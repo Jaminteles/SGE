@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Environment & secrets (RNF-003: segredos não devem ser versionados)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Prisma
+prisma/*.db
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Test coverage
+coverage/
+
+# Temp
+tmp/

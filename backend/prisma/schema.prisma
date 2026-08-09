@@ -1,0 +1,293 @@
+// SGE - Sistema de Gestão Empresarial e Financeira
+// Sprint 1 - Fundação (Fase 1): M01 Empresas/Filiais/Configurações + M02 Usuários/Perfis/Permissões
+// Base de dados relacional (ERS §2 / §7). Multi-tenant: registros operacionais
+// vinculados a uma Empresa (RN-001) e isolados por empresa (RF-005).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Status genérico ativo/inativo (RF-001 ativar/inativar).
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// Ações de permissão por operação (RF-011).
+enum PermissionAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  APPROVE
+  EXPORT
+}
+
+// Escopo de categorias e parâmetros (RF-006).
+enum SettingScope {
+  FINANCIAL
+  FISCAL
+  GENERAL
+}
+
+// ---------------------------------------------------------------------------
+// M02 — Usuários, Perfis e Permissões
+// ---------------------------------------------------------------------------
+
+/// Identidade global do usuário. O e-mail é único na plataforma; o acesso a
+/// cada empresa é concedido via Membership (RF-004, RF-007).
+model User {
+  id           String       @id @default(cuid())
+  name         String
+  email        String       @unique
+  passwordHash String // RNF-001: somente hash seguro (argon2id)
+  isSuperAdmin Boolean      @default(false) // administrador de plataforma
+  status       RecordStatus @default(ACTIVE)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  memberships    Membership[]
+  sessions       Session[]
+  passwordResets PasswordResetToken[]
+
+  @@index([status])
+  @@map("users")
+}
+
+/// Sessão de acesso: guarda o hash do refresh token para permitir revogação
+/// e logout server-side (RF-008).
+model Session {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique // hash do refresh token (nunca o token em claro)
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+/// Token de recuperação de senha (RF-009). Armazenado como hash e de uso único.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+/// Perfil de acesso por empresa (RF-010). Perfis "isSystem" são criados no
+/// provisionamento da empresa e não podem ser removidos.
+model Role {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions        RolePermission[]
+  memberships        Membership[]
+  approvalThresholds ApprovalThreshold[]
+
+  @@unique([companyId, name])
+  @@map("roles")
+}
+
+/// Catálogo global de permissões por módulo + recurso + operação (RF-011).
+model Permission {
+  id          String           @id @default(cuid())
+  code        String           @unique // ex.: "companies:CREATE"
+  module      String // M01..M18
+  resource    String // ex.: companies, branches
+  action      PermissionAction
+  description String?
+
+  roles RolePermission[]
+
+  @@unique([resource, action])
+  @@index([module])
+  @@map("permissions")
+}
+
+/// Vínculo N:N entre Perfil e Permissão.
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ---------------------------------------------------------------------------
+// M01 — Empresas, Filiais e Configurações
+// ---------------------------------------------------------------------------
+
+/// Empresa = tenant. Fronteira de isolamento de dados (RF-005, RN-001).
+model Company {
+  id                    String       @id @default(cuid())
+  legalName             String // razão social
+  tradeName             String? // nome fantasia
+  taxId                 String       @unique // CNPJ (somente dígitos)
+  stateRegistration     String? // inscrição estadual (RF-003)
+  municipalRegistration String? // inscrição municipal (RF-003)
+  email                 String?
+  phone                 String?
+  // Endereço (RF-003)
+  addressStreet         String?
+  addressNumber         String?
+  addressComplement     String?
+  addressDistrict       String?
+  addressCity           String?
+  addressState          String?
+  addressZipCode        String?
+  addressCountry        String?      @default("BR")
+  status                RecordStatus @default(ACTIVE)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  branches           Branch[]
+  memberships        Membership[]
+  roles              Role[]
+  categories         Category[]
+  costCenters        CostCenter[]
+  settings           CompanySetting[]
+  approvalThresholds ApprovalThreshold[]
+
+  @@index([status])
+  @@map("companies")
+}
+
+/// Filial de uma empresa (RF-002). Escopo local de operações.
+model Branch {
+  id                String       @id @default(cuid())
+  companyId         String
+  company           Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code              String
+  name              String
+  taxId             String? // CNPJ da filial
+  email             String?
+  phone             String?
+  addressStreet     String?
+  addressNumber     String?
+  addressComplement String?
+  addressDistrict   String?
+  addressCity       String?
+  addressState      String?
+  addressZipCode    String?
+  addressCountry    String?      @default("BR")
+  status            RecordStatus @default(ACTIVE)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@map("branches")
+}
+
+/// Associação Usuário ↔ Empresa ↔ Perfil (RF-004). Um usuário tem no máximo
+/// um perfil por empresa.
+model Membership {
+  id        String       @id @default(cuid())
+  userId    String
+  companyId String
+  roleId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  role      Role         @relation(fields: [roleId], references: [id])
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([userId, companyId])
+  @@index([companyId, status])
+  @@map("memberships")
+}
+
+/// Categorias financeiras/fiscais da empresa (RF-006). Suporta hierarquia.
+model Category {
+  id        String       @id @default(cuid())
+  companyId String
+  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  scope     SettingScope @default(FINANCIAL)
+  parentId  String?
+  parent    Category?    @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[]   @relation("CategoryTree")
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([companyId, scope, name])
+  @@index([companyId, status])
+  @@map("categories")
+}
+
+/// Centro de custo da empresa (RF-006).
+model CostCenter {
+  id        String       @id @default(cuid())
+  companyId String
+  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  code      String
+  name      String
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@map("cost_centers")
+}
+
+/// Parâmetros financeiros e fiscais por empresa, em chave/valor (RF-006).
+model CompanySetting {
+  id          String       @id @default(cuid())
+  companyId   String
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  scope       SettingScope @default(GENERAL)
+  key         String
+  value       String
+  description String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([companyId, scope, key])
+  @@map("company_settings")
+}
+
+/// Alçada de aprovação de operações críticas (RF-012, RN-003). Define, por
+/// faixa de valor, qual perfil está autorizado a aprovar a operação.
+model ApprovalThreshold {
+  id             String       @id @default(cuid())
+  companyId      String
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  operation      String // chave da operação crítica (ex.: "payments:create")
+  minAmount      Decimal      @default(0) @db.Decimal(18, 2) // RNF-012: precisão decimal
+  maxAmount      Decimal?     @db.Decimal(18, 2) // null = sem limite superior
+  requiredRoleId String
+  requiredRole   Role         @relation(fields: [requiredRoleId], references: [id])
+  status         RecordStatus @default(ACTIVE)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([companyId, operation, status])
+  @@map("approval_thresholds")
+}
