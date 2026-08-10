@@ -1,4 +1,6 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
+  // `prisma/` fica fora do build: seed e check-db rodam via ts-node e, ao
+  // serem compilados, deslocavam a raiz do dist para dist/src.
+  "exclude": ["node_modules", "test", "dist", "prisma", "**/*spec.ts"]
 }

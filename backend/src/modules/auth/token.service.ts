@@ -43,7 +43,7 @@ export class TokenService {
     const refreshTtl = this.config.getOrThrow<string>('JWT_REFRESH_TTL');
     const expiresAt = new Date(Date.now() + parseDurationMs(refreshTtl));
 
-    const session = await this.prisma.session.create({
+    const session = await this.prisma.db.session.create({
       data: {
         userId: user.id,
         tokenHash: randomBytes(32).toString('hex'), // placeholder até assinar
@@ -56,7 +56,7 @@ export class TokenService {
     const accessToken = await this.signAccessToken(user);
     const refreshToken = await this.signRefreshToken(user.id, session.id, refreshTtl);
 
-    await this.prisma.session.update({
+    await this.prisma.db.session.update({
       where: { id: session.id },
       data: { tokenHash: this.hashToken(refreshToken) },
     });
@@ -67,7 +67,7 @@ export class TokenService {
   async rotate(refreshToken: string, meta: SessionMeta = {}): Promise<IssuedTokens> {
     const payload = await this.verifyRefreshToken(refreshToken);
 
-    const session = await this.prisma.session.findUnique({
+    const session = await this.prisma.db.session.findUnique({
       where: { id: payload.sid },
       include: { user: true },
     });
@@ -82,12 +82,12 @@ export class TokenService {
       throw new UnauthorizedException('Reuso de token detectado. Sessões encerradas.');
     }
 
-    if (session.user.status !== 'ACTIVE') {
+    if (!session.user.isActive) {
       throw new UnauthorizedException('Usuário inativo.');
     }
 
     // Rotação: revoga a sessão atual e emite uma nova.
-    await this.prisma.session.update({
+    await this.prisma.db.session.update({
       where: { id: session.id },
       data: { revokedAt: new Date() },
     });
@@ -109,14 +109,14 @@ export class TokenService {
     } catch {
       return; // logout idempotente
     }
-    await this.prisma.session.updateMany({
+    await this.prisma.db.session.updateMany({
       where: { id: payload.sid, revokedAt: null },
       data: { revokedAt: new Date() },
     });
   }
 
   async revokeAllForUser(userId: string): Promise<void> {
-    await this.prisma.session.updateMany({
+    await this.prisma.db.session.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });

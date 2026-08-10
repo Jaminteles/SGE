@@ -2,6 +2,13 @@ import { PrismaClient } from '@prisma/client';
 import { hash } from '@node-rs/argon2';
 import { PERMISSION_CATALOG } from '../src/common/authorization/permission-catalog';
 
+/**
+ * Carga inicial do backend sobre o banco criado por `bd/*.sql`.
+ *
+ * Não cria tabelas: apenas sincroniza o catálogo de permissões da API em
+ * `gestao.permissao` e garante o super admin. Roda fora do contexto de
+ * requisição, então toca apenas tabelas sem RLS (permissao e usuario).
+ */
 const prisma = new PrismaClient();
 
 const ARGON2_OPTIONS = { memoryCost: 19_456, timeCost: 2, parallelism: 1 };
@@ -9,20 +16,16 @@ const ARGON2_OPTIONS = { memoryCost: 19_456, timeCost: 2, parallelism: 1 };
 async function seedPermissions(): Promise<void> {
   for (const p of PERMISSION_CATALOG) {
     await prisma.permission.upsert({
-      where: { code: p.code },
+      where: {
+        module_resource_action: { module: p.module, resource: p.resource, action: p.action },
+      },
       create: {
-        code: p.code,
         module: p.module,
         resource: p.resource,
         action: p.action,
         description: p.description,
       },
-      update: {
-        module: p.module,
-        resource: p.resource,
-        action: p.action,
-        description: p.description,
-      },
+      update: { description: p.description },
     });
   }
   console.log(`✔ ${PERMISSION_CATALOG.length} permissões sincronizadas.`);
@@ -37,7 +40,7 @@ async function seedAdmin(): Promise<void> {
   if (existing) {
     await prisma.user.update({
       where: { email },
-      data: { name, isSuperAdmin: true, status: 'ACTIVE' },
+      data: { name, isSuperAdmin: true, isActive: true },
     });
     console.log(`✔ Super admin já existente atualizado: ${email}`);
     return;
@@ -51,6 +54,14 @@ async function seedAdmin(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  const [{ schema }] = await prisma.$queryRaw<
+    { schema: string }[]
+  >`SELECT current_schema() AS schema`;
+  if (schema !== 'gestao') {
+    throw new Error(
+      `Conexão apontando para o schema "${schema}". Inclua ?schema=gestao na DATABASE_URL.`,
+    );
+  }
   await seedPermissions();
   await seedAdmin();
 }

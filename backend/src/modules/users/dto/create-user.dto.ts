@@ -7,19 +7,25 @@ export class CreateUserDto {
   @ApiProperty()
   @IsString()
   @MinLength(2)
-  @MaxLength(160)
+  @MaxLength(255)
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   name!: string;
 
   @ApiProperty()
   @IsEmail()
-  @MaxLength(180)
+  @MaxLength(255)
   @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
   email!: string;
 
   @ApiProperty()
   @IsStrongPassword()
   password!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  phone?: string;
 
   @ApiPropertyOptional({ default: false, description: 'Administrador de plataforma' })
   @IsOptional()

@@ -1,7 +1,14 @@
 // SGE - Sistema de Gestão Empresarial e Financeira
 // Sprint 1 - Fundação (Fase 1): M01 Empresas/Filiais/Configurações + M02 Usuários/Perfis/Permissões
-// Base de dados relacional (ERS §2 / §7). Multi-tenant: registros operacionais
-// vinculados a uma Empresa (RN-001) e isolados por empresa (RF-005).
+//
+// IMPORTANTE: este schema NÃO é dono do banco. O modelo físico vive em `bd/*.sql`
+// (schema `gestao`, PostgreSQL 14+) e é a fonte da verdade. Aqui há apenas o
+// mapeamento (@map/@@map) das tabelas usadas pela Sprint 1. Não rode
+// `prisma migrate`: mudanças estruturais são feitas nos scripts de `bd/`.
+//
+// Isolamento multiempresa é feito por RLS no banco (RN-001/RN-002): toda
+// requisição roda em transação com `app.empresa_id`/`app.usuario_id` definidos
+// (ver src/prisma/prisma.service.ts).
 
 generator client {
   provider = "prisma-client-js"
@@ -9,160 +16,189 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = env("DATABASE_URL") // deve conter ?schema=gestao
 }
 
-// Status genérico ativo/inativo (RF-001 ativar/inativar).
-enum RecordStatus {
-  ACTIVE
-  INACTIVE
+// ---------------------------------------------------------------------------
+// Tipos enumerados do banco (bd/01_schema_core.sql §0.2)
+// ---------------------------------------------------------------------------
+
+enum PersonType {
+  PF
+  PJ
+  ESTRANGEIRO
+
+  @@map("enum_tipo_pessoa")
 }
 
-// Ações de permissão por operação (RF-011).
-enum PermissionAction {
-  CREATE
-  READ
-  UPDATE
-  DELETE
-  APPROVE
-  EXPORT
+enum TaxRegime {
+  SIMPLES_NACIONAL
+  LUCRO_PRESUMIDO
+  LUCRO_REAL
+  MEI
+  IMUNE_ISENTO
+
+  @@map("enum_regime_tributario")
 }
 
-// Escopo de categorias e parâmetros (RF-006).
-enum SettingScope {
-  FINANCIAL
-  FISCAL
-  GENERAL
+/// Natureza da categoria financeira: título a pagar ou a receber.
+enum EntryType {
+  PAGAR
+  RECEBER
+
+  @@map("enum_tipo_titulo")
 }
 
 // ---------------------------------------------------------------------------
 // M02 — Usuários, Perfis e Permissões
 // ---------------------------------------------------------------------------
 
-/// Identidade global do usuário. O e-mail é único na plataforma; o acesso a
-/// cada empresa é concedido via Membership (RF-004, RF-007).
+/// gestao.usuario — identidade global; o acesso a cada empresa vem de Membership.
 model User {
-  id           String       @id @default(cuid())
-  name         String
-  email        String       @unique
-  passwordHash String // RNF-001: somente hash seguro (argon2id)
-  isSuperAdmin Boolean      @default(false) // administrador de plataforma
-  status       RecordStatus @default(ACTIVE)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String    @map("nome") @db.VarChar(255)
+  email        String    @unique(map: "uq_usuario_email") @db.VarChar(255)
+  passwordHash String    @map("senha_hash") // RNF-001: somente hash (argon2id)
+  phone        String?   @map("telefone") @db.VarChar(20)
+  isSuperAdmin Boolean   @default(false) @map("super_admin")
+  lastLoginAt  DateTime? @map("ultimo_login_em") @db.Timestamptz(6)
+  /// Invalida access tokens emitidos antes da última troca de senha (RF-009).
+  passwordChangedAt DateTime? @map("senha_alterada_em") @db.Timestamptz(6)
+  isActive     Boolean   @default(true) @map("ativo")
+  createdAt    DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
   memberships    Membership[]
   sessions       Session[]
   passwordResets PasswordResetToken[]
+  approverOf     ApprovalApprover[]
 
-  @@index([status])
-  @@map("users")
+  @@map("usuario")
 }
 
-/// Sessão de acesso: guarda o hash do refresh token para permitir revogação
-/// e logout server-side (RF-008).
+/// gestao.sessao — refresh token (hash) para revogação server-side (RF-008).
 model Session {
-  id        String    @id @default(cuid())
-  userId    String
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("usuario_id") @db.Uuid
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String    @unique // hash do refresh token (nunca o token em claro)
-  userAgent String?
-  ip        String?
-  expiresAt DateTime
-  revokedAt DateTime?
-  createdAt DateTime  @default(now())
+  companyId String?   @map("empresa_id") @db.Uuid
+  tokenHash String    @unique(map: "uq_sessao_token") @map("refresh_token_hash")
+  ip        String?   @db.Inet
+  userAgent String?   @map("user_agent")
+  expiresAt DateTime  @map("expira_em") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revogada_em") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
 
-  @@index([userId])
-  @@map("sessions")
+  @@map("sessao")
 }
 
-/// Token de recuperação de senha (RF-009). Armazenado como hash e de uso único.
+/// gestao.token_recuperacao — token de reset de senha, hash e uso único (RF-009).
 model PasswordResetToken {
-  id        String    @id @default(cuid())
-  userId    String
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("usuario_id") @db.Uuid
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String    @unique
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
+  tokenHash String    @unique(map: "uq_token_recuperacao") @map("token_hash")
+  purpose   String    @default("RESET_SENHA") @map("finalidade") @db.VarChar(40)
+  expiresAt DateTime  @map("expira_em") @db.Timestamptz(6)
+  usedAt    DateTime? @map("utilizado_em") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
 
-  @@index([userId])
-  @@map("password_reset_tokens")
+  @@map("token_recuperacao")
 }
 
-/// Perfil de acesso por empresa (RF-010). Perfis "isSystem" são criados no
-/// provisionamento da empresa e não podem ser removidos.
+/// gestao.perfil — perfil de acesso (RF-010). companyId nulo = perfil global do
+/// sistema, visível a todas as empresas.
 model Role {
-  id          String   @id @default(cuid())
-  companyId   String
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name        String
-  description String?
-  isSystem    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String?  @map("empresa_id") @db.Uuid
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String   @map("nome") @db.VarChar(120)
+  description String?  @map("descricao")
+  isSystem    Boolean  @default(false) @map("sistema")
+  isActive    Boolean  @default(true) @map("ativo")
+  createdAt   DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  permissions        RolePermission[]
-  memberships        Membership[]
-  approvalThresholds ApprovalThreshold[]
+  permissions RolePermission[]
+  memberships Membership[]
+  approverOf  ApprovalApprover[]
 
-  @@unique([companyId, name])
-  @@map("roles")
+  @@map("perfil")
 }
 
-/// Catálogo global de permissões por módulo + recurso + operação (RF-011).
+/// gestao.permissao — catálogo global módulo + recurso + ação (RF-011).
+/// O código usado na API é derivado: `recurso:acao`.
 model Permission {
-  id          String           @id @default(cuid())
-  code        String           @unique // ex.: "companies:CREATE"
-  module      String // M01..M18
-  resource    String // ex.: companies, branches
-  action      PermissionAction
-  description String?
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  module      String  @map("modulo") @db.VarChar(60)
+  resource    String  @map("recurso") @db.VarChar(60)
+  action      String  @map("acao") @db.VarChar(40)
+  description String? @map("descricao")
 
   roles RolePermission[]
 
-  @@unique([resource, action])
-  @@index([module])
-  @@map("permissions")
+  @@unique([module, resource, action], map: "uq_permissao")
+  @@map("permissao")
 }
 
-/// Vínculo N:N entre Perfil e Permissão.
+/// gestao.perfil_permissao — vínculo N:N entre perfil e permissão.
 model RolePermission {
-  roleId       String
-  permissionId String
+  roleId       String     @map("perfil_id") @db.Uuid
+  permissionId String     @map("permissao_id") @db.Uuid
+  grantedAt    DateTime   @default(now()) @map("concedida_em") @db.Timestamptz(6)
   role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
-  @@map("role_permissions")
+  @@map("perfil_permissao")
+}
+
+/// gestao.usuario_empresa — usuário ↔ empresa ↔ perfil (RF-004/RF-005).
+/// branchId nulo = acesso a todas as filiais.
+model Membership {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("usuario_id") @db.Uuid
+  companyId String   @map("empresa_id") @db.Uuid
+  roleId    String   @map("perfil_id") @db.Uuid
+  branchId  String?  @map("filial_id") @db.Uuid
+  isDefault Boolean  @default(false) @map("padrao")
+  isActive  Boolean  @default(true) @map("ativo")
+  createdAt DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  role    Role    @relation(fields: [roleId], references: [id])
+  branch  Branch? @relation(fields: [branchId], references: [id])
+
+  @@unique([userId, companyId, branchId, roleId], map: "uq_usuario_empresa")
+  @@map("usuario_empresa")
 }
 
 // ---------------------------------------------------------------------------
 // M01 — Empresas, Filiais e Configurações
 // ---------------------------------------------------------------------------
 
-/// Empresa = tenant. Fronteira de isolamento de dados (RF-005, RN-001).
+/// gestao.empresa — tenant. Fronteira de isolamento (RF-005, RN-001).
 model Company {
-  id                    String       @id @default(cuid())
-  legalName             String // razão social
-  tradeName             String? // nome fantasia
-  taxId                 String       @unique // CNPJ (somente dígitos)
-  stateRegistration     String? // inscrição estadual (RF-003)
-  municipalRegistration String? // inscrição municipal (RF-003)
-  email                 String?
-  phone                 String?
-  // Endereço (RF-003)
-  addressStreet         String?
-  addressNumber         String?
-  addressComplement     String?
-  addressDistrict       String?
-  addressCity           String?
-  addressState          String?
-  addressZipCode        String?
-  addressCountry        String?      @default("BR")
-  status                RecordStatus @default(ACTIVE)
-  createdAt             DateTime     @default(now())
-  updatedAt             DateTime     @updatedAt
+  id                    String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  legalName             String     @map("razao_social") @db.VarChar(255)
+  tradeName             String?    @map("nome_fantasia") @db.VarChar(255)
+  personType            PersonType @default(PJ) @map("tipo_pessoa")
+  taxId                 String?    @map("cnpj") @db.VarChar(14)
+  cpf                   String?    @db.VarChar(11)
+  stateRegistration     String?    @map("inscricao_estadual") @db.VarChar(20)
+  municipalRegistration String?    @map("inscricao_municipal") @db.VarChar(20)
+  taxRegime             TaxRegime? @map("regime_tributario")
+  mainCnae              String?    @map("cnae_principal") @db.VarChar(10)
+  email                 String?    @db.VarChar(255)
+  phone                 String?    @map("telefone") @db.VarChar(20)
+  logoUrl               String?    @map("logo_url")
+  timezone              String     @default("America/Sao_Paulo") @db.VarChar(50)
+  currency              String     @default("BRL") @map("moeda") @db.Char(3)
+  isActive              Boolean    @default(true) @map("ativo")
+  createdAt             DateTime   @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt             DateTime   @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
   branches           Branch[]
   memberships        Membership[]
@@ -171,123 +207,148 @@ model Company {
   costCenters        CostCenter[]
   settings           CompanySetting[]
   approvalThresholds ApprovalThreshold[]
+  tenantAddresses    Address[]           @relation("EnderecoTenant")
+  addresses          Address[]           @relation("EnderecoDaEmpresa")
 
-  @@index([status])
-  @@map("companies")
+  @@map("empresa")
 }
 
-/// Filial de uma empresa (RF-002). Escopo local de operações.
+/// gestao.filial — filial da empresa (RF-002).
 model Branch {
-  id                String       @id @default(cuid())
-  companyId         String
-  company           Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  code              String
-  name              String
-  taxId             String? // CNPJ da filial
-  email             String?
-  phone             String?
-  addressStreet     String?
-  addressNumber     String?
-  addressComplement String?
-  addressDistrict   String?
-  addressCity       String?
-  addressState      String?
-  addressZipCode    String?
-  addressCountry    String?      @default("BR")
-  status            RecordStatus @default(ACTIVE)
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId             String   @map("empresa_id") @db.Uuid
+  company               Company  @relation(fields: [companyId], references: [id])
+  code                  String   @map("codigo") @db.VarChar(20)
+  name                  String   @map("nome") @db.VarChar(255)
+  taxId                 String?  @map("cnpj") @db.VarChar(14)
+  stateRegistration     String?  @map("inscricao_estadual") @db.VarChar(20)
+  municipalRegistration String?  @map("inscricao_municipal") @db.VarChar(20)
+  isHeadquarters        Boolean  @default(false) @map("matriz")
+  isActive              Boolean  @default(true) @map("ativo")
+  createdAt             DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  @@unique([companyId, code])
-  @@index([companyId, status])
-  @@map("branches")
+  addresses   Address[]
+  memberships Membership[]
+
+  @@unique([companyId, code], map: "uq_filial_codigo")
+  @@map("filial")
 }
 
-/// Associação Usuário ↔ Empresa ↔ Perfil (RF-004). Um usuário tem no máximo
-/// um perfil por empresa.
-model Membership {
-  id        String       @id @default(cuid())
-  userId    String
-  companyId String
-  roleId    String
-  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  role      Role         @relation(fields: [roleId], references: [id])
-  status    RecordStatus @default(ACTIVE)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+/// gestao.endereco — endereço com dono controlado por CHECK (RF-003).
+/// Nesta sprint são usados apenas os donos empresa e filial.
+model Address {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String   @map("empresa_id") @db.Uuid
+  tenant         Company  @relation("EnderecoTenant", fields: [companyId], references: [id], onDelete: Cascade)
+  type           String   @default("PRINCIPAL") @map("tipo") @db.VarChar(30)
+  street         String   @map("logradouro") @db.VarChar(255)
+  number         String?  @map("numero") @db.VarChar(20)
+  complement     String?  @map("complemento") @db.VarChar(100)
+  district       String?  @map("bairro") @db.VarChar(120)
+  city           String   @map("cidade") @db.VarChar(120)
+  state          String   @map("uf") @db.Char(2)
+  zipCode        String?  @map("cep") @db.VarChar(8)
+  country        String   @default("Brasil") @map("pais") @db.VarChar(60)
+  ibgeCode       String?  @map("codigo_ibge") @db.VarChar(7)
+  isPrimary      Boolean  @default(false) @map("principal")
+  ownerCompanyId String?  @map("empresa_ref_id") @db.Uuid
+  ownerCompany   Company? @relation("EnderecoDaEmpresa", fields: [ownerCompanyId], references: [id], onDelete: Cascade)
+  branchId       String?  @map("filial_id") @db.Uuid
+  branch         Branch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  @@unique([userId, companyId])
-  @@index([companyId, status])
-  @@map("memberships")
+  @@map("endereco")
 }
 
-/// Categorias financeiras/fiscais da empresa (RF-006). Suporta hierarquia.
+/// gestao.categoria_financeira — plano gerencial hierárquico (RF-006).
 model Category {
-  id        String       @id @default(cuid())
-  companyId String
-  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  name      String
-  scope     SettingScope @default(FINANCIAL)
-  parentId  String?
-  parent    Category?    @relation("CategoryTree", fields: [parentId], references: [id])
-  children  Category[]   @relation("CategoryTree")
-  status    RecordStatus @default(ACTIVE)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId     String     @map("empresa_id") @db.Uuid
+  company       Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  parentId      String?    @map("categoria_pai_id") @db.Uuid
+  parent        Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children      Category[] @relation("CategoryTree")
+  code          String     @map("codigo") @db.VarChar(30)
+  name          String     @map("nome") @db.VarChar(255)
+  type          EntryType  @map("tipo")
+  acceptsEntry  Boolean    @default(true) @map("aceita_lancamento")
+  isActive      Boolean    @default(true) @map("ativo")
+  createdAt     DateTime   @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt     DateTime   @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  @@unique([companyId, scope, name])
-  @@index([companyId, status])
-  @@map("categories")
+  @@unique([companyId, code], map: "uq_categoria_financeira_codigo")
+  @@map("categoria_financeira")
 }
 
-/// Centro de custo da empresa (RF-006).
+/// gestao.centro_custo — centro de custo hierárquico (RF-006).
 model CostCenter {
-  id        String       @id @default(cuid())
-  companyId String
-  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  code      String
-  name      String
-  status    RecordStatus @default(ACTIVE)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId    String       @map("empresa_id") @db.Uuid
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId     String?      @map("filial_id") @db.Uuid
+  parentId     String?      @map("centro_custo_pai_id") @db.Uuid
+  parent       CostCenter?  @relation("CostCenterTree", fields: [parentId], references: [id])
+  children     CostCenter[] @relation("CostCenterTree")
+  code         String       @map("codigo") @db.VarChar(30)
+  name         String       @map("nome") @db.VarChar(255)
+  description  String?      @map("descricao")
+  acceptsEntry Boolean      @default(true) @map("aceita_lancamento")
+  isActive     Boolean      @default(true) @map("ativo")
+  createdAt    DateTime     @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  @@unique([companyId, code])
-  @@index([companyId, status])
-  @@map("cost_centers")
+  @@unique([companyId, code], map: "uq_centro_custo_codigo")
+  @@map("centro_custo")
 }
 
-/// Parâmetros financeiros e fiscais por empresa, em chave/valor (RF-006).
+/// gestao.parametro_empresa — parâmetros chave/valor por grupo (RF-006).
 model CompanySetting {
-  id          String       @id @default(cuid())
-  companyId   String
-  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  scope       SettingScope @default(GENERAL)
-  key         String
-  value       String
-  description String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String   @map("empresa_id") @db.Uuid
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  scope       String   @map("grupo") @db.VarChar(60)
+  key         String   @map("chave") @db.VarChar(120)
+  value       Json     @map("valor")
+  description String?  @map("descricao")
+  createdAt   DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  @@unique([companyId, scope, key])
-  @@map("company_settings")
+  @@unique([companyId, scope, key], map: "uq_parametro_empresa")
+  @@map("parametro_empresa")
 }
 
-/// Alçada de aprovação de operações críticas (RF-012, RN-003). Define, por
-/// faixa de valor, qual perfil está autorizado a aprovar a operação.
+/// gestao.alcada — faixa de valor que exige aprovação (RF-012, RN-003).
 model ApprovalThreshold {
-  id             String       @id @default(cuid())
-  companyId      String
-  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  operation      String // chave da operação crítica (ex.: "payments:create")
-  minAmount      Decimal      @default(0) @db.Decimal(18, 2) // RNF-012: precisão decimal
-  maxAmount      Decimal?     @db.Decimal(18, 2) // null = sem limite superior
-  requiredRoleId String
-  requiredRole   Role         @relation(fields: [requiredRoleId], references: [id])
-  status         RecordStatus @default(ACTIVE)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId    String   @map("empresa_id") @db.Uuid
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name         String   @map("nome") @db.VarChar(120)
+  operation    String   @map("tipo_operacao") @db.VarChar(60)
+  minAmount    Decimal  @default(0) @map("valor_minimo") @db.Decimal(18, 2)
+  maxAmount    Decimal? @map("valor_maximo") @db.Decimal(18, 2)
+  level        Int      @default(1) @map("nivel") @db.SmallInt
+  minApprovers Int      @default(1) @map("aprovadores_min") @db.SmallInt
+  isActive     Boolean  @default(true) @map("ativo")
+  createdAt    DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  @@index([companyId, operation, status])
-  @@map("approval_thresholds")
+  approvers ApprovalApprover[]
+
+  @@unique([companyId, operation, level], map: "uq_alcada")
+  @@map("alcada")
+}
+
+/// gestao.alcada_aprovador — quem aprova a alçada: um perfil OU um usuário.
+model ApprovalApprover {
+  id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  thresholdId String           @map("alcada_id") @db.Uuid
+  threshold  ApprovalThreshold @relation(fields: [thresholdId], references: [id], onDelete: Cascade)
+  userId     String?           @map("usuario_id") @db.Uuid
+  user       User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId     String?           @map("perfil_id") @db.Uuid
+  role       Role?             @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@map("alcada_aprovador")
 }

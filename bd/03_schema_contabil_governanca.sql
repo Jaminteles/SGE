@@ -748,8 +748,8 @@ BEGIN
         EXECUTE format('ALTER TABLE gestao.%I FORCE ROW LEVEL SECURITY;', r.table_name);
         EXECUTE format(
             'CREATE POLICY pol_%1$s_tenant ON gestao.%1$I
-             USING (empresa_id = gestao.fn_empresa_corrente())
-             WITH CHECK (empresa_id = gestao.fn_empresa_corrente());', r.table_name);
+             USING (empresa_id = gestao.fn_empresa_corrente() OR empresa_id IS NULL)
+             WITH CHECK (empresa_id = gestao.fn_empresa_corrente() OR empresa_id IS NULL);', r.table_name);
     END LOOP;
 END $$;
 

@@ -1,11 +1,15 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, RecordStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import { PaginatedResult } from '../../common/dto/paginated-result';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
+/**
+ * Categorias financeiras (RF-006) — `gestao.categoria_financeira`.
+ * Cada categoria tem código único na empresa e natureza PAGAR/RECEBER.
+ */
 @Injectable()
 export class CategoriesService {
   constructor(private readonly prisma: PrismaService) {}
@@ -14,12 +18,14 @@ export class CategoriesService {
     if (dto.parentId) {
       await this.ensureParent(companyId, dto.parentId);
     }
-    return this.prisma.category.create({
+    return this.prisma.db.category.create({
       data: {
         companyId,
+        code: dto.code,
         name: dto.name,
-        scope: dto.scope,
+        type: dto.type,
         parentId: dto.parentId,
+        ...(dto.acceptsEntry !== undefined ? { acceptsEntry: dto.acceptsEntry } : {}),
       },
     });
   }
@@ -27,25 +33,30 @@ export class CategoriesService {
   async findAll(companyId: string, query: PaginationQueryDto) {
     const where: Prisma.CategoryWhereInput = {
       companyId,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.q ? { name: { contains: query.q, mode: 'insensitive' } } : {}),
+      ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
+      ...(query.q
+        ? {
+            OR: [
+              { name: { contains: query.q, mode: 'insensitive' } },
+              { code: { contains: query.q, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
     };
 
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.category.findMany({
-        where,
-        orderBy: [{ scope: 'asc' }, { name: 'asc' }],
-        skip: query.skip,
-        take: query.take,
-      }),
-      this.prisma.category.count({ where }),
-    ]);
+    const data = await this.prisma.db.category.findMany({
+      where,
+      orderBy: [{ type: 'asc' }, { code: 'asc' }],
+      skip: query.skip,
+      take: query.take,
+    });
+    const total = await this.prisma.db.category.count({ where });
 
     return new PaginatedResult(data, total, query.page, query.pageSize);
   }
 
   async findOne(companyId: string, id: string) {
-    const category = await this.prisma.category.findFirst({ where: { id, companyId } });
+    const category = await this.prisma.db.category.findFirst({ where: { id, companyId } });
     if (!category) {
       throw new NotFoundException('Categoria não encontrada.');
     }
@@ -60,27 +71,26 @@ export class CategoriesService {
       }
       await this.ensureParent(companyId, dto.parentId);
     }
-    return this.prisma.category.update({
+    return this.prisma.db.category.update({
       where: { id },
       data: {
+        ...(dto.code !== undefined ? { code: dto.code } : {}),
         ...(dto.name !== undefined ? { name: dto.name } : {}),
-        ...(dto.scope !== undefined ? { scope: dto.scope } : {}),
+        ...(dto.type !== undefined ? { type: dto.type } : {}),
         ...(dto.parentId !== undefined ? { parentId: dto.parentId } : {}),
-        ...(dto.status !== undefined ? { status: dto.status } : {}),
+        ...(dto.acceptsEntry !== undefined ? { acceptsEntry: dto.acceptsEntry } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
       },
     });
   }
 
   async remove(companyId: string, id: string) {
     await this.findOne(companyId, id);
-    return this.prisma.category.update({
-      where: { id },
-      data: { status: RecordStatus.INACTIVE },
-    });
+    return this.prisma.db.category.update({ where: { id }, data: { isActive: false } });
   }
 
   private async ensureParent(companyId: string, parentId: string) {
-    const parent = await this.prisma.category.findFirst({
+    const parent = await this.prisma.db.category.findFirst({
       where: { id: parentId, companyId },
       select: { id: true },
     });

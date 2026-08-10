@@ -1,11 +1,10 @@
 import { ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
-import { RecordStatus } from '@prisma/client';
+import { IsBoolean, IsOptional } from 'class-validator';
 import { CreateBranchDto } from './create-branch.dto';
 
 export class UpdateBranchDto extends PartialType(CreateBranchDto) {
-  @ApiPropertyOptional({ enum: RecordStatus })
+  @ApiPropertyOptional({ description: 'Situação da filial (coluna `ativo`)' })
   @IsOptional()
-  @IsEnum(RecordStatus)
-  status?: RecordStatus;
+  @IsBoolean()
+  isActive?: boolean;
 }

@@ -1,6 +1,6 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { ValidationPipe } from '@nestjs/common';
 import { LoggerModule } from 'nestjs-pino';
@@ -12,6 +12,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { TenantContextMiddleware } from './common/middleware/tenant-context.middleware';
+import { TransactionInterceptor } from './common/interceptors/transaction.interceptor';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -77,6 +79,8 @@ import { HealthModule } from './modules/health/health.module';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
+    // Confirma/reverte a transação que carrega o contexto de RLS da requisição.
+    { provide: APP_INTERCEPTOR, useClass: TransactionInterceptor },
     {
       provide: APP_PIPE,
       useValue: new ValidationPipe({
@@ -87,4 +91,16 @@ import { HealthModule } from './modules/health/health.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  /**
+   * Toda rota da API roda dentro da transação que define `app.empresa_id` e
+   * `app.usuario_id` — sem isso a RLS do banco devolve zero linhas (RN-001).
+   * O health check fica de fora: só precisa de um SELECT 1.
+   */
+  configure(consumer: MiddlewareConsumer): void {
+    consumer
+      .apply(TenantContextMiddleware)
+      .exclude('api/v1/health', 'api/docs', 'api/docs/(.*)')
+      .forRoutes('*');
+  }
+}

@@ -1,15 +1,24 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
-import { RecordStatus } from '@prisma/client';
+import { IsBoolean, IsOptional, IsUUID } from 'class-validator';
 
 export class UpdateMembershipDto {
   @ApiPropertyOptional({ description: 'Novo perfil de acesso' })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   roleId?: string;
 
-  @ApiPropertyOptional({ enum: RecordStatus })
+  @ApiPropertyOptional({ description: 'Filial do vínculo. Vazio = todas as filiais.' })
   @IsOptional()
-  @IsEnum(RecordStatus)
-  status?: RecordStatus;
+  @IsUUID()
+  branchId?: string;
+
+  @ApiPropertyOptional({ description: 'Empresa padrão do usuário' })
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
+
+  @ApiPropertyOptional({ description: 'Situação do vínculo (coluna `ativo`)' })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

@@ -10,6 +10,7 @@ export interface AccessTokenPayload {
   sub: string; // userId
   email: string;
   isSuperAdmin: boolean;
+  iat?: number; // emitido em (segundos) — preenchido pelo próprio JWT
 }
 
 /** Payload assinado no refresh token. */

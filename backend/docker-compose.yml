@@ -1,20 +1,32 @@
-# Banco de dados para desenvolvimento local (Sprint 1).
+# PostgreSQL para desenvolvimento local — alternativa a uma instalação nativa.
 # Suba com: docker compose up -d
+#
+# O container já nasce com o banco e o role donos do schema. Os objetos ainda
+# precisam ser criados rodando os scripts de ../bd na ordem 01 → 04, por exemplo:
+#   docker compose exec -T postgres psql -U gestao_owner -d gestao_empresarial < ../bd/01_schema_core.sql
+#
+# (00_setup_banco.sql não é necessário aqui: o próprio container cria o role e o
+# banco a partir das variáveis abaixo.)
+#
+# Atenção: neste modo gestao_owner é superusuário do container e, portanto,
+# ignora RLS. A API deve continuar conectando como sge_api (criado em bd/04),
+# que é um role comum e permanece sujeito às políticas.
 services:
   postgres:
     image: postgres:16-alpine
     container_name: sge-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: sge
-      POSTGRES_PASSWORD: sge
-      POSTGRES_DB: sge
+      POSTGRES_USER: gestao_owner
+      POSTGRES_PASSWORD: desus
+      POSTGRES_DB: gestao_empresarial
     ports:
       - '5432:5432'
     volumes:
       - sge_pgdata:/var/lib/postgresql/data
+      - ../bd:/bd:ro
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U sge -d sge']
+      test: ['CMD-SHELL', 'pg_isready -U gestao_owner -d gestao_empresarial']
       interval: 10s
       timeout: 5s
       retries: 5

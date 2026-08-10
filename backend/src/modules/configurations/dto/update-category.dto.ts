@@ -1,11 +1,10 @@
 import { ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
-import { RecordStatus } from '@prisma/client';
+import { IsBoolean, IsOptional } from 'class-validator';
 import { CreateCategoryDto } from './create-category.dto';
 
 export class UpdateCategoryDto extends PartialType(CreateCategoryDto) {
-  @ApiPropertyOptional({ enum: RecordStatus })
+  @ApiPropertyOptional({ description: 'Situação da categoria (coluna `ativo`)' })
   @IsOptional()
-  @IsEnum(RecordStatus)
-  status?: RecordStatus;
+  @IsBoolean()
+  isActive?: boolean;
 }

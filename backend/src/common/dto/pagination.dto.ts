@@ -1,7 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
-import { RecordStatus } from '@prisma/client';
+import { IsBoolean, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 /** Parâmetros padrão de paginação/filtro server-side (RNF-008). */
 export class PaginationQueryDto {
@@ -26,10 +25,11 @@ export class PaginationQueryDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   q?: string;
 
-  @ApiPropertyOptional({ enum: RecordStatus })
+  @ApiPropertyOptional({ description: 'Filtra por situação (coluna `ativo`)' })
   @IsOptional()
-  @IsEnum(RecordStatus)
-  status?: RecordStatus;
+  @Transform(({ value }) => (value === 'true' ? true : value === 'false' ? false : value))
+  @IsBoolean()
+  isActive?: boolean;
 
   get skip(): number {
     return (this.page - 1) * this.pageSize;

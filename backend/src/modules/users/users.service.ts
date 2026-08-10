@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, RecordStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PasswordService } from '../auth/password.service';
 import { TokenService } from '../auth/token.service';
@@ -13,8 +13,10 @@ const userSelect = {
   id: true,
   name: true,
   email: true,
+  phone: true,
   isSuperAdmin: true,
-  status: true,
+  isActive: true,
+  lastLoginAt: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.UserSelect;
@@ -30,10 +32,11 @@ export class UsersService {
   /** Cadastra um usuário (RF-007). */
   async create(dto: CreateUserDto) {
     const passwordHash = await this.password.hash(dto.password);
-    return this.prisma.user.create({
+    return this.prisma.db.user.create({
       data: {
         name: dto.name,
         email: dto.email,
+        phone: dto.phone,
         passwordHash,
         isSuperAdmin: dto.isSuperAdmin ?? false,
       },
@@ -43,7 +46,7 @@ export class UsersService {
 
   async findAll(query: PaginationQueryDto) {
     const where: Prisma.UserWhereInput = {
-      ...(query.status ? { status: query.status } : {}),
+      ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
       ...(query.q
         ? {
             OR: [
@@ -54,22 +57,20 @@ export class UsersService {
         : {}),
     };
 
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.user.findMany({
-        where,
-        select: userSelect,
-        orderBy: { createdAt: 'desc' },
-        skip: query.skip,
-        take: query.take,
-      }),
-      this.prisma.user.count({ where }),
-    ]);
+    const data = await this.prisma.db.user.findMany({
+      where,
+      select: userSelect,
+      orderBy: { createdAt: 'desc' },
+      skip: query.skip,
+      take: query.take,
+    });
+    const total = await this.prisma.db.user.count({ where });
 
     return new PaginatedResult(data, total, query.page, query.pageSize);
   }
 
   async findOne(id: string) {
-    const user = await this.prisma.user.findUnique({ where: { id }, select: userSelect });
+    const user = await this.prisma.db.user.findUnique({ where: { id }, select: userSelect });
     if (!user) {
       throw new NotFoundException('Usuário não encontrado.');
     }
@@ -79,17 +80,18 @@ export class UsersService {
   /** Atualiza dados/situação do usuário (RF-007). Ao inativar, encerra sessões. */
   async update(id: string, dto: UpdateUserDto) {
     await this.findOne(id);
-    const user = await this.prisma.user.update({
+    const user = await this.prisma.db.user.update({
       where: { id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name } : {}),
-        ...(dto.status !== undefined ? { status: dto.status } : {}),
+        ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
         ...(dto.isSuperAdmin !== undefined ? { isSuperAdmin: dto.isSuperAdmin } : {}),
       },
       select: userSelect,
     });
 
-    if (dto.status === RecordStatus.INACTIVE) {
+    if (dto.isActive === false) {
       await this.tokens.revokeAllForUser(id);
     }
     return user;

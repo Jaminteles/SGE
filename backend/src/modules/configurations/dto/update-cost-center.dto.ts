@@ -1,11 +1,10 @@
 import { ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
-import { RecordStatus } from '@prisma/client';
+import { IsBoolean, IsOptional } from 'class-validator';
 import { CreateCostCenterDto } from './create-cost-center.dto';
 
 export class UpdateCostCenterDto extends PartialType(CreateCostCenterDto) {
-  @ApiPropertyOptional({ enum: RecordStatus })
+  @ApiPropertyOptional({ description: 'Situação do centro de custo (coluna `ativo`)' })
   @IsOptional()
-  @IsEnum(RecordStatus)
-  status?: RecordStatus;
+  @IsBoolean()
+  isActive?: boolean;
 }

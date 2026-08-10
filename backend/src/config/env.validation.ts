@@ -17,6 +17,9 @@ export const envSchema = z.object({
 
   PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().default(30),
 
+  // Tempo máximo da transação que carrega o contexto de RLS de cada requisição.
+  REQUEST_TX_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
+
   CORS_ORIGINS: z.string().default(''),
 
   THROTTLE_TTL_SECONDS: z.coerce.number().int().positive().default(60),

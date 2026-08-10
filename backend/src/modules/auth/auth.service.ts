@@ -1,7 +1,6 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomBytes } from 'node:crypto';
-import { RecordStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PasswordService } from './password.service';
 import { IssuedTokens, TokenService } from './token.service';
@@ -29,16 +28,25 @@ export class AuthService {
 
   /** Autentica o usuário e emite tokens + lista de empresas acessíveis (RF-008). */
   async login(dto: LoginDto, meta: RequestMeta): Promise<IssuedTokens & { user: unknown }> {
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const user = await this.prisma.db.user.findUnique({ where: { email: dto.email } });
 
     // Verificação em tempo ~constante para evitar enumeração de usuários.
     const validPassword = user
       ? await this.password.verify(user.passwordHash, dto.password)
       : await this.password.verify(await this.getDummyHash(), dto.password);
 
-    if (!user || !validPassword || user.status !== RecordStatus.ACTIVE) {
+    if (!user || !validPassword || !user.isActive) {
       throw new UnauthorizedException('Credenciais inválidas.');
     }
+
+    // A partir daqui a sessão de banco tem dono: a RLS libera as associações
+    // do próprio usuário (bd/04, pol_usuario_empresa_proprio).
+    await this.prisma.setCurrentUser(user.id);
+
+    await this.prisma.db.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
 
     const issued = await this.tokens.issueTokens(user, meta);
     return { ...issued, user: await this.profile(user.id) };
@@ -58,15 +66,15 @@ export class AuthService {
    * de notificações (M17); aqui o token é gerado e registrado.
    */
   async forgotPassword(dto: ForgotPasswordDto): Promise<void> {
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (!user || user.status !== RecordStatus.ACTIVE) {
+    const user = await this.prisma.db.user.findUnique({ where: { email: dto.email } });
+    if (!user || !user.isActive) {
       return;
     }
 
     const rawToken = randomBytes(32).toString('base64url');
     const ttlMinutes = this.config.getOrThrow<number>('PASSWORD_RESET_TTL_MINUTES');
 
-    await this.prisma.passwordResetToken.create({
+    await this.prisma.db.passwordResetToken.create({
       data: {
         userId: user.id,
         tokenHash: this.hashToken(rawToken),
@@ -80,7 +88,7 @@ export class AuthService {
 
   /** Redefine a senha via token e encerra todas as sessões (RF-009). */
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
-    const record = await this.prisma.passwordResetToken.findUnique({
+    const record = await this.prisma.db.passwordResetToken.findUnique({
       where: { tokenHash: this.hashToken(dto.token) },
     });
 
@@ -90,25 +98,25 @@ export class AuthService {
 
     const passwordHash = await this.password.hash(dto.newPassword);
 
-    await this.prisma.$transaction([
-      this.prisma.user.update({
+    await this.prisma.transaction(async (tx) => {
+      await tx.user.update({
         where: { id: record.userId },
-        data: { passwordHash },
-      }),
-      this.prisma.passwordResetToken.update({
+        data: { passwordHash, passwordChangedAt: new Date() },
+      });
+      await tx.passwordResetToken.update({
         where: { id: record.id },
         data: { usedAt: new Date() },
-      }),
-      this.prisma.session.updateMany({
+      });
+      await tx.session.updateMany({
         where: { userId: record.userId, revokedAt: null },
         data: { revokedAt: new Date() },
-      }),
-    ]);
+      });
+    });
   }
 
   /** Altera a própria senha (RF-009) e encerra as demais sessões. */
   async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.db.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new UnauthorizedException('Usuário não encontrado.');
     }
@@ -119,29 +127,34 @@ export class AuthService {
     }
 
     const passwordHash = await this.password.hash(dto.newPassword);
-    await this.prisma.$transaction([
-      this.prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
-      this.prisma.session.updateMany({
+    await this.prisma.transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { passwordHash, passwordChangedAt: new Date() },
+      });
+      await tx.session.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
-      }),
-    ]);
+      });
+    });
   }
 
   /** Perfil do usuário autenticado com as empresas às quais tem acesso. */
   async profile(userId: string) {
-    const user = await this.prisma.user.findUniqueOrThrow({
+    const user = await this.prisma.db.user.findUniqueOrThrow({
       where: { id: userId },
       select: {
         id: true,
         name: true,
         email: true,
         isSuperAdmin: true,
-        status: true,
+        isActive: true,
         memberships: {
-          where: { status: RecordStatus.ACTIVE },
+          where: { isActive: true },
           select: {
             companyId: true,
+            branchId: true,
+            isDefault: true,
             company: { select: { legalName: true, tradeName: true } },
             role: { select: { id: true, name: true } },
           },

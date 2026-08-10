@@ -1,14 +1,21 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, RecordStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import { PaginatedResult } from '../../common/dto/paginated-result';
 import { CreateApprovalThresholdDto } from './dto/create-approval-threshold.dto';
 import { UpdateApprovalThresholdDto } from './dto/update-approval-threshold.dto';
 
+/**
+ * Alçadas de aprovação (RF-012, RN-003) — `gestao.alcada`.
+ * Os aprovadores ficam em `gestao.alcada_aprovador`: cada linha aponta para um
+ * perfil OU um usuário. A API desta sprint trabalha com aprovação por perfil.
+ */
 const thresholdInclude = {
-  requiredRole: { select: { id: true, name: true } },
+  approvers: { include: { role: { select: { id: true, name: true } } } },
 } satisfies Prisma.ApprovalThresholdInclude;
+
+type ThresholdRow = Prisma.ApprovalThresholdGetPayload<{ include: typeof thresholdInclude }>;
 
 @Injectable()
 export class ApprovalThresholdsService {
@@ -20,52 +27,52 @@ export class ApprovalThresholdsService {
     this.validateRange(min, max);
     await this.ensureRole(companyId, dto.requiredRoleId);
 
-    return this.prisma.approvalThreshold.create({
+    const row = await this.prisma.db.approvalThreshold.create({
       data: {
         companyId,
+        name: dto.name ?? dto.operation,
         operation: dto.operation,
         minAmount: min,
         maxAmount: max,
-        requiredRoleId: dto.requiredRoleId,
+        ...(dto.level !== undefined ? { level: dto.level } : {}),
+        ...(dto.minApprovers !== undefined ? { minApprovers: dto.minApprovers } : {}),
+        approvers: { create: [{ roleId: dto.requiredRoleId }] },
       },
       include: thresholdInclude,
     });
+    return this.toResponse(row);
   }
 
   async findAll(companyId: string, query: PaginationQueryDto) {
     const where: Prisma.ApprovalThresholdWhereInput = {
       companyId,
-      ...(query.status ? { status: query.status } : {}),
+      ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
       ...(query.q ? { operation: { contains: query.q, mode: 'insensitive' } } : {}),
     };
 
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.approvalThreshold.findMany({
-        where,
-        include: thresholdInclude,
-        orderBy: [{ operation: 'asc' }, { minAmount: 'asc' }],
-        skip: query.skip,
-        take: query.take,
-      }),
-      this.prisma.approvalThreshold.count({ where }),
-    ]);
+    const rows = await this.prisma.db.approvalThreshold.findMany({
+      where,
+      include: thresholdInclude,
+      orderBy: [{ operation: 'asc' }, { minAmount: 'asc' }],
+      skip: query.skip,
+      take: query.take,
+    });
+    const total = await this.prisma.db.approvalThreshold.count({ where });
 
-    return new PaginatedResult(data, total, query.page, query.pageSize);
+    return new PaginatedResult(
+      rows.map((r) => this.toResponse(r)),
+      total,
+      query.page,
+      query.pageSize,
+    );
   }
 
   async findOne(companyId: string, id: string) {
-    const threshold = await this.prisma.approvalThreshold.findFirst({
-      where: { id, companyId },
-      include: thresholdInclude,
-    });
-    if (!threshold) {
-      throw new NotFoundException('Alçada não encontrada.');
-    }
-    return threshold;
+    return this.toResponse(await this.load(companyId, id));
   }
 
   async update(companyId: string, id: string, dto: UpdateApprovalThresholdDto) {
-    const current = await this.findOne(companyId, id);
+    const current = await this.load(companyId, id);
 
     const min = dto.minAmount != null ? new Prisma.Decimal(dto.minAmount) : current.minAmount;
     const max =
@@ -80,22 +87,29 @@ export class ApprovalThresholdsService {
       await this.ensureRole(companyId, dto.requiredRoleId);
     }
 
-    return this.prisma.approvalThreshold.update({
+    const row = await this.prisma.db.approvalThreshold.update({
       where: { id },
       data: {
+        ...(dto.name !== undefined ? { name: dto.name } : {}),
         ...(dto.operation !== undefined ? { operation: dto.operation } : {}),
         ...(dto.minAmount != null ? { minAmount: min } : {}),
         ...(dto.maxAmount !== undefined ? { maxAmount: max } : {}),
-        ...(dto.requiredRoleId !== undefined ? { requiredRoleId: dto.requiredRoleId } : {}),
-        ...(dto.status !== undefined ? { status: dto.status } : {}),
+        ...(dto.level !== undefined ? { level: dto.level } : {}),
+        ...(dto.minApprovers !== undefined ? { minApprovers: dto.minApprovers } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+        // Substitui o aprovador por perfil de forma atômica.
+        ...(dto.requiredRoleId !== undefined
+          ? { approvers: { deleteMany: {}, create: [{ roleId: dto.requiredRoleId }] } }
+          : {}),
       },
       include: thresholdInclude,
     });
+    return this.toResponse(row);
   }
 
   async remove(companyId: string, id: string) {
-    await this.findOne(companyId, id);
-    await this.prisma.approvalThreshold.delete({ where: { id } });
+    await this.load(companyId, id);
+    await this.prisma.db.approvalThreshold.delete({ where: { id } });
   }
 
   /**
@@ -104,11 +118,11 @@ export class ApprovalThresholdsService {
    */
   async evaluate(companyId: string, operation: string, amount: string) {
     const value = new Prisma.Decimal(amount);
-    const thresholds = await this.prisma.approvalThreshold.findMany({
+    const rows = await this.prisma.db.approvalThreshold.findMany({
       where: {
         companyId,
         operation,
-        status: RecordStatus.ACTIVE,
+        isActive: true,
         minAmount: { lte: value },
         OR: [{ maxAmount: null }, { maxAmount: { gte: value } }],
       },
@@ -116,12 +130,44 @@ export class ApprovalThresholdsService {
       orderBy: { minAmount: 'asc' },
     });
 
+    const matched = rows.map((r) => this.toResponse(r));
+    const roles = new Map(
+      rows.flatMap((r) => r.approvers.filter((a) => a.role).map((a) => [a.role!.id, a.role!])),
+    );
+
     return {
       operation,
       amount: value.toFixed(2),
-      requiresApproval: thresholds.length > 0,
-      authorizedRoles: thresholds.map((t) => t.requiredRole),
-      matchedThresholds: thresholds,
+      requiresApproval: matched.length > 0,
+      authorizedRoles: [...roles.values()],
+      matchedThresholds: matched,
+    };
+  }
+
+  private async load(companyId: string, id: string): Promise<ThresholdRow> {
+    const threshold = await this.prisma.db.approvalThreshold.findFirst({
+      where: { id, companyId },
+      include: thresholdInclude,
+    });
+    if (!threshold) {
+      throw new NotFoundException('Alçada não encontrada.');
+    }
+    return threshold;
+  }
+
+  private toResponse(row: ThresholdRow) {
+    return {
+      id: row.id,
+      name: row.name,
+      operation: row.operation,
+      minAmount: row.minAmount,
+      maxAmount: row.maxAmount,
+      level: row.level,
+      minApprovers: row.minApprovers,
+      isActive: row.isActive,
+      requiredRoles: row.approvers.filter((a) => a.role).map((a) => a.role),
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     };
   }
 
@@ -135,8 +181,8 @@ export class ApprovalThresholdsService {
   }
 
   private async ensureRole(companyId: string, roleId: string) {
-    const role = await this.prisma.role.findFirst({
-      where: { id: roleId, companyId },
+    const role = await this.prisma.db.role.findFirst({
+      where: { id: roleId, OR: [{ companyId }, { companyId: null }] },
       select: { id: true },
     });
     if (!role) {

@@ -10,7 +10,6 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { RecordStatus } from '@prisma/client';
 import { RequireSuperAdmin } from '../../common/decorators/super-admin.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { ActiveCompanyId } from '../../common/decorators/active-company.decorator';
@@ -78,7 +77,7 @@ export class CompaniesController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Ativar empresa (RF-001)' })
   activate(@Param('id') id: string) {
-    return this.companies.setStatus(id, RecordStatus.ACTIVE);
+    return this.companies.setActive(id, true);
   }
 
   @Post(':id/inactivate')
@@ -86,6 +85,6 @@ export class CompaniesController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Inativar empresa (RF-001)' })
   inactivate(@Param('id') id: string) {
-    return this.companies.setStatus(id, RecordStatus.INACTIVE);
+    return this.companies.setActive(id, false);
   }
 }

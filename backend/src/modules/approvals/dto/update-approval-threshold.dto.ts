@@ -1,11 +1,10 @@
 import { ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
-import { RecordStatus } from '@prisma/client';
+import { IsBoolean, IsOptional } from 'class-validator';
 import { CreateApprovalThresholdDto } from './create-approval-threshold.dto';
 
 export class UpdateApprovalThresholdDto extends PartialType(CreateApprovalThresholdDto) {
-  @ApiPropertyOptional({ enum: RecordStatus })
+  @ApiPropertyOptional({ description: 'Situação da alçada (coluna `ativo`)' })
   @IsOptional()
-  @IsEnum(RecordStatus)
-  status?: RecordStatus;
+  @IsBoolean()
+  isActive?: boolean;
 }

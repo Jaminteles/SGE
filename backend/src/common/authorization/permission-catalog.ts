@@ -1,10 +1,16 @@
-import { PermissionAction } from '@prisma/client';
+import { PermissionAction } from '../enums';
 
 /**
  * Catálogo de permissões da Sprint 1 (RF-011).
- * Fonte única de verdade: usado pelo seed (para popular a tabela Permission)
- * e pelos controllers (via @RequirePermissions). Cada permissão é
- * `recurso:AÇÃO` e pertence a um módulo da ERS.
+ *
+ * Fonte única de verdade do backend: usado pelo seed (para popular
+ * `gestao.permissao`) e pelos controllers (via @RequirePermissions).
+ *
+ * No banco a permissão é a tripla (modulo, recurso, acao) — não existe coluna
+ * de código. O código usado na API é derivado: `recurso:AÇÃO`. A carga inicial
+ * de `bd/03` traz outra família de permissões (EMPRESAS/EMPRESA/LER, ...),
+ * reservada para os módulos das próximas sprints; as duas convivem porque a
+ * chave única é a tripla.
  *
  * Empresas e usuários são recursos de plataforma (administrados por
  * super admin) e por isso não constam no RBAC por empresa — exceto a
@@ -31,13 +37,18 @@ export interface PermissionDefinition {
   description: string;
 }
 
+/** Código de permissão exposto pela API a partir da tripla do banco. */
+export function permissionCode(resource: string, action: string): string {
+  return `${resource}:${action}`;
+}
+
 function build(
   module: string,
   resource: string,
   actions: { action: PermissionAction; description: string }[],
 ): PermissionDefinition[] {
   return actions.map(({ action, description }) => ({
-    code: `${resource}:${action}`,
+    code: permissionCode(resource, action),
     module,
     resource,
     action,
@@ -96,41 +107,44 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ]),
 ];
 
+/** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
+export const PERMISSION_BY_CODE = new Map(PERMISSION_CATALOG.map((p) => [p.code, p]));
+
 /** Constantes de código para uso nos decorators @RequirePermissions. */
 export const PERMISSIONS = {
-  COMPANY_READ: `${RESOURCES.COMPANY}:${A.READ}`,
-  COMPANY_UPDATE: `${RESOURCES.COMPANY}:${A.UPDATE}`,
+  COMPANY_READ: permissionCode(RESOURCES.COMPANY, A.READ),
+  COMPANY_UPDATE: permissionCode(RESOURCES.COMPANY, A.UPDATE),
 
-  BRANCHES_CREATE: `${RESOURCES.BRANCHES}:${A.CREATE}`,
-  BRANCHES_READ: `${RESOURCES.BRANCHES}:${A.READ}`,
-  BRANCHES_UPDATE: `${RESOURCES.BRANCHES}:${A.UPDATE}`,
-  BRANCHES_DELETE: `${RESOURCES.BRANCHES}:${A.DELETE}`,
+  BRANCHES_CREATE: permissionCode(RESOURCES.BRANCHES, A.CREATE),
+  BRANCHES_READ: permissionCode(RESOURCES.BRANCHES, A.READ),
+  BRANCHES_UPDATE: permissionCode(RESOURCES.BRANCHES, A.UPDATE),
+  BRANCHES_DELETE: permissionCode(RESOURCES.BRANCHES, A.DELETE),
 
-  CATEGORIES_CREATE: `${RESOURCES.CATEGORIES}:${A.CREATE}`,
-  CATEGORIES_READ: `${RESOURCES.CATEGORIES}:${A.READ}`,
-  CATEGORIES_UPDATE: `${RESOURCES.CATEGORIES}:${A.UPDATE}`,
-  CATEGORIES_DELETE: `${RESOURCES.CATEGORIES}:${A.DELETE}`,
+  CATEGORIES_CREATE: permissionCode(RESOURCES.CATEGORIES, A.CREATE),
+  CATEGORIES_READ: permissionCode(RESOURCES.CATEGORIES, A.READ),
+  CATEGORIES_UPDATE: permissionCode(RESOURCES.CATEGORIES, A.UPDATE),
+  CATEGORIES_DELETE: permissionCode(RESOURCES.CATEGORIES, A.DELETE),
 
-  COST_CENTERS_CREATE: `${RESOURCES.COST_CENTERS}:${A.CREATE}`,
-  COST_CENTERS_READ: `${RESOURCES.COST_CENTERS}:${A.READ}`,
-  COST_CENTERS_UPDATE: `${RESOURCES.COST_CENTERS}:${A.UPDATE}`,
-  COST_CENTERS_DELETE: `${RESOURCES.COST_CENTERS}:${A.DELETE}`,
+  COST_CENTERS_CREATE: permissionCode(RESOURCES.COST_CENTERS, A.CREATE),
+  COST_CENTERS_READ: permissionCode(RESOURCES.COST_CENTERS, A.READ),
+  COST_CENTERS_UPDATE: permissionCode(RESOURCES.COST_CENTERS, A.UPDATE),
+  COST_CENTERS_DELETE: permissionCode(RESOURCES.COST_CENTERS, A.DELETE),
 
-  SETTINGS_READ: `${RESOURCES.SETTINGS}:${A.READ}`,
-  SETTINGS_UPDATE: `${RESOURCES.SETTINGS}:${A.UPDATE}`,
+  SETTINGS_READ: permissionCode(RESOURCES.SETTINGS, A.READ),
+  SETTINGS_UPDATE: permissionCode(RESOURCES.SETTINGS, A.UPDATE),
 
-  ROLES_CREATE: `${RESOURCES.ROLES}:${A.CREATE}`,
-  ROLES_READ: `${RESOURCES.ROLES}:${A.READ}`,
-  ROLES_UPDATE: `${RESOURCES.ROLES}:${A.UPDATE}`,
-  ROLES_DELETE: `${RESOURCES.ROLES}:${A.DELETE}`,
+  ROLES_CREATE: permissionCode(RESOURCES.ROLES, A.CREATE),
+  ROLES_READ: permissionCode(RESOURCES.ROLES, A.READ),
+  ROLES_UPDATE: permissionCode(RESOURCES.ROLES, A.UPDATE),
+  ROLES_DELETE: permissionCode(RESOURCES.ROLES, A.DELETE),
 
-  MEMBERSHIPS_CREATE: `${RESOURCES.MEMBERSHIPS}:${A.CREATE}`,
-  MEMBERSHIPS_READ: `${RESOURCES.MEMBERSHIPS}:${A.READ}`,
-  MEMBERSHIPS_UPDATE: `${RESOURCES.MEMBERSHIPS}:${A.UPDATE}`,
-  MEMBERSHIPS_DELETE: `${RESOURCES.MEMBERSHIPS}:${A.DELETE}`,
+  MEMBERSHIPS_CREATE: permissionCode(RESOURCES.MEMBERSHIPS, A.CREATE),
+  MEMBERSHIPS_READ: permissionCode(RESOURCES.MEMBERSHIPS, A.READ),
+  MEMBERSHIPS_UPDATE: permissionCode(RESOURCES.MEMBERSHIPS, A.UPDATE),
+  MEMBERSHIPS_DELETE: permissionCode(RESOURCES.MEMBERSHIPS, A.DELETE),
 
-  APPROVAL_THRESHOLDS_CREATE: `${RESOURCES.APPROVAL_THRESHOLDS}:${A.CREATE}`,
-  APPROVAL_THRESHOLDS_READ: `${RESOURCES.APPROVAL_THRESHOLDS}:${A.READ}`,
-  APPROVAL_THRESHOLDS_UPDATE: `${RESOURCES.APPROVAL_THRESHOLDS}:${A.UPDATE}`,
-  APPROVAL_THRESHOLDS_DELETE: `${RESOURCES.APPROVAL_THRESHOLDS}:${A.DELETE}`,
+  APPROVAL_THRESHOLDS_CREATE: permissionCode(RESOURCES.APPROVAL_THRESHOLDS, A.CREATE),
+  APPROVAL_THRESHOLDS_READ: permissionCode(RESOURCES.APPROVAL_THRESHOLDS, A.READ),
+  APPROVAL_THRESHOLDS_UPDATE: permissionCode(RESOURCES.APPROVAL_THRESHOLDS, A.UPDATE),
+  APPROVAL_THRESHOLDS_DELETE: permissionCode(RESOURCES.APPROVAL_THRESHOLDS, A.DELETE),
 } as const;

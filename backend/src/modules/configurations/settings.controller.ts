@@ -10,7 +10,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { SettingScope } from '@prisma/client';
+import { SettingScope } from '../../common/enums';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { ActiveCompanyId } from '../../common/decorators/active-company.decorator';
 import { PERMISSIONS } from '../../common/authorization/permission-catalog';

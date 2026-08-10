@@ -50,6 +50,15 @@ async function bootstrap(): Promise<void> {
 
   const port = config.getOrThrow<number>('PORT');
   await app.listen(port);
+
+  // Endereços úteis no terminal (clicáveis na maioria dos terminais).
+  const logger = app.get(Logger);
+  const base = `http://localhost:${port}`;
+  logger.log(`API              -> ${base}/api/v1`);
+  logger.log(`Health           -> ${base}/api/v1/health`);
+  if (config.get('NODE_ENV') !== 'production') {
+    logger.log(`Swagger/OpenAPI  -> ${base}/api/docs`);
+  }
 }
 
 void bootstrap();
