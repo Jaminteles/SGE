@@ -1,5 +1,5 @@
 // SGE - Sistema de Gestão Empresarial e Financeira
-// Sprint 1 - Fundação (Fase 1): M01 Empresas/Filiais/Configurações + M02 Usuários/Perfis/Permissões
+// Sprint 1 (M01/M02), Sprint 2 (M16 Auditoria) e Sprint 3 (M03 Funcionários e RH)
 //
 // IMPORTANTE: este schema NÃO é dono do banco. O modelo físico vive em `bd/*.sql`
 // (schema `gestao`, PostgreSQL 14+) e é a fonte da verdade. Aqui há apenas o
@@ -71,6 +71,55 @@ enum AuditEvent {
   REABERTURA
 
   @@map("enum_tipo_evento_auditoria")
+}
+
+/// Situação do funcionário (`enum_status_funcionario`). Projetada pelo banco a
+/// partir do histórico funcional (bd/06) — a API não a escreve diretamente.
+enum EmployeeStatus {
+  ATIVO
+  AFASTADO
+  FERIAS
+  DESLIGADO
+
+  @@map("enum_status_funcionario")
+}
+
+/// Evento do histórico funcional (RF-015/RF-020).
+enum HrEventType {
+  ADMISSAO
+  PROMOCAO
+  TRANSFERENCIA
+  AFASTAMENTO
+  FERIAS
+  RETORNO
+  DESLIGAMENTO
+  ALTERACAO_SALARIAL
+
+  @@map("enum_tipo_evento_rh")
+}
+
+/// Natureza da verba de folha (RF-017): provento, desconto ou encargo.
+enum PayrollItemType {
+  SALARIO
+  BENEFICIO
+  DESCONTO
+  ADICIONAL
+  ENCARGO
+
+  @@map("enum_tipo_verba")
+}
+
+/// Situação da solicitação de reembolso (RF-018).
+enum ReimbursementStatus {
+  RASCUNHO
+  SOLICITADO
+  EM_ANALISE
+  APROVADO
+  REPROVADO
+  PAGO
+  CANCELADO
+
+  @@map("enum_status_reembolso")
 }
 
 // ---------------------------------------------------------------------------
@@ -362,6 +411,268 @@ model ApprovalThreshold {
 
   @@unique([companyId, operation, level], map: "uq_alcada")
   @@map("alcada")
+}
+
+// ---------------------------------------------------------------------------
+// M03 — Funcionários e Recursos Humanos (RF-013 a RF-021)
+//
+// As referências a empresa, filial, centro de custo, categoria e usuário ficam
+// como colunas escalares: o vínculo com o tenant é garantido pelas FKs
+// compostas (empresa_id, <coluna>) criadas em bd/06, e declarar a relação aqui
+// só acrescentaria ida e volta ao Prisma sem uso nos serviços.
+// ---------------------------------------------------------------------------
+
+/// gestao.departamento — estrutura organizacional hierárquica (RF-014).
+model Department {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId    String       @map("empresa_id") @db.Uuid
+  parentId     String?      @map("departamento_pai_id") @db.Uuid
+  parent       Department?  @relation("DepartmentTree", fields: [parentId], references: [id])
+  children     Department[] @relation("DepartmentTree")
+  costCenterId String?      @map("centro_custo_id") @db.Uuid
+  code         String       @map("codigo") @db.VarChar(30)
+  name         String       @map("nome") @db.VarChar(255)
+  isActive     Boolean      @default(true) @map("ativo")
+  createdAt    DateTime     @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt    DateTime     @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  employees Employee[]
+  events    EmployeeEvent[]
+
+  @@unique([companyId, code], map: "uq_departamento_codigo")
+  @@map("departamento")
+}
+
+/// gestao.cargo — cargo com faixa salarial e CBO (RF-014).
+model Position {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String   @map("empresa_id") @db.Uuid
+  code        String   @map("codigo") @db.VarChar(30)
+  name        String   @map("nome") @db.VarChar(255)
+  cbo         String?  @db.VarChar(10)
+  description String?  @map("descricao")
+  minSalary   Decimal? @map("faixa_salarial_min") @db.Decimal(18, 2)
+  maxSalary   Decimal? @map("faixa_salarial_max") @db.Decimal(18, 2)
+  isActive    Boolean  @default(true) @map("ativo")
+  createdAt   DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  employees Employee[]
+  events    EmployeeEvent[]
+
+  @@unique([companyId, code], map: "uq_cargo_codigo")
+  @@map("cargo")
+}
+
+/// gestao.funcionario — cadastro funcional (RF-013, RF-014, RF-016).
+///
+/// `status`, `terminationDate` e o salário vigente são projetados pelo banco a
+/// partir de `funcionario_evento` (bd/06): o histórico é a fonte da verdade.
+model Employee {
+  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String         @map("empresa_id") @db.Uuid
+  branchId          String?        @map("filial_id") @db.Uuid
+  /// Usuário do sistema correspondente, quando o funcionário acessa a API.
+  userId            String?        @map("usuario_id") @db.Uuid
+  registration      String         @map("matricula") @db.VarChar(30)
+  name              String         @map("nome") @db.VarChar(255)
+  taxId             String         @map("cpf") @db.VarChar(11)
+  rg                String?        @db.VarChar(20)
+  pis               String?        @db.VarChar(15)
+  birthDate         DateTime?      @map("data_nascimento") @db.Date
+  corporateEmail    String?        @map("email_corporativo") @db.VarChar(255)
+  phone             String?        @map("telefone") @db.VarChar(20)
+  positionId        String?        @map("cargo_id") @db.Uuid
+  position          Position?      @relation(fields: [positionId], references: [id])
+  departmentId      String?        @map("departamento_id") @db.Uuid
+  department        Department?    @relation(fields: [departmentId], references: [id])
+  costCenterId      String?        @map("centro_custo_id") @db.Uuid
+  managerId         String?        @map("gestor_id") @db.Uuid
+  manager           Employee?      @relation("EmployeeHierarchy", fields: [managerId], references: [id])
+  subordinates      Employee[]     @relation("EmployeeHierarchy")
+  hireDate          DateTime       @map("data_admissao") @db.Date
+  terminationDate   DateTime?      @map("data_desligamento") @db.Date
+  terminationReason String?        @map("motivo_desligamento")
+  contractType      String?        @map("tipo_contrato") @db.VarChar(40)
+  status            EmployeeStatus @default(ATIVO)
+  baseSalary        Decimal?       @map("salario_base") @db.Decimal(18, 2)
+  createdAt         DateTime       @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt         DateTime       @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  bankAccounts   EmployeeBankAccount[]
+  events         EmployeeEvent[]
+  payrollItems   EmployeePayrollItem[]
+  reimbursements Reimbursement[]
+
+  @@unique([companyId, registration], map: "uq_funcionario_matricula")
+  @@unique([companyId, taxId], map: "uq_funcionario_cpf")
+  @@map("funcionario")
+}
+
+/// gestao.dado_bancario — conta para crédito de salário/reembolso (RF-013).
+/// A tabela também atende parceiros (M04); aqui só o dono funcionário é usado.
+model EmployeeBankAccount {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String   @map("empresa_id") @db.Uuid
+  employeeId     String   @map("funcionario_id") @db.Uuid
+  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  bankCode       String?  @map("banco_codigo") @db.VarChar(5)
+  bankName       String?  @map("banco_nome") @db.VarChar(120)
+  agency         String?  @map("agencia") @db.VarChar(10)
+  agencyDigit    String?  @map("agencia_digito") @db.VarChar(2)
+  account        String?  @map("conta") @db.VarChar(20)
+  accountDigit   String?  @map("conta_digito") @db.VarChar(2)
+  accountType    String?  @map("tipo_conta") @db.VarChar(20)
+  holderName     String?  @map("titular_nome") @db.VarChar(255)
+  holderDocument String?  @map("titular_documento") @db.VarChar(14)
+  pixKey         String?  @map("chave_pix") @db.VarChar(140)
+  pixKeyType     String?  @map("tipo_chave_pix") @db.VarChar(20)
+  isPrimary      Boolean  @default(false) @map("principal")
+  isActive       Boolean  @default(true) @map("ativo")
+  createdAt      DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  @@map("dado_bancario")
+}
+
+/// gestao.funcionario_evento — histórico funcional (RF-015, RF-020).
+/// Append-only: bd/06 recusa UPDATE e DELETE — correção se faz com novo evento.
+model EmployeeEvent {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId    String      @map("empresa_id") @db.Uuid
+  employeeId   String      @map("funcionario_id") @db.Uuid
+  employee     Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type         HrEventType @map("tipo")
+  startDate    DateTime    @map("data_inicio") @db.Date
+  endDate      DateTime?   @map("data_fim") @db.Date
+  positionId   String?     @map("cargo_id") @db.Uuid
+  position     Position?   @relation(fields: [positionId], references: [id])
+  departmentId String?     @map("departamento_id") @db.Uuid
+  department   Department? @relation(fields: [departmentId], references: [id])
+  costCenterId String?     @map("centro_custo_id") @db.Uuid
+  salary       Decimal?    @map("salario") @db.Decimal(18, 2)
+  note         String?     @map("observacao")
+  recordedBy   String?     @map("registrado_por") @db.Uuid
+  createdAt    DateTime    @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  @@index([employeeId, startDate(sort: Desc)], map: "ix_funcionario_evento_func")
+  @@map("funcionario_evento")
+}
+
+/// gestao.verba — catálogo de salários, benefícios e descontos (RF-017/RF-021).
+model PayrollItem {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId        String          @map("empresa_id") @db.Uuid
+  code             String          @map("codigo") @db.VarChar(30)
+  name             String          @map("nome") @db.VarChar(255)
+  type             PayrollItemType @map("tipo")
+  /// Conta contábil e categoria financeira ligam a folha à contabilidade (RF-021).
+  ledgerAccountId  String?         @map("conta_contabil_id") @db.Uuid
+  categoryId       String?         @map("categoria_financeira_id") @db.Uuid
+  affectsInss      Boolean         @default(false) @map("incide_inss")
+  affectsIrrf      Boolean         @default(false) @map("incide_irrf")
+  affectsFgts      Boolean         @default(false) @map("incide_fgts")
+  isActive         Boolean         @default(true) @map("ativo")
+  createdAt        DateTime        @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt        DateTime        @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  assignments EmployeePayrollItem[]
+
+  @@unique([companyId, code], map: "uq_verba_codigo")
+  @@map("verba")
+}
+
+/// gestao.funcionario_verba — verba atribuída a um funcionário com vigência.
+/// bd/06 impede vigências sobrepostas da mesma verba (RF-017).
+model EmployeePayrollItem {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId     String      @map("empresa_id") @db.Uuid
+  employeeId    String      @map("funcionario_id") @db.Uuid
+  employee      Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  payrollItemId String      @map("verba_id") @db.Uuid
+  payrollItem   PayrollItem @relation(fields: [payrollItemId], references: [id])
+  amount        Decimal?    @map("valor") @db.Decimal(18, 2)
+  percentage    Decimal?    @map("percentual") @db.Decimal(9, 6)
+  effectiveFrom DateTime    @map("vigencia_inicio") @db.Date
+  effectiveTo   DateTime?   @map("vigencia_fim") @db.Date
+  note          String?     @map("observacao")
+  createdAt     DateTime    @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt     DateTime    @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  @@map("funcionario_verba")
+}
+
+/// gestao.reembolso — solicitação de reembolso de despesa (RF-018).
+/// `totalAmount` é recalculado pelo banco a partir dos itens (bd/06).
+model Reimbursement {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String              @map("empresa_id") @db.Uuid
+  branchId       String?             @map("filial_id") @db.Uuid
+  employeeId     String              @map("funcionario_id") @db.Uuid
+  employee       Employee            @relation(fields: [employeeId], references: [id])
+  number         String              @map("numero") @db.VarChar(30)
+  description    String              @map("descricao") @db.VarChar(255)
+  requestDate    DateTime            @default(now()) @map("data_solicitacao") @db.Date
+  totalAmount    Decimal             @default(0) @map("valor_total") @db.Decimal(18, 2)
+  approvedAmount Decimal?            @map("valor_aprovado") @db.Decimal(18, 2)
+  status         ReimbursementStatus @default(RASCUNHO)
+  costCenterId   String?             @map("centro_custo_id") @db.Uuid
+  /// Título a pagar gerado na liquidação (M08, sprint futura).
+  payableId      String?             @map("titulo_id") @db.Uuid
+  approvedBy     String?             @map("aprovado_por") @db.Uuid
+  approvedAt     DateTime?           @map("aprovado_em") @db.Timestamptz(6)
+  note           String?             @map("observacao")
+  createdAt      DateTime            @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt      DateTime            @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  items ReimbursementItem[]
+
+  @@unique([companyId, number], map: "uq_reembolso_numero")
+  @@map("reembolso")
+}
+
+/// gestao.reembolso_item — despesa individual da solicitação (RF-018/RF-019).
+model ReimbursementItem {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId       String          @map("empresa_id") @db.Uuid
+  reimbursementId String          @map("reembolso_id") @db.Uuid
+  reimbursement   Reimbursement   @relation(fields: [reimbursementId], references: [id], onDelete: Cascade)
+  description     String          @map("descricao") @db.VarChar(255)
+  expenseDate     DateTime        @map("data_despesa") @db.Date
+  amount          Decimal         @map("valor") @db.Decimal(18, 2)
+  categoryId      String?         @map("categoria_financeira_id") @db.Uuid
+  costCenterId    String?         @map("centro_custo_id") @db.Uuid
+  documentId      String?         @map("documento_id") @db.Uuid
+  document        StoredDocument? @relation(fields: [documentId], references: [id])
+  approved        Boolean?        @map("aprovado")
+  note            String?         @map("observacao")
+  createdAt       DateTime        @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  @@index([reimbursementId], map: "ix_reembolso_item_reembolso")
+  @@map("reembolso_item")
+}
+
+/// gestao.documento — arquivo armazenado (RF-019: comprovantes de despesa).
+/// O binário fica no provedor de storage; aqui só os metadados e o hash.
+model StoredDocument {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId       String   @map("empresa_id") @db.Uuid
+  fileName        String   @map("nome_arquivo") @db.VarChar(255)
+  mimeType        String?  @map("tipo_mime") @db.VarChar(120)
+  sizeBytes       BigInt?  @map("tamanho_bytes")
+  sha256          String?  @map("hash_sha256") @db.VarChar(64)
+  storageProvider String   @default("S3") @map("storage_provider") @db.VarChar(40)
+  storageKey      String   @map("storage_key")
+  category        String?  @map("categoria") @db.VarChar(60)
+  entity          String?  @map("entidade") @db.VarChar(60)
+  entityId        String?  @map("entidade_id") @db.Uuid
+  uploadedBy      String?  @map("enviado_por") @db.Uuid
+  createdAt       DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  reimbursementItems ReimbursementItem[]
+
+  @@index([companyId, entity, entityId], map: "ix_documento_entidade")
+  @@map("documento")
 }
 
 // ---------------------------------------------------------------------------

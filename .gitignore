@@ -33,3 +33,8 @@ coverage/
 
 # Temp
 tmp/
+
+# Arquivos enviados pelos usuários (comprovantes — RF-019).
+# Ancorado na raiz: `storage/` solto também esconderia src/common/storage.
+/storage/
+/backend/storage/

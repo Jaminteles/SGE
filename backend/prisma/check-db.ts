@@ -94,13 +94,42 @@ async function main(): Promise<void> {
     detail: `${Number(auditWritable?.n ?? 0)} privilégio(s) de UPDATE/DELETE concedidos — rode bd/05`,
   });
 
+  // Sprint 3 (M03): sem as FKs compostas, um cadastro de RH pode apontar para
+  // outra empresa; sem os triggers, salário e dado bancário mudam sem trilha.
+  const tenantFks = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_constraint
+       WHERE contype = 'f' AND conname LIKE 'fk\\_%\\_tenant'
+    `,
+  );
+  checks.push({
+    label: 'referências de RH presas à empresa (bd/06)',
+    ok: Number(tenantFks?.n ?? 0) >= 22,
+    detail: `${Number(tenantFks?.n ?? 0)} FKs compostas (esperado ≥ 22) — rode bd/06_rh_sprint3.sql`,
+  });
+
+  const hrTriggers = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_trigger
+       WHERE NOT tgisinternal
+         AND tgname IN ('trg_funcionario_auditoria', 'trg_reembolso_auditoria',
+                        'trg_dado_bancario_auditoria', 'trg_funcionario_verba_auditoria',
+                        'trg_funcionario_evento_aplica', 'trg_reembolso_item_total')
+    `,
+  );
+  checks.push({
+    label: 'regras e auditoria do M03 aplicadas (bd/06)',
+    ok: Number(hrTriggers?.n ?? 0) >= 6,
+    detail: `${Number(hrTriggers?.n ?? 0)} triggers de 6 — rode bd/06_rh_sprint3.sql`,
+  });
+
   const permissions = await prisma.permission.count({
-    where: { module: { in: ['M01', 'M02', 'M16'] } },
+    where: { module: { in: ['M01', 'M02', 'M03', 'M16'] } },
   });
   checks.push({
     label: 'catálogo de permissões da API carregado',
     ok: permissions > 0,
-    detail: `${permissions} permissões M01/M02/M16 — rode npm run db:seed`,
+    detail: `${permissions} permissões M01/M02/M03/M16 — rode npm run db:seed`,
   });
 
   const admins = await prisma.user.count({ where: { isSuperAdmin: true, isActive: true } });

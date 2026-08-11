@@ -49,6 +49,15 @@ async function seedSystemRoles(): Promise<void> {
     // RF-117: o Auditor é o responsável pelo requisito e precisa da trilha —
     // somente leitura, que é tudo o que o módulo expõe (RF-118).
     { role: 'AUDITOR', codes: [PERMISSIONS.AUDIT_READ] },
+    // M03: o perfil RH mantém o cadastro funcional inteiro. A aprovação de
+    // reembolso fica de fora de propósito — quem lança não decide (RN-003);
+    // atribua `reimbursements:APPROVE` ao perfil que responde pela alçada.
+    {
+      role: 'RH',
+      codes: PERMISSION_CATALOG.filter(
+        (p) => p.module === 'M03' && p.code !== PERMISSIONS.REIMBURSEMENTS_APPROVE,
+      ).map((p) => p.code),
+    },
   ];
 
   for (const { role, codes } of grants) {

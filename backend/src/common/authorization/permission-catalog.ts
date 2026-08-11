@@ -28,6 +28,15 @@ export const RESOURCES = {
   SETTINGS: 'settings',
   APPROVAL_THRESHOLDS: 'approval-thresholds',
   AUDIT: 'audit',
+  DEPARTMENTS: 'departments',
+  POSITIONS: 'positions',
+  EMPLOYEES: 'employees',
+  EMPLOYEE_EVENTS: 'employee-events',
+  BANK_ACCOUNTS: 'employee-bank-accounts',
+  PAYROLL_ITEMS: 'payroll-items',
+  COMPENSATION: 'compensation',
+  REIMBURSEMENTS: 'reimbursements',
+  PAYROLL: 'payroll',
 } as const;
 
 export interface PermissionDefinition {
@@ -111,6 +120,62 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...build('M16', RESOURCES.AUDIT, [
     { action: A.READ, description: 'Consultar e filtrar a trilha de auditoria' },
   ]),
+  // M03 — Funcionários e Recursos Humanos.
+  //
+  // Dado bancário, remuneração e folha são recursos separados de propósito: são
+  // os alvos preferidos de fraude (desvio de crédito) e de vazamento, e quem
+  // mantém o cadastro funcional raramente precisa deles.
+  ...build('M03', RESOURCES.DEPARTMENTS, [
+    { action: A.CREATE, description: 'Cadastrar departamentos' },
+    { action: A.READ, description: 'Consultar departamentos' },
+    { action: A.UPDATE, description: 'Editar departamentos' },
+    { action: A.DELETE, description: 'Inativar departamentos' },
+  ]),
+  ...build('M03', RESOURCES.POSITIONS, [
+    { action: A.CREATE, description: 'Cadastrar cargos' },
+    { action: A.READ, description: 'Consultar cargos' },
+    { action: A.UPDATE, description: 'Editar cargos' },
+    { action: A.DELETE, description: 'Inativar cargos' },
+  ]),
+  ...build('M03', RESOURCES.EMPLOYEES, [
+    { action: A.CREATE, description: 'Cadastrar funcionários' },
+    { action: A.READ, description: 'Consultar funcionários' },
+    { action: A.UPDATE, description: 'Editar funcionários' },
+    { action: A.DELETE, description: 'Desligar funcionários' },
+  ]),
+  ...build('M03', RESOURCES.EMPLOYEE_EVENTS, [
+    { action: A.CREATE, description: 'Registrar admissão, férias, afastamento e desligamento' },
+    { action: A.READ, description: 'Consultar o histórico funcional' },
+  ]),
+  ...build('M03', RESOURCES.BANK_ACCOUNTS, [
+    { action: A.CREATE, description: 'Cadastrar dados bancários de funcionários' },
+    { action: A.READ, description: 'Consultar dados bancários de funcionários' },
+    { action: A.UPDATE, description: 'Editar dados bancários de funcionários' },
+    { action: A.DELETE, description: 'Inativar dados bancários de funcionários' },
+  ]),
+  ...build('M03', RESOURCES.PAYROLL_ITEMS, [
+    { action: A.CREATE, description: 'Cadastrar verbas de folha' },
+    { action: A.READ, description: 'Consultar verbas de folha' },
+    { action: A.UPDATE, description: 'Editar verbas de folha' },
+    { action: A.DELETE, description: 'Inativar verbas de folha' },
+  ]),
+  ...build('M03', RESOURCES.COMPENSATION, [
+    { action: A.CREATE, description: 'Atribuir salários, benefícios e descontos' },
+    { action: A.READ, description: 'Consultar a remuneração do funcionário' },
+    { action: A.UPDATE, description: 'Editar a remuneração do funcionário' },
+    { action: A.DELETE, description: 'Encerrar a vigência de uma verba' },
+  ]),
+  ...build('M03', RESOURCES.REIMBURSEMENTS, [
+    { action: A.CREATE, description: 'Solicitar reembolso de despesas' },
+    { action: A.READ, description: 'Consultar reembolsos e comprovantes' },
+    { action: A.UPDATE, description: 'Editar reembolsos em elaboração' },
+    { action: A.DELETE, description: 'Cancelar reembolsos' },
+    { action: A.APPROVE, description: 'Aprovar ou reprovar reembolsos' },
+  ]),
+  ...build('M03', RESOURCES.PAYROLL, [
+    { action: A.READ, description: 'Consultar a consolidação para folha e contabilidade' },
+    { action: A.EXPORT, description: 'Exportar a consolidação para folha e contabilidade' },
+  ]),
 ];
 
 /** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
@@ -155,4 +220,46 @@ export const PERMISSIONS = {
   APPROVAL_THRESHOLDS_DELETE: permissionCode(RESOURCES.APPROVAL_THRESHOLDS, A.DELETE),
 
   AUDIT_READ: permissionCode(RESOURCES.AUDIT, A.READ),
+
+  DEPARTMENTS_CREATE: permissionCode(RESOURCES.DEPARTMENTS, A.CREATE),
+  DEPARTMENTS_READ: permissionCode(RESOURCES.DEPARTMENTS, A.READ),
+  DEPARTMENTS_UPDATE: permissionCode(RESOURCES.DEPARTMENTS, A.UPDATE),
+  DEPARTMENTS_DELETE: permissionCode(RESOURCES.DEPARTMENTS, A.DELETE),
+
+  POSITIONS_CREATE: permissionCode(RESOURCES.POSITIONS, A.CREATE),
+  POSITIONS_READ: permissionCode(RESOURCES.POSITIONS, A.READ),
+  POSITIONS_UPDATE: permissionCode(RESOURCES.POSITIONS, A.UPDATE),
+  POSITIONS_DELETE: permissionCode(RESOURCES.POSITIONS, A.DELETE),
+
+  EMPLOYEES_CREATE: permissionCode(RESOURCES.EMPLOYEES, A.CREATE),
+  EMPLOYEES_READ: permissionCode(RESOURCES.EMPLOYEES, A.READ),
+  EMPLOYEES_UPDATE: permissionCode(RESOURCES.EMPLOYEES, A.UPDATE),
+  EMPLOYEES_DELETE: permissionCode(RESOURCES.EMPLOYEES, A.DELETE),
+
+  EMPLOYEE_EVENTS_CREATE: permissionCode(RESOURCES.EMPLOYEE_EVENTS, A.CREATE),
+  EMPLOYEE_EVENTS_READ: permissionCode(RESOURCES.EMPLOYEE_EVENTS, A.READ),
+
+  BANK_ACCOUNTS_CREATE: permissionCode(RESOURCES.BANK_ACCOUNTS, A.CREATE),
+  BANK_ACCOUNTS_READ: permissionCode(RESOURCES.BANK_ACCOUNTS, A.READ),
+  BANK_ACCOUNTS_UPDATE: permissionCode(RESOURCES.BANK_ACCOUNTS, A.UPDATE),
+  BANK_ACCOUNTS_DELETE: permissionCode(RESOURCES.BANK_ACCOUNTS, A.DELETE),
+
+  PAYROLL_ITEMS_CREATE: permissionCode(RESOURCES.PAYROLL_ITEMS, A.CREATE),
+  PAYROLL_ITEMS_READ: permissionCode(RESOURCES.PAYROLL_ITEMS, A.READ),
+  PAYROLL_ITEMS_UPDATE: permissionCode(RESOURCES.PAYROLL_ITEMS, A.UPDATE),
+  PAYROLL_ITEMS_DELETE: permissionCode(RESOURCES.PAYROLL_ITEMS, A.DELETE),
+
+  COMPENSATION_CREATE: permissionCode(RESOURCES.COMPENSATION, A.CREATE),
+  COMPENSATION_READ: permissionCode(RESOURCES.COMPENSATION, A.READ),
+  COMPENSATION_UPDATE: permissionCode(RESOURCES.COMPENSATION, A.UPDATE),
+  COMPENSATION_DELETE: permissionCode(RESOURCES.COMPENSATION, A.DELETE),
+
+  REIMBURSEMENTS_CREATE: permissionCode(RESOURCES.REIMBURSEMENTS, A.CREATE),
+  REIMBURSEMENTS_READ: permissionCode(RESOURCES.REIMBURSEMENTS, A.READ),
+  REIMBURSEMENTS_UPDATE: permissionCode(RESOURCES.REIMBURSEMENTS, A.UPDATE),
+  REIMBURSEMENTS_DELETE: permissionCode(RESOURCES.REIMBURSEMENTS, A.DELETE),
+  REIMBURSEMENTS_APPROVE: permissionCode(RESOURCES.REIMBURSEMENTS, A.APPROVE),
+
+  PAYROLL_READ: permissionCode(RESOURCES.PAYROLL, A.READ),
+  PAYROLL_EXPORT: permissionCode(RESOURCES.PAYROLL, A.EXPORT),
 } as const;

@@ -22,6 +22,16 @@ export const envSchema = z.object({
 
   CORS_ORIGINS: z.string().default(''),
 
+  // Comprovantes de despesa (RF-019). Diretório fora do versionamento; em
+  // produção troque o provedor por S3 sem mudar o contrato de `documento`.
+  STORAGE_LOCAL_ROOT: z.string().default('./storage'),
+  UPLOAD_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(50 * 1024 * 1024)
+    .default(10 * 1024 * 1024),
+
   THROTTLE_TTL_SECONDS: z.coerce.number().int().positive().default(60),
   THROTTLE_LIMIT: z.coerce.number().int().positive().default(120),
 

@@ -15,6 +15,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { TenantContextMiddleware } from './common/middleware/tenant-context.middleware';
 import { TransactionInterceptor } from './common/interceptors/transaction.interceptor';
 import { AuditModule } from './common/audit/audit.module';
+import { StorageModule } from './common/storage/storage.module';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -25,6 +26,7 @@ import { MembershipsModule } from './modules/memberships/memberships.module';
 import { ConfigurationsModule } from './modules/configurations/configurations.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { AuditQueryModule } from './modules/audit/audit.module';
+import { HrModule } from './modules/hr/hr.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -66,6 +68,8 @@ import { HealthModule } from './modules/health/health.module';
     PrismaModule,
     // Global: os módulos de negócio emitem eventos sem importá-lo (M16).
     AuditModule,
+    // Global: armazenamento de arquivos (comprovantes — RF-019).
+    StorageModule,
 
     AuthModule,
     UsersModule,
@@ -76,6 +80,7 @@ import { HealthModule } from './modules/health/health.module';
     ConfigurationsModule,
     ApprovalsModule,
     AuditQueryModule,
+    HrModule,
     HealthModule,
   ],
   providers: [

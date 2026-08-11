@@ -7,6 +7,8 @@ export const AUDIT_ENTITY = {
   USER: 'usuario',
   SESSION: 'sessao',
   COMPANY: 'empresa',
+  EMPLOYEE: 'funcionario',
+  REIMBURSEMENT: 'reembolso',
 } as const;
 
 export interface AuditEventInput {

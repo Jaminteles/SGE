@@ -1,4 +1,4 @@
-# SGE — Backend (Fase 1: Fundação)
+# SGE — Backend (Fases 1 e 2)
 
 Backend do **Sistema de Gestão Empresarial e Financeira**, implementado conforme a
 stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
@@ -9,6 +9,10 @@ stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
 - **Sprint 2 — M16 (Auditoria)**: trilha de eventos com autor, origem e valores
   anterior/posterior, consulta filtrada e proteção contra alteração
   (RF-114 a RF-118).
+- **Sprint 3 — M03 (Funcionários e RH)**: cadastro funcional e bancário, cargos,
+  departamentos e gestores, histórico de admissão/desligamento e eventos
+  administrativos, centro de custo, verbas, reembolsos com comprovante e
+  consolidação para folha e contabilidade (RF-013 a RF-021).
 
 ## Banco de dados
 
@@ -25,13 +29,15 @@ usado. Mudanças estruturais são feitas nos scripts SQL.
 ## Como rodar
 
 ```bash
-# 1. Criar/atualizar o banco (uma vez) — a partir da pasta bd/
+# 1. Criar o banco — a partir da pasta bd/
+# ATENÇÃO: 00_setup_banco.sql APAGA o banco gestao_empresarial e o recria.
 psql -U postgres -f 00_setup_banco.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 01_schema_core.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 02_schema_financeiro.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 03_schema_contabil_governanca.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 04_ajustes_integracao_backend.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 05_auditoria_sprint2.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 06_rh_sprint3.sql
 ```
 
 ```bash
@@ -96,8 +102,13 @@ associações, mas não são editáveis pela API.
 
 `gestao.permissao` não tem coluna de código: a chave é a tripla
 (`modulo`, `recurso`, `acao`). A API deriva o código `recurso:AÇÃO` e grava seu
-catálogo com `modulo` = `M01`/`M02`. As permissões em português da carga inicial
-de `bd/03` continuam lá, reservadas para os módulos das próximas sprints.
+catálogo com `modulo` = `M01`/`M02`/`M03`/`M16`. As permissões em português da
+carga inicial de `bd/03` continuam lá, reservadas para os módulos das próximas
+sprints.
+
+O seed vincula ao perfil de sistema **RH** todas as permissões do M03 **exceto**
+`reimbursements:APPROVE`: quem lança a despesa não decide sobre ela (RN-003).
+Conceda a aprovação ao perfil que responde pela alçada.
 
 ## Mapa de requisitos → endpoints
 
@@ -120,6 +131,15 @@ de `bd/03` continuam lá, reservadas para os módulos das próximas sprints.
 | RF-116 | Valores anterior e posterior | `previousValue`/`currentValue`/`changedFields` na resposta |
 | RF-117 | Consultar e filtrar auditoria | `GET /audit`, `GET /audit/:id`, `GET /audit/entities/:entity/:entityId` |
 | RF-118 | Proteger registros contra alteração | Sem rota de escrita + trigger (`bd/03`) + `REVOKE UPDATE/DELETE` (`bd/05`) |
+| RF-013 | Funcionários, dados profissionais e bancários | `/employees` (CRUD) + `/employees/:id/bank-accounts` |
+| RF-014 | Cargos, departamentos e gestores | `/positions`, `/departments`, `managerId` em `/employees` |
+| RF-015 | Admissão, desligamento e histórico | `POST /employees` (admissão), `POST /employees/:id/terminate`, `GET /employees/:id/events` |
+| RF-016 | Funcionário ↔ centro de custo | `costCenterId` em `/employees`, nos eventos e nos itens de reembolso |
+| RF-017 | Salários, benefícios e descontos | `/payroll-items` (catálogo) + `/employees/:id/payroll-items` (atribuição) |
+| RF-018 | Despesas e reembolsos | `/reimbursements` + `/submit`, `/review`, `/approve`, `/reject` |
+| RF-019 | Armazenar comprovantes | `POST/GET /reimbursements/:id/items/:itemId/receipt` |
+| RF-020 | Férias, afastamentos e eventos administrativos | `POST /employees/:id/events` |
+| RF-021 | Informações para folha e contabilidade | `GET /payroll/summary?competence=YYYY-MM` |
 
 ## Contrato da API — pontos de atenção
 
@@ -142,6 +162,37 @@ status. A API acompanha:
 - **Auditoria** é somente leitura e o `id` vem como **string**: a coluna é
   `bigint` e `JSON.stringify` não serializa `BigInt`. O filtro de período usa
   intervalo semiaberto — `from` inclusivo, `to` exclusivo.
+- **Valores monetários** trafegam como **string decimal** (`"1234.56"`), nunca
+  como número: `number` em JSON é ponto flutuante binário (RN-012).
+- **Datas de RH** (admissão, vigência, despesa, competência) são dias civis:
+  `YYYY-MM-DD` (ou `YYYY-MM` na competência), sem hora e sem fuso.
+
+### M03 — o que o cadastro não deixa você escrever
+
+| Campo | Quem escreve | Por quê |
+| --- | --- | --- |
+| `employee.status`, `terminationDate`, `baseSalary` | Trigger de `funcionario_evento` (`bd/06`) | O histórico é a fonte; o cadastro é a projeção. Editar direto faria os dois divergirem |
+| `reimbursement.number` | `fn_proximo_numero_reembolso` (`bd/06`) | Sequencial por empresa e ano, serializado na transação |
+| `reimbursement.totalAmount` | Trigger de `reembolso_item` (`bd/06`) | É a soma das despesas — valor vindo do cliente não é valor |
+
+Consequências no uso: a admissão é registrada junto com `POST /employees`; o
+desligamento vai por `POST /employees/:id/terminate` (que também grava o
+motivo); férias, afastamento, retorno, promoção, transferência e alteração
+salarial vão por `POST /employees/:id/events`. Eventos são **append-only** — o
+banco recusa `UPDATE`/`DELETE`, e a correção é um novo evento.
+
+### Reembolso: fluxo e barreiras (RF-018/RF-019)
+
+`RASCUNHO → SOLICITADO → EM_ANALISE → APROVADO | REPROVADO`, com `CANCELADO`
+disponível até a aprovação e `PAGO` reservado à liquidação financeira (M08).
+
+- `submit` exige comprovante em **todas** as despesas (RF-019);
+- aprovar exige `reimbursements:APPROVE`, **alçada** compatível com o valor
+  (operação `REEMBOLSO` em `/approval-thresholds`) e **não ser o solicitante**;
+- o valor aprovado nunca pode superar o solicitado;
+- comprovante aceita apenas **PDF, JPEG e PNG**, conferidos pela assinatura do
+  arquivo, e o mesmo arquivo (hash igual) não é aceito duas vezes na empresa —
+  é o sinal mais barato de despesa lançada em duplicidade.
 
 ### Auditoria — o que grava o quê (M16)
 
@@ -173,7 +224,23 @@ estrita, para não vazar atividade entre empresas.
 - **RN-010**: a trilha é *append-only* em três camadas — ausência de rota de
   escrita, trigger que rejeita `UPDATE`/`DELETE` e retirada do privilégio da role
   da aplicação. Hashes de senha e de token são removidos do valor auditado.
-- **RNF-012**: testes automatizados das regras críticas (autenticação, RBAC, isolamento, CNPJ).
+- **RNF-012**: testes automatizados das regras críticas (autenticação, RBAC,
+  isolamento, CPF/CNPJ, máquina de estados e alçada do reembolso, armazenamento
+  de comprovantes).
+- **RN-001 estrutural (Sprint 3)**: as referências do M03 usam **FK composta**
+  `(empresa_id, <coluna>)`. A verificação de chave estrangeira roda no sistema,
+  sem RLS: sem isso, um defeito na API poderia vincular funcionário da empresa A
+  ao centro de custo da empresa B. Como FK composta não aceita `ON DELETE SET
+  NULL` no PostgreSQL 14, o que era `SET NULL` virou `RESTRICT` — cadastro em
+  uso é **inativado**, não removido.
+- **Segregação de dados sensíveis**: dado bancário (`employee-bank-accounts`),
+  remuneração (`compensation`) e folha (`payroll`) são recursos com permissão
+  própria — quem mantém o cadastro funcional não recebe nenhum dos três por
+  tabela. `GET /payroll/summary` é registrado na trilha como `EXPORTACAO`.
+- **Upload de comprovantes**: a chave de armazenamento é gerada pelo servidor
+  (empresa + uuid), o caminho é conferido contra a raiz configurada, o tipo é
+  validado pela assinatura do arquivo e o download responde sempre como
+  `attachment`.
 - Extras: Helmet, CORS restrito, rate limiting, versionamento de API, tratamento padronizado de erros.
 
 ## Observações

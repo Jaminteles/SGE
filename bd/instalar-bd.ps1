@@ -1,32 +1,41 @@
 <#
 .SYNOPSIS
-    Cria (ou recria) o banco do Sistema Integrado de Gestao Empresarial e Financeira.
+    Recria do zero o banco do Sistema Integrado de Gestao Empresarial e Financeira.
 
 .DESCRIPTION
+    ATENCAO: APAGA o banco informado, com todos os seus dados, antes de criar.
+    Os scripts 01 a 06 montam o schema do zero -- nao sao migracoes e nao se
+    aplicam sobre um banco existente. Recriar e o caminho previsto.
+
     Executa, em ordem:
       1. valida que o psql esta acessivel
-      2. cria a role gestao_owner (se nao existir) e o banco
-      3. roda 01_schema_core.sql, 02_schema_financeiro.sql, 03_schema_contabil_governanca.sql
-      4. opcionalmente roda 99_smoke_test.sql
+      2. derruba o banco e as roles da aplicacao (app_gestao, sge_api)
+      3. cria/atualiza a role gestao_owner e cria o banco
+      4. roda 01 a 06 (schema, ajustes de integracao, auditoria e RH)
+      5. opcionalmente roda 99_smoke_test.sql
 
     Deve ser executado a partir da pasta que contem os arquivos .sql.
 
 .PARAMETER Banco
-    Nome do banco a criar. Padrao: gestao_empresarial
+    Nome do banco a recriar. Padrao: gestao_empresarial
+
+.PARAMETER Forcar
+    Nao pede confirmacao antes de apagar um banco existente. Para automacao.
 
 .PARAMETER Recriar
-    Derruba o banco antes de criar. APAGA TODOS OS DADOS do banco informado.
+    Obsoleto: recriar passou a ser o comportamento padrao. Mantido como
+    sinonimo de -Forcar para nao quebrar quem ja usava o script.
 
 .PARAMETER SmokeTest
     Roda 99_smoke_test.sql no final. Insere dados de teste -- use so em banco descartavel.
 
 .EXAMPLE
     .\instalar-bd.ps1
-    Instalacao limpa em gestao_empresarial.
+    Recria gestao_empresarial, confirmando antes se o banco ja existir.
 
 .EXAMPLE
-    .\instalar-bd.ps1 -Banco gestao_dev -Recriar -SmokeTest
-    Recria gestao_dev do zero e valida com o smoke test.
+    .\instalar-bd.ps1 -Banco gestao_dev -Forcar -SmokeTest
+    Recria gestao_dev sem perguntar e valida com o smoke test.
 #>
 
 [CmdletBinding()]
@@ -36,6 +45,7 @@ param(
     [string] $Superusuario = 'postgres',
     [string] $Host_        = 'localhost',
     [int]    $Porta        = 5432,
+    [switch] $Forcar,
     [switch] $Recriar,
     [switch] $SmokeTest
 )
@@ -72,7 +82,8 @@ $scripts = @(
     '02_schema_financeiro.sql',
     '03_schema_contabil_governanca.sql',
     '04_ajustes_integracao_backend.sql',
-    '05_auditoria_sprint2.sql'
+    '05_auditoria_sprint2.sql',
+    '06_rh_sprint3.sql'
 )
 
 $faltando = $scripts | Where-Object { -not (Test-Path $_) }
@@ -97,22 +108,32 @@ $senhaOwner = Read-Host -AsSecureString |
 if ([string]::IsNullOrWhiteSpace($senhaOwner)) { throw 'A senha do owner nao pode ser vazia.' }
 
 # -----------------------------------------------------------------------------
-# 4. Criar role e banco (como superusuario)
+# 4. Recriar role e banco (como superusuario)
 # -----------------------------------------------------------------------------
-function Psql-Super([string] $sql) {
+# -Valor devolve so o dado (psql -t -A), sem cabecalho nem "(1 row)": e o que
+# permite comparar o resultado com '1' sem depender do formato da tabela.
+function Psql-Super([string] $sql, [switch] $Valor) {
     $env:PGPASSWORD = $senhaSuper
-    $saida = psql -U $Superusuario -h $Host_ -p $Porta -d postgres -v ON_ERROR_STOP=1 -q -c $sql 2>&1
+    $psqlArgs = @('-U', $Superusuario, '-h', $Host_, '-p', $Porta, '-d', 'postgres',
+                  '-v', 'ON_ERROR_STOP=1', '-q')
+    if ($Valor) { $psqlArgs += @('-t', '-A') }
+
+    $saida = psql @psqlArgs -c $sql 2>&1
     if ($LASTEXITCODE -ne 0) { throw "Falha ao executar: $sql`n$saida" }
     return $saida
+}
+
+function Existe([string] $sql) {
+    return ((Psql-Super $sql -Valor) -join '').Trim() -eq '1'
 }
 
 Escreve ''
 Escreve '--- Preparando role e banco ---' Cyan
 
 # A role precisa de CREATEROLE: o script 03 executa CREATE ROLE app_gestao.
-$existeRole = (Psql-Super "SELECT 1 FROM pg_roles WHERE rolname = '$Owner';") -match '1'
-
-if ($existeRole) {
+# gestao_owner nao e recriada: pode ser dona de objetos em outros bancos do
+# cluster, e o DROP falharia. Reaplicar senha e atributos basta.
+if (Existe "SELECT 1 FROM pg_roles WHERE rolname = '$Owner';") {
     Psql-Super "ALTER ROLE $Owner WITH LOGIN CREATEROLE PASSWORD '$senhaOwner';" | Out-Null
     Escreve "Role '$Owner' ja existia -- senha e atributos atualizados." Green
 } else {
@@ -120,15 +141,29 @@ if ($existeRole) {
     Escreve "Role '$Owner' criada." Green
 }
 
-if ($Recriar) {
+# Recriar e o padrao: 01 a 06 montam o schema do zero e nao se aplicam sobre um
+# banco existente -- o CREATE TABLE falharia logo no primeiro.
+$existeBanco = Existe "SELECT 1 FROM pg_database WHERE datname = '$Banco';"
+
+if ($existeBanco -and -not ($Forcar -or $Recriar)) {
     Escreve ''
-    Escreve "ATENCAO: o banco '$Banco' sera APAGADO com todos os seus dados." Yellow
+    Escreve "ATENCAO: o banco '$Banco' ja existe e sera APAGADO com todos os seus dados." Yellow
+    Escreve 'Use -Forcar para pular esta confirmacao.' Gray
     $conf = Read-Host "Digite o nome do banco para confirmar"
     if ($conf -ne $Banco) { throw 'Confirmacao nao confere. Nada foi alterado.' }
+}
 
-    Psql-Super "DROP DATABASE IF EXISTS $Banco WITH (FORCE);" | Out-Null
-    Psql-Super "DROP ROLE IF EXISTS app_gestao;"              | Out-Null
-    Escreve "Banco '$Banco' removido." Green
+# Ordem: primeiro o banco, depois as roles -- enquanto o banco existir, elas
+# ainda detem privilegios la dentro e o DROP ROLE e recusado. As roles caem
+# mesmo sem o banco: sao do cluster, e 03 executa CREATE ROLE app_gestao sem
+# condicional -- uma sobra de instalacao anterior pararia o script justamente
+# na configuracao da RLS.
+Psql-Super "DROP DATABASE IF EXISTS $Banco WITH (FORCE);" | Out-Null
+Psql-Super "DROP ROLE IF EXISTS sge_api;"                 | Out-Null
+Psql-Super "DROP ROLE IF EXISTS app_gestao;"              | Out-Null
+
+if ($existeBanco) {
+    Escreve "Banco '$Banco' e roles da aplicacao removidos." Green
 }
 
 Psql-Super "CREATE DATABASE $Banco OWNER $Owner;" | Out-Null
