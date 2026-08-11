@@ -26,6 +26,7 @@ const payload = (iat: number): AccessTokenPayload => ({
 
 const activeUser = {
   id: 'u1',
+  name: 'Fulano',
   email: 'a@b.c',
   isSuperAdmin: false,
   isActive: true,
@@ -40,8 +41,9 @@ describe('JwtStrategy', () => {
       email: 'a@b.c',
       isSuperAdmin: false,
     });
-    // Identifica a sessão de banco para a auditoria e a RLS (RN-010).
-    expect(setCurrentUser).toHaveBeenCalledWith('u1');
+    // Identifica a sessão de banco para a auditoria e a RLS (RN-010). O nome
+    // segue junto porque a trilha o grava desnormalizado (RF-115).
+    expect(setCurrentUser).toHaveBeenCalledWith('u1', 'Fulano');
   });
 
   it('rejeita usuário inativo (RF-007)', async () => {

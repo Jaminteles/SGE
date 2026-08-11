@@ -27,6 +27,7 @@ export const RESOURCES = {
   COST_CENTERS: 'cost-centers',
   SETTINGS: 'settings',
   APPROVAL_THRESHOLDS: 'approval-thresholds',
+  AUDIT: 'audit',
 } as const;
 
 export interface PermissionDefinition {
@@ -105,6 +106,11 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     { action: A.UPDATE, description: 'Editar alçadas de aprovação' },
     { action: A.DELETE, description: 'Remover alçadas de aprovação' },
   ]),
+  // M16 — Auditoria. A trilha é append-only (RF-118): só existe leitura, e
+  // nenhuma permissão de escrita deve ser adicionada aqui.
+  ...build('M16', RESOURCES.AUDIT, [
+    { action: A.READ, description: 'Consultar e filtrar a trilha de auditoria' },
+  ]),
 ];
 
 /** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
@@ -147,4 +153,6 @@ export const PERMISSIONS = {
   APPROVAL_THRESHOLDS_READ: permissionCode(RESOURCES.APPROVAL_THRESHOLDS, A.READ),
   APPROVAL_THRESHOLDS_UPDATE: permissionCode(RESOURCES.APPROVAL_THRESHOLDS, A.UPDATE),
   APPROVAL_THRESHOLDS_DELETE: permissionCode(RESOURCES.APPROVAL_THRESHOLDS, A.DELETE),
+
+  AUDIT_READ: permissionCode(RESOURCES.AUDIT, A.READ),
 } as const;

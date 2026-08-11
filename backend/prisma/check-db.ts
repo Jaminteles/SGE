@@ -65,13 +65,42 @@ async function main(): Promise<void> {
     detail: `${Number(policies?.n ?? 0)} políticas ativas`,
   });
 
+  // Sprint 2 (M16): a trilha só é confiável com a RLS de leitura e sem
+  // privilégio de escrita destrutiva sobre `auditoria` (RF-118).
+  const auditPolicy = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_policies
+       WHERE schemaname = 'gestao' AND tablename = 'auditoria'
+         AND policyname = 'pol_auditoria_tenant_leitura'
+    `,
+  );
+  checks.push({
+    label: 'auditoria isolada por empresa (bd/05)',
+    ok: Number(auditPolicy?.n ?? 0) === 1,
+    detail: 'política pol_auditoria_tenant_leitura — rode bd/05_auditoria_sprint2.sql',
+  });
+
+  const auditWritable = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM information_schema.table_privileges
+       WHERE table_schema = 'gestao' AND table_name = 'auditoria'
+         AND grantee IN ('app_gestao', 'sge_api')
+         AND privilege_type IN ('UPDATE', 'DELETE')
+    `,
+  );
+  checks.push({
+    label: 'trilha de auditoria append-only (RF-118)',
+    ok: Number(auditWritable?.n ?? 0) === 0,
+    detail: `${Number(auditWritable?.n ?? 0)} privilégio(s) de UPDATE/DELETE concedidos — rode bd/05`,
+  });
+
   const permissions = await prisma.permission.count({
-    where: { module: { in: ['M01', 'M02'] } },
+    where: { module: { in: ['M01', 'M02', 'M16'] } },
   });
   checks.push({
     label: 'catálogo de permissões da API carregado',
     ok: permissions > 0,
-    detail: `${permissions} permissões M01/M02 — rode npm run db:seed`,
+    detail: `${permissions} permissões M01/M02/M16 — rode npm run db:seed`,
   });
 
   const admins = await prisma.user.count({ where: { isSuperAdmin: true, isActive: true } });

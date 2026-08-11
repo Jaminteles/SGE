@@ -30,6 +30,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       where: { id: payload.sub },
       select: {
         id: true,
+        name: true,
         email: true,
         isSuperAdmin: true,
         isActive: true,
@@ -53,7 +54,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     // Identifica a sessão de banco: alimenta a auditoria (RN-010) e as
     // políticas de RLS que liberam as associações do próprio usuário.
-    await this.prisma.setCurrentUser(user.id);
+    await this.prisma.setCurrentUser(user.id, user.name);
 
     return { id: user.id, email: user.email, isSuperAdmin: user.isSuperAdmin };
   }

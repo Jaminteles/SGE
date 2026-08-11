@@ -1,7 +1,9 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AuditEvent } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AUDIT_ENTITY, AuditService } from '../../common/audit/audit.service';
 import { PasswordService } from './password.service';
 import { IssuedTokens, TokenService } from './token.service';
 import { LoginDto } from './dto/login.dto';
@@ -24,6 +26,7 @@ export class AuthService {
     private readonly password: PasswordService,
     private readonly tokens: TokenService,
     private readonly config: ConfigService,
+    private readonly audit: AuditService,
   ) {}
 
   /** Autentica o usuário e emite tokens + lista de empresas acessíveis (RF-008). */
@@ -36,12 +39,24 @@ export class AuthService {
       : await this.password.verify(await this.getDummyHash(), dto.password);
 
     if (!user || !validPassword || !user.isActive) {
+      // Fora da transação: a resposta 401 a reverte, e a tentativa recusada é
+      // justamente o que a trilha precisa guardar (RF-114).
+      await this.audit.recordOutOfBand({
+        event: AuditEvent.ACESSO_NEGADO,
+        entity: AUDIT_ENTITY.USER,
+        entityId: user?.id,
+        userId: user?.id,
+        userName: user?.name,
+        // Sem detalhar a causa: distinguir "não existe" de "senha errada" na
+        // trilha reintroduziria a enumeração de usuários que o fluxo evita.
+        note: `Falha de autenticação para ${dto.email}.`,
+      });
       throw new UnauthorizedException('Credenciais inválidas.');
     }
 
     // A partir daqui a sessão de banco tem dono: a RLS libera as associações
     // do próprio usuário (bd/04, pol_usuario_empresa_proprio).
-    await this.prisma.setCurrentUser(user.id);
+    await this.prisma.setCurrentUser(user.id, user.name);
 
     await this.prisma.db.user.update({
       where: { id: user.id },
@@ -49,6 +64,15 @@ export class AuthService {
     });
 
     const issued = await this.tokens.issueTokens(user, meta);
+
+    // Login bem-sucedido acompanha a transação: se ela reverter, não houve
+    // login. Ainda não há empresa ativa — o evento fica sem `empresa_id`.
+    await this.audit.record({
+      event: AuditEvent.LOGIN,
+      entity: AUDIT_ENTITY.USER,
+      entityId: user.id,
+    });
+
     return { ...issued, user: await this.profile(user.id) };
   }
 
@@ -57,7 +81,16 @@ export class AuthService {
   }
 
   async logout(refreshToken: string): Promise<void> {
-    await this.tokens.revokeByRefreshToken(refreshToken);
+    const revoked = await this.tokens.revokeByRefreshToken(refreshToken);
+    if (!revoked) {
+      return; // nada foi encerrado: não há evento a registrar.
+    }
+    await this.audit.record({
+      event: AuditEvent.LOGOUT,
+      entity: AUDIT_ENTITY.SESSION,
+      entityId: revoked.sessionId,
+      userId: revoked.userId,
+    });
   }
 
   /**

@@ -10,6 +10,22 @@ interface RequestStore {
   tx: TxClient;
   companyId?: string;
   userId?: string;
+  userName?: string;
+  metadata?: RequestMetadata;
+}
+
+/**
+ * Origem da ação, gravada em `auditoria.origem` (RF-115). Os valores seguem o
+ * comentário da coluna em bd/03.
+ */
+export type AuditOrigin = 'API' | 'WORKER' | 'WEBHOOK' | 'IMPORTACAO' | 'SISTEMA';
+
+/** Metadados da requisição que alimentam a trilha de auditoria (RF-115). */
+export interface RequestMetadata {
+  origin: AuditOrigin;
+  ip?: string;
+  userAgent?: string;
+  correlationId?: string;
 }
 
 /**
@@ -49,9 +65,38 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     return this.als.getStore()?.tx ?? (this as unknown as TxClient);
   }
 
+  /**
+   * Cliente base, fora da transação da requisição.
+   *
+   * Use apenas quando o registro precisa sobreviver ao rollback — é o caso dos
+   * eventos de segurança (RF-114): a transação da requisição é revertida em
+   * resposta 4xx/5xx, e uma tentativa de acesso negado que some da trilha é
+   * exatamente a que mais importa registrar.
+   */
+  get root(): PrismaClient {
+    return this;
+  }
+
   /** Empresa ativa da requisição, quando já resolvida pelo PermissionsGuard. */
   get currentCompanyId(): string | undefined {
     return this.als.getStore()?.companyId;
+  }
+
+  /** Usuário autenticado da requisição, quando já resolvido pelo JwtStrategy. */
+  get currentUser(): { id: string; name?: string } | undefined {
+    const store = this.als.getStore();
+    return store?.userId ? { id: store.userId, name: store.userName } : undefined;
+  }
+
+  /**
+   * Metadados HTTP da requisição corrente.
+   *
+   * Os parâmetros de sessão (`app.*`) só alcançam a trilha nas gravações feitas
+   * por trigger. Um INSERT direto em `auditoria` — como o dos eventos de
+   * negócio — precisa preencher as colunas, e é daqui que os valores vêm.
+   */
+  get currentRequestMetadata(): RequestMetadata | undefined {
+    return this.als.getStore()?.metadata;
   }
 
   /**
@@ -107,12 +152,40 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   /**
    * Define o usuário da sessão de banco (`app.usuario_id`), usado pela auditoria
    * (RN-010) e pelas políticas de leitura das próprias associações.
+   *
+   * O nome é desnormalizado na trilha (RF-115): o registro precisa continuar
+   * legível depois que o usuário for renomeado ou removido.
    */
-  async setCurrentUser(userId: string): Promise<void> {
+  async setCurrentUser(userId: string, userName?: string): Promise<void> {
     const store = this.als.getStore();
     if (!store) return;
     store.userId = userId;
-    await this.applySetting('app.usuario_id', userId);
+    store.userName = userName;
+    await this.db.$queryRaw`
+      SELECT set_config('app.usuario_id', ${userId}, true),
+             set_config('app.usuario_nome', ${userName ?? ''}, true)
+    `;
+  }
+
+  /**
+   * Publica os metadados da requisição na sessão de banco (RF-115).
+   *
+   * O trigger de auditoria roda dentro do PostgreSQL e não enxerga o HTTP:
+   * é por estes parâmetros que ip, user agent e correlation id chegam à trilha
+   * (bd/05, fn_auditoria_generica).
+   */
+  async setRequestMetadata(meta: RequestMetadata): Promise<void> {
+    const store = this.als.getStore();
+    if (!store) return;
+    store.metadata = meta;
+    // Um único round-trip: são quatro parâmetros em toda requisição, e a
+    // latência de rede aqui entra no caminho crítico de cada chamada da API.
+    await this.db.$queryRaw`
+      SELECT set_config('app.origem', ${meta.origin}, true),
+             set_config('app.ip', ${meta.ip ?? ''}, true),
+             set_config('app.user_agent', ${meta.userAgent ?? ''}, true),
+             set_config('app.correlation_id', ${meta.correlationId ?? ''}, true)
+    `;
   }
 
   /** Define a empresa ativa da sessão de banco (`app.empresa_id`) — RF-005. */

@@ -49,6 +49,30 @@ enum EntryType {
   @@map("enum_tipo_titulo")
 }
 
+/// Evento registrado na trilha de auditoria (RF-114).
+/// CRIACAO/ALTERACAO/EXCLUSAO vêm do trigger de DML; os demais são eventos de
+/// negócio gravados pela aplicação (bd/05, fn_registra_evento_auditoria).
+enum AuditEvent {
+  CRIACAO
+  ALTERACAO
+  EXCLUSAO
+  APROVACAO
+  REPROVACAO
+  PAGAMENTO
+  RECEBIMENTO
+  CANCELAMENTO
+  ESTORNO
+  LOGIN
+  LOGOUT
+  ACESSO_NEGADO
+  EXPORTACAO
+  IMPORTACAO
+  FECHAMENTO
+  REABERTURA
+
+  @@map("enum_tipo_evento_auditoria")
+}
+
 // ---------------------------------------------------------------------------
 // M02 — Usuários, Perfis e Permissões
 // ---------------------------------------------------------------------------
@@ -338,6 +362,42 @@ model ApprovalThreshold {
 
   @@unique([companyId, operation, level], map: "uq_alcada")
   @@map("alcada")
+}
+
+// ---------------------------------------------------------------------------
+// M16 — Auditoria
+// ---------------------------------------------------------------------------
+
+/// gestao.auditoria — trilha append-only (RF-114 a RF-118).
+///
+/// Tabela particionada por mês; a PK inclui a chave de particionamento. Não há
+/// relação declarada com Company/User de propósito: a trilha precisa sobreviver
+/// à remoção do que ela descreve, por isso guarda `userName` desnormalizado.
+///
+/// Somente leitura pela API. UPDATE e DELETE são barrados no banco por trigger
+/// (bd/03) e por ausência de privilégio (bd/05) — não exponha mutação aqui.
+model AuditLog {
+  id             BigInt     @default(autoincrement())
+  companyId      String?    @map("empresa_id") @db.Uuid
+  userId         String?    @map("usuario_id") @db.Uuid
+  userName       String?    @map("usuario_nome") @db.VarChar(255)
+  event          AuditEvent @map("evento")
+  entity         String     @map("entidade") @db.VarChar(60)
+  entityId       String?    @map("entidade_id") @db.Uuid
+  previousValue  Json?      @map("valor_anterior")
+  currentValue   Json?      @map("valor_posterior")
+  changedFields  String[]   @map("campos_alterados")
+  origin         String?    @map("origem") @db.VarChar(40)
+  ip             String?    @db.Inet
+  userAgent      String?    @map("user_agent")
+  correlationId  String?    @map("correlation_id") @db.VarChar(60)
+  note           String?    @map("observacao")
+  occurredAt     DateTime   @default(now()) @map("ocorrido_em") @db.Timestamptz(6)
+
+  @@id([id, occurredAt])
+  @@index([companyId, occurredAt(sort: Desc)], map: "ix_auditoria_empresa_periodo")
+  @@index([companyId, entity, entityId, occurredAt(sort: Desc)], map: "ix_auditoria_entidade")
+  @@map("auditoria")
 }
 
 /// gestao.alcada_aprovador — quem aprova a alçada: um perfil OU um usuário.

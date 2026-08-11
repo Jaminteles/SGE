@@ -102,17 +102,25 @@ export class TokenService {
     );
   }
 
-  async revokeByRefreshToken(refreshToken: string): Promise<void> {
+  /**
+   * Revoga a sessão do refresh token. Devolve a sessão efetivamente encerrada,
+   * ou `null` quando não havia o que encerrar — o logout é idempotente, e quem
+   * audita precisa saber se algo de fato mudou.
+   */
+  async revokeByRefreshToken(
+    refreshToken: string,
+  ): Promise<{ userId: string; sessionId: string } | null> {
     let payload: RefreshTokenPayload;
     try {
       payload = await this.verifyRefreshToken(refreshToken);
     } catch {
-      return; // logout idempotente
+      return null; // logout idempotente
     }
-    await this.prisma.db.session.updateMany({
+    const { count } = await this.prisma.db.session.updateMany({
       where: { id: payload.sid, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    return count > 0 ? { userId: payload.sub, sessionId: payload.sid } : null;
   }
 
   async revokeAllForUser(userId: string): Promise<void> {

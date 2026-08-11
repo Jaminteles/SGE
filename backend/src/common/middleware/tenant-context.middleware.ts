@@ -11,6 +11,9 @@ export const REQUEST_TX = Symbol('sge.request.tx');
 
 export type RequestWithTx = Request & { [REQUEST_TX]?: RequestTransaction };
 
+/** Limite defensivo: o User-Agent é entrada do cliente e vai para a trilha. */
+const MAX_USER_AGENT = 512;
+
 /**
  * Abre a transação que carrega o contexto de RLS da requisição (RN-001/RN-002).
  *
@@ -49,6 +52,24 @@ export class TenantContextMiddleware implements NestMiddleware {
     res.on('finish', fallback);
     res.on('close', fallback);
 
-    ctx.run(() => next());
+    // Os metadados precisam ser publicados dentro do contexto (é `SET LOCAL`
+    // na transação recém-aberta). O AsyncLocalStorage atravessa o await, então
+    // `next` continua no mesmo contexto.
+    ctx.run(() => {
+      void this.publishMetadata(req)
+        .then(() => next())
+        .catch((error: unknown) => next(error));
+    });
+  }
+
+  /** Alimenta ip/user agent/correlation id da trilha de auditoria (RF-115). */
+  private async publishMetadata(req: RequestWithTx): Promise<void> {
+    const userAgent = req.headers['user-agent'];
+    await this.prisma.setRequestMetadata({
+      origin: 'API',
+      ip: req.ip,
+      userAgent: typeof userAgent === 'string' ? userAgent.slice(0, MAX_USER_AGENT) : undefined,
+      correlationId: (req as Request & { id?: string }).id,
+    });
   }
 }

@@ -1,11 +1,14 @@
-# SGE — Backend (Sprint 1: Fundação)
+# SGE — Backend (Fase 1: Fundação)
 
 Backend do **Sistema de Gestão Empresarial e Financeira**, implementado conforme a
 stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
 
-Esta sprint entrega a **Fundação** (Fase 1 do roadmap): cadastro de empresas e
-filiais, configurações da empresa, usuários, autenticação, perfis e permissões
-(RBAC), isolamento multiempresa e alçadas de aprovação.
+- **Sprint 1 — M01/M02**: cadastro de empresas e filiais, configurações da
+  empresa, usuários, autenticação, perfis e permissões (RBAC), isolamento
+  multiempresa e alçadas de aprovação.
+- **Sprint 2 — M16 (Auditoria)**: trilha de eventos com autor, origem e valores
+  anterior/posterior, consulta filtrada e proteção contra alteração
+  (RF-114 a RF-118).
 
 ## Banco de dados
 
@@ -28,6 +31,7 @@ psql -U gestao_owner -h localhost -d gestao_empresarial -f 01_schema_core.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 02_schema_financeiro.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 03_schema_contabil_governanca.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 04_ajustes_integracao_backend.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 05_auditoria_sprint2.sql
 ```
 
 ```bash
@@ -111,6 +115,11 @@ de `bd/03` continuam lá, reservadas para os módulos das próximas sprints.
 | RF-010 | Perfis de acesso | `/roles` (CRUD) |
 | RF-011 | Permissões por módulo/operação | `GET /permissions`, permissões nos perfis |
 | RF-012 | Alçadas de operações críticas | `/approval-thresholds` (CRUD) + `GET /approval-thresholds/evaluate` |
+| RF-114 | Registrar criação, alteração, aprovação, pagamento, recebimento e cancelamento | Trigger de DML (`bd/03`) + `AuditService` para eventos de negócio |
+| RF-115 | Registrar usuário, data/hora, origem e entidade | `SET LOCAL app.*` no `TenantContextMiddleware` → colunas de `gestao.auditoria` |
+| RF-116 | Valores anterior e posterior | `previousValue`/`currentValue`/`changedFields` na resposta |
+| RF-117 | Consultar e filtrar auditoria | `GET /audit`, `GET /audit/:id`, `GET /audit/entities/:entity/:entityId` |
+| RF-118 | Proteger registros contra alteração | Sem rota de escrita + trigger (`bd/03`) + `REVOKE UPDATE/DELETE` (`bd/05`) |
 
 ## Contrato da API — pontos de atenção
 
@@ -130,6 +139,26 @@ status. A API acompanha:
 - **Associação** aceita `branchId` (vazio = todas as filiais) e `isDefault`.
 - **Alçada** aceita `name`, `level` e `minApprovers`; o `requiredRoleId` vira uma
   linha em `gestao.alcada_aprovador` e a resposta traz `requiredRoles`.
+- **Auditoria** é somente leitura e o `id` vem como **string**: a coluna é
+  `bigint` e `JSON.stringify` não serializa `BigInt`. O filtro de período usa
+  intervalo semiaberto — `from` inclusivo, `to` exclusivo.
+
+### Auditoria — o que grava o quê (M16)
+
+| Evento | Quem grava | Sobrevive a rollback? |
+| --- | --- | --- |
+| `CRIACAO`, `ALTERACAO`, `EXCLUSAO` | Trigger de DML nas tabelas críticas (`bd/03`) | Não — acompanha a transação |
+| `LOGIN`, `LOGOUT`, e futuros `APROVACAO`/`PAGAMENTO`/... | `AuditService.record()` | Não — acompanha a transação |
+| `ACESSO_NEGADO` | `AuditService.recordOutOfBand()` | **Sim** — gravado fora da transação |
+
+A distinção importa: o `TenantContextMiddleware` reverte a transação da
+requisição em respostas 4xx/5xx. Um evento de segurança gravado dentro dela
+desapareceria exatamente no caso que mais interessa auditar. Em contrapartida,
+eventos de sucesso *devem* reverter junto — não houve o fato que descrevem.
+
+Eventos anteriores à escolha da empresa (login) ficam sem `empresa_id` e, por
+isso, **não aparecem** na trilha de nenhum tenant: a política de RLS de `bd/05` é
+estrita, para não vazar atividade entre empresas.
 
 ## Segurança (RNF aplicados nesta sprint)
 
@@ -139,7 +168,11 @@ status. A API acompanha:
 - **RNF-006/007**: cada requisição é uma transação; erro reverte tudo.
 - **RNF-008**: paginação e filtros server-side nas listagens.
 - **RNF-010**: logs estruturados (pino) com correlation id + trilha de auditoria
-  no banco com o usuário responsável (`app.usuario_id`).
+  no banco com o usuário responsável (`app.usuario_id`). O mesmo correlation id
+  vai para `auditoria.correlation_id`, ligando log e trilha.
+- **RN-010**: a trilha é *append-only* em três camadas — ausência de rota de
+  escrita, trigger que rejeita `UPDATE`/`DELETE` e retirada do privilégio da role
+  da aplicação. Hashes de senha e de token são removidos do valor auditado.
 - **RNF-012**: testes automatizados das regras críticas (autenticação, RBAC, isolamento, CNPJ).
 - Extras: Helmet, CORS restrito, rate limiting, versionamento de API, tratamento padronizado de erros.
 

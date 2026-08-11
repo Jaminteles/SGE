@@ -1,13 +1,17 @@
 import { PrismaClient } from '@prisma/client';
 import { hash } from '@node-rs/argon2';
-import { PERMISSION_CATALOG } from '../src/common/authorization/permission-catalog';
+import { PERMISSION_CATALOG, PERMISSIONS } from '../src/common/authorization/permission-catalog';
 
 /**
  * Carga inicial do backend sobre o banco criado por `bd/*.sql`.
  *
- * Não cria tabelas: apenas sincroniza o catálogo de permissões da API em
- * `gestao.permissao` e garante o super admin. Roda fora do contexto de
- * requisição, então toca apenas tabelas sem RLS (permissao e usuario).
+ * Não cria tabelas: sincroniza o catálogo de permissões da API em
+ * `gestao.permissao`, vincula-o aos perfis de sistema e garante o super admin.
+ *
+ * Roda fora do contexto de requisição, sem `app.empresa_id`. Isso é seguro
+ * porque só toca tabelas sem RLS (`permissao`, `usuario`, `perfil_permissao`) ou
+ * linhas de empresa nula — os perfis de sistema, que a política de tenant libera
+ * justamente por serem globais.
  */
 const prisma = new PrismaClient();
 
@@ -29,6 +33,57 @@ async function seedPermissions(): Promise<void> {
     });
   }
   console.log(`✔ ${PERMISSION_CATALOG.length} permissões sincronizadas.`);
+}
+
+/**
+ * Vincula o catálogo da API aos perfis de sistema de `bd/03`.
+ *
+ * O script SQL dá "todas as permissões" ao ADMINISTRADOR num CROSS JOIN que roda
+ * antes de este seed existir: as permissões da API são criadas depois e ficariam
+ * de fora. Aqui o vínculo é refeito a cada execução, o que também cobre as
+ * permissões acrescentadas por sprints novas.
+ */
+async function seedSystemRoles(): Promise<void> {
+  const grants: { role: string; codes: string[] | 'all' }[] = [
+    { role: 'ADMINISTRADOR', codes: 'all' },
+    // RF-117: o Auditor é o responsável pelo requisito e precisa da trilha —
+    // somente leitura, que é tudo o que o módulo expõe (RF-118).
+    { role: 'AUDITOR', codes: [PERMISSIONS.AUDIT_READ] },
+  ];
+
+  for (const { role, codes } of grants) {
+    // Perfis de sistema: `empresa_id` nulo, visíveis a todas as empresas.
+    const profile = await prisma.role.findFirst({
+      where: { name: role, companyId: null, isSystem: true },
+      select: { id: true },
+    });
+    if (!profile) {
+      console.warn(`! perfil de sistema ${role} não encontrado — rode bd/03.`);
+      continue;
+    }
+
+    const wanted =
+      codes === 'all'
+        ? PERMISSION_CATALOG
+        : PERMISSION_CATALOG.filter((p) => codes.includes(p.code));
+
+    for (const p of wanted) {
+      const permission = await prisma.permission.findUnique({
+        where: {
+          module_resource_action: { module: p.module, resource: p.resource, action: p.action },
+        },
+        select: { id: true },
+      });
+      if (!permission) continue;
+
+      await prisma.rolePermission.upsert({
+        where: { roleId_permissionId: { roleId: profile.id, permissionId: permission.id } },
+        create: { roleId: profile.id, permissionId: permission.id },
+        update: {},
+      });
+    }
+    console.log(`✔ perfil ${role}: ${wanted.length} permissões da API vinculadas.`);
+  }
 }
 
 async function seedAdmin(): Promise<void> {
@@ -63,6 +118,7 @@ async function main(): Promise<void> {
     );
   }
   await seedPermissions();
+  await seedSystemRoles();
   await seedAdmin();
 }
 
