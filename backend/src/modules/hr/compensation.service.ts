@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { toDateOnly } from '../../common/utils/date-only';
-import { HrReferencesService } from './hr-references.service';
+import { ReferencesService } from '../../common/references/references.service';
 import { EmployeesService } from './employees.service';
 import { CreateCompensationDto } from './dto/create-compensation.dto';
 import { UpdateCompensationDto } from './dto/update-compensation.dto';
@@ -23,7 +23,7 @@ export class CompensationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly employees: EmployeesService,
-    private readonly references: HrReferencesService,
+    private readonly references: ReferencesService,
   ) {}
 
   async create(companyId: string, employeeId: string, dto: CreateCompensationDto) {

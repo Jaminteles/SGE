@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import { PaginatedResult } from '../../common/dto/paginated-result';
-import { HrReferencesService } from './hr-references.service';
+import { ReferencesService } from '../../common/references/references.service';
 import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 
@@ -12,7 +12,7 @@ import { UpdateDepartmentDto } from './dto/update-department.dto';
 export class DepartmentsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly references: HrReferencesService,
+    private readonly references: ReferencesService,
   ) {}
 
   async create(companyId: string, dto: CreateDepartmentDto) {

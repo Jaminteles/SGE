@@ -10,11 +10,11 @@ const META: RequestMetadata = {
 };
 
 function buildService(overrides: Partial<Record<string, unknown>> = {}) {
-  const txCreate = jest.fn().mockResolvedValue({});
-  const rootCreate = jest.fn().mockResolvedValue({});
+  const txCreate = jest.fn().mockResolvedValue({ count: 1 });
+  const rootCreate = jest.fn().mockResolvedValue({ count: 1 });
   const prisma = {
-    db: { auditLog: { create: txCreate } },
-    root: { auditLog: { create: rootCreate } },
+    db: { auditLog: { createMany: txCreate } },
+    root: { auditLog: { createMany: rootCreate } },
     currentRequestMetadata: META,
     currentCompanyId: 'empresa-1',
     currentUser: { id: 'u1', name: 'Fulano' },
@@ -90,7 +90,7 @@ describe('AuditService', () => {
   // Auditar é efeito colateral: falhar aqui não pode virar 500 para o usuário.
   it('não propaga falha ao gravar fora da transação', async () => {
     const { audit } = buildService({
-      root: { auditLog: { create: jest.fn().mockRejectedValue(new Error('banco fora')) } },
+      root: { auditLog: { createMany: jest.fn().mockRejectedValue(new Error('banco fora')) } },
     });
 
     await expect(
@@ -102,7 +102,7 @@ describe('AuditService', () => {
   // evento perdido em silêncio quebraria a completude da trilha (RN-010).
   it('propaga falha ao gravar dentro da transação', async () => {
     const { audit } = buildService({
-      db: { auditLog: { create: jest.fn().mockRejectedValue(new Error('banco fora')) } },
+      db: { auditLog: { createMany: jest.fn().mockRejectedValue(new Error('banco fora')) } },
     });
 
     await expect(

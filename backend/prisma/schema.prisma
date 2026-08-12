@@ -1,9 +1,10 @@
 // SGE - Sistema de Gestão Empresarial e Financeira
-// Sprint 1 (M01/M02), Sprint 2 (M16 Auditoria) e Sprint 3 (M03 Funcionários e RH)
+// Sprint 1 (M01/M02), Sprint 2 (M16 Auditoria), Sprint 3 (M03 Funcionários e RH)
+// e Sprint 4 (M04 Clientes/Fornecedores + M05 Produtos e Serviços)
 //
 // IMPORTANTE: este schema NÃO é dono do banco. O modelo físico vive em `bd/*.sql`
 // (schema `gestao`, PostgreSQL 14+) e é a fonte da verdade. Aqui há apenas o
-// mapeamento (@map/@@map) das tabelas usadas pela Sprint 1. Não rode
+// mapeamento (@map/@@map) das tabelas usadas pela API. Não rode
 // `prisma migrate`: mudanças estruturais são feitas nos scripts de `bd/`.
 //
 // Isolamento multiempresa é feito por RLS no banco (RN-001/RN-002): toda
@@ -122,24 +123,76 @@ enum ReimbursementStatus {
   @@map("enum_status_reembolso")
 }
 
+/// Natureza do item do catálogo (RF-028) — `enum_tipo_item`.
+enum ItemType {
+  PRODUTO
+  SERVICO
+  MATERIA_PRIMA
+  ATIVO_IMOBILIZADO
+
+  @@map("enum_tipo_item")
+}
+
+/// Meio de liquidação da forma de pagamento (RF-026) — `enum_metodo_pagamento`.
+enum PaymentMethodType {
+  PIX
+  BOLETO
+  TED
+  DOC
+  TRANSFERENCIA_INTERNA
+  DEBITO_AUTOMATICO
+  CARTAO_CREDITO
+  CARTAO_DEBITO
+  DINHEIRO
+  CHEQUE
+  COMPENSACAO
+  OUTRO
+
+  @@map("enum_metodo_pagamento")
+}
+
+/// Situação do título (M08). Usada em leitura pelo histórico do parceiro (RF-025).
+enum EntryStatus {
+  ABERTO
+  PARCIALMENTE_LIQUIDADO
+  LIQUIDADO
+  CANCELADO
+  RENEGOCIADO
+
+  @@map("enum_status_titulo")
+}
+
+/// Situação do pedido de compra (M06). Leitura no histórico do parceiro (RF-025).
+enum PurchaseOrderStatus {
+  RASCUNHO
+  AGUARDANDO_APROVACAO
+  APROVADO
+  REPROVADO
+  PARCIALMENTE_RECEBIDO
+  RECEBIDO
+  CANCELADO
+
+  @@map("enum_status_pedido_compra")
+}
+
 // ---------------------------------------------------------------------------
 // M02 — Usuários, Perfis e Permissões
 // ---------------------------------------------------------------------------
 
 /// gestao.usuario — identidade global; o acesso a cada empresa vem de Membership.
 model User {
-  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name         String    @map("nome") @db.VarChar(255)
-  email        String    @unique(map: "uq_usuario_email") @db.VarChar(255)
-  passwordHash String    @map("senha_hash") // RNF-001: somente hash (argon2id)
-  phone        String?   @map("telefone") @db.VarChar(20)
-  isSuperAdmin Boolean   @default(false) @map("super_admin")
-  lastLoginAt  DateTime? @map("ultimo_login_em") @db.Timestamptz(6)
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String    @map("nome") @db.VarChar(255)
+  email             String    @unique(map: "uq_usuario_email") @db.VarChar(255)
+  passwordHash      String    @map("senha_hash") // RNF-001: somente hash (argon2id)
+  phone             String?   @map("telefone") @db.VarChar(20)
+  isSuperAdmin      Boolean   @default(false) @map("super_admin")
+  lastLoginAt       DateTime? @map("ultimo_login_em") @db.Timestamptz(6)
   /// Invalida access tokens emitidos antes da última troca de senha (RF-009).
   passwordChangedAt DateTime? @map("senha_alterada_em") @db.Timestamptz(6)
-  isActive     Boolean   @default(true) @map("ativo")
-  createdAt    DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
-  updatedAt    DateTime  @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+  isActive          Boolean   @default(true) @map("ativo")
+  createdAt         DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
   memberships    Membership[]
   sessions       Session[]
@@ -308,8 +361,8 @@ model Branch {
   @@map("filial")
 }
 
-/// gestao.endereco — endereço com dono controlado por CHECK (RF-003).
-/// Nesta sprint são usados apenas os donos empresa e filial.
+/// gestao.endereco — endereço com dono controlado por CHECK (RF-003/RF-024).
+/// Donos usados pela API: empresa, filial e parceiro — exatamente um por linha.
 model Address {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId      String   @map("empresa_id") @db.Uuid
@@ -329,6 +382,8 @@ model Address {
   ownerCompany   Company? @relation("EnderecoDaEmpresa", fields: [ownerCompanyId], references: [id], onDelete: Cascade)
   branchId       String?  @map("filial_id") @db.Uuid
   branch         Branch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  partnerId      String?  @map("parceiro_id") @db.Uuid
+  partner        Partner? @relation(fields: [partnerId], references: [id], onDelete: Cascade)
   createdAt      DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
@@ -337,19 +392,19 @@ model Address {
 
 /// gestao.categoria_financeira — plano gerencial hierárquico (RF-006).
 model Category {
-  id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId     String     @map("empresa_id") @db.Uuid
-  company       Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  parentId      String?    @map("categoria_pai_id") @db.Uuid
-  parent        Category?  @relation("CategoryTree", fields: [parentId], references: [id])
-  children      Category[] @relation("CategoryTree")
-  code          String     @map("codigo") @db.VarChar(30)
-  name          String     @map("nome") @db.VarChar(255)
-  type          EntryType  @map("tipo")
-  acceptsEntry  Boolean    @default(true) @map("aceita_lancamento")
-  isActive      Boolean    @default(true) @map("ativo")
-  createdAt     DateTime   @default(now()) @map("criado_em") @db.Timestamptz(6)
-  updatedAt     DateTime   @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId    String     @map("empresa_id") @db.Uuid
+  company      Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  parentId     String?    @map("categoria_pai_id") @db.Uuid
+  parent       Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children     Category[] @relation("CategoryTree")
+  code         String     @map("codigo") @db.VarChar(30)
+  name         String     @map("nome") @db.VarChar(255)
+  type         EntryType  @map("tipo")
+  acceptsEntry Boolean    @default(true) @map("aceita_lancamento")
+  isActive     Boolean    @default(true) @map("ativo")
+  createdAt    DateTime   @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt    DateTime   @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
   @@unique([companyId, code], map: "uq_categoria_financeira_codigo")
   @@map("categoria_financeira")
@@ -499,7 +554,7 @@ model Employee {
   createdAt         DateTime       @default(now()) @map("criado_em") @db.Timestamptz(6)
   updatedAt         DateTime       @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  bankAccounts   EmployeeBankAccount[]
+  bankAccounts   BankAccount[]
   events         EmployeeEvent[]
   payrollItems   EmployeePayrollItem[]
   reimbursements Reimbursement[]
@@ -509,28 +564,33 @@ model Employee {
   @@map("funcionario")
 }
 
-/// gestao.dado_bancario — conta para crédito de salário/reembolso (RF-013).
-/// A tabela também atende parceiros (M04); aqui só o dono funcionário é usado.
-model EmployeeBankAccount {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId      String   @map("empresa_id") @db.Uuid
-  employeeId     String   @map("funcionario_id") @db.Uuid
-  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  bankCode       String?  @map("banco_codigo") @db.VarChar(5)
-  bankName       String?  @map("banco_nome") @db.VarChar(120)
-  agency         String?  @map("agencia") @db.VarChar(10)
-  agencyDigit    String?  @map("agencia_digito") @db.VarChar(2)
-  account        String?  @map("conta") @db.VarChar(20)
-  accountDigit   String?  @map("conta_digito") @db.VarChar(2)
-  accountType    String?  @map("tipo_conta") @db.VarChar(20)
-  holderName     String?  @map("titular_nome") @db.VarChar(255)
-  holderDocument String?  @map("titular_documento") @db.VarChar(14)
-  pixKey         String?  @map("chave_pix") @db.VarChar(140)
-  pixKeyType     String?  @map("tipo_chave_pix") @db.VarChar(20)
-  isPrimary      Boolean  @default(false) @map("principal")
-  isActive       Boolean  @default(true) @map("ativo")
-  createdAt      DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
-  updatedAt      DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+/// gestao.dado_bancario — conta para crédito de salário/reembolso (RF-013) e
+/// para pagamento/recebimento de parceiro (RF-024).
+///
+/// O dono é exatamente um dos dois — funcionário **ou** parceiro —, garantido
+/// pelo CHECK `ck_dado_bancario_proprietario` (bd/01).
+model BankAccount {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String    @map("empresa_id") @db.Uuid
+  employeeId     String?   @map("funcionario_id") @db.Uuid
+  employee       Employee? @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  partnerId      String?   @map("parceiro_id") @db.Uuid
+  partner        Partner?  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  bankCode       String?   @map("banco_codigo") @db.VarChar(5)
+  bankName       String?   @map("banco_nome") @db.VarChar(120)
+  agency         String?   @map("agencia") @db.VarChar(10)
+  agencyDigit    String?   @map("agencia_digito") @db.VarChar(2)
+  account        String?   @map("conta") @db.VarChar(20)
+  accountDigit   String?   @map("conta_digito") @db.VarChar(2)
+  accountType    String?   @map("tipo_conta") @db.VarChar(20)
+  holderName     String?   @map("titular_nome") @db.VarChar(255)
+  holderDocument String?   @map("titular_documento") @db.VarChar(14)
+  pixKey         String?   @map("chave_pix") @db.VarChar(140)
+  pixKeyType     String?   @map("tipo_chave_pix") @db.VarChar(20)
+  isPrimary      Boolean   @default(false) @map("principal")
+  isActive       Boolean   @default(true) @map("ativo")
+  createdAt      DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
   @@map("dado_bancario")
 }
@@ -561,20 +621,20 @@ model EmployeeEvent {
 
 /// gestao.verba — catálogo de salários, benefícios e descontos (RF-017/RF-021).
 model PayrollItem {
-  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId        String          @map("empresa_id") @db.Uuid
-  code             String          @map("codigo") @db.VarChar(30)
-  name             String          @map("nome") @db.VarChar(255)
-  type             PayrollItemType @map("tipo")
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId       String          @map("empresa_id") @db.Uuid
+  code            String          @map("codigo") @db.VarChar(30)
+  name            String          @map("nome") @db.VarChar(255)
+  type            PayrollItemType @map("tipo")
   /// Conta contábil e categoria financeira ligam a folha à contabilidade (RF-021).
-  ledgerAccountId  String?         @map("conta_contabil_id") @db.Uuid
-  categoryId       String?         @map("categoria_financeira_id") @db.Uuid
-  affectsInss      Boolean         @default(false) @map("incide_inss")
-  affectsIrrf      Boolean         @default(false) @map("incide_irrf")
-  affectsFgts      Boolean         @default(false) @map("incide_fgts")
-  isActive         Boolean         @default(true) @map("ativo")
-  createdAt        DateTime        @default(now()) @map("criado_em") @db.Timestamptz(6)
-  updatedAt        DateTime        @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+  ledgerAccountId String?         @map("conta_contabil_id") @db.Uuid
+  categoryId      String?         @map("categoria_financeira_id") @db.Uuid
+  affectsInss     Boolean         @default(false) @map("incide_inss")
+  affectsIrrf     Boolean         @default(false) @map("incide_irrf")
+  affectsFgts     Boolean         @default(false) @map("incide_fgts")
+  isActive        Boolean         @default(true) @map("ativo")
+  createdAt       DateTime        @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt       DateTime        @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
   assignments EmployeePayrollItem[]
 
@@ -676,6 +736,284 @@ model StoredDocument {
 }
 
 // ---------------------------------------------------------------------------
+// M04 — Clientes e Fornecedores
+//
+// Modelagem do banco (bd/01): uma entidade `parceiro` com os papéis
+// `eh_cliente`/`eh_fornecedor`, porque na prática a mesma pessoa jurídica
+// exerce os dois. O que é específico de cada papel fica em `cliente` e
+// `fornecedor` (1:1 com o parceiro).
+// ---------------------------------------------------------------------------
+
+/// gestao.parceiro — cliente e/ou fornecedor (RF-022, RF-023).
+model Partner {
+  id                    String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId             String     @map("empresa_id") @db.Uuid
+  personType            PersonType @map("tipo_pessoa")
+  code                  String?    @map("codigo") @db.VarChar(30)
+  legalName             String     @map("razao_social") @db.VarChar(255)
+  tradeName             String?    @map("nome_fantasia") @db.VarChar(255)
+  cnpj                  String?    @db.VarChar(14)
+  cpf                   String?    @db.VarChar(11)
+  foreignDocument       String?    @map("documento_estrangeiro") @db.VarChar(30)
+  stateRegistration     String?    @map("inscricao_estadual") @db.VarChar(20)
+  municipalRegistration String?    @map("inscricao_municipal") @db.VarChar(20)
+  icmsTaxpayer          Boolean    @default(false) @map("contribuinte_icms")
+  taxRegime             TaxRegime? @map("regime_tributario")
+  email                 String?    @db.VarChar(255)
+  phone                 String?    @map("telefone") @db.VarChar(20)
+  website               String?    @map("site") @db.VarChar(255)
+  isCustomer            Boolean    @default(false) @map("eh_cliente")
+  isSupplier            Boolean    @default(false) @map("eh_fornecedor")
+  note                  String?    @map("observacao")
+  isActive              Boolean    @default(true) @map("ativo")
+  createdAt             DateTime   @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt             DateTime   @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  customer     Customer?
+  supplier     Supplier?
+  addresses    Address[]
+  contacts     Contact[]
+  bankAccounts BankAccount[]
+  products     ProductSupplier[]
+
+  @@map("parceiro")
+}
+
+/// gestao.cliente — dados do papel cliente (RF-022, RF-026).
+model Customer {
+  partnerId       String         @id @map("parceiro_id") @db.Uuid
+  partner         Partner        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  companyId       String         @map("empresa_id") @db.Uuid
+  creditLimit     Decimal        @default(0) @map("limite_credito") @db.Decimal(18, 2)
+  paymentTermId   String?        @map("condicao_pagamento_id") @db.Uuid
+  paymentTerm     PaymentTerm?   @relation(fields: [paymentTermId], references: [id])
+  paymentMethodId String?        @map("forma_pagamento_id") @db.Uuid
+  paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  salesRepId      String?        @map("vendedor_id") @db.Uuid
+  preferredDueDay Int?           @map("dia_vencimento_preferencial") @db.SmallInt
+  isBlocked       Boolean        @default(false) @map("bloqueado")
+  blockReason     String?        @map("motivo_bloqueio")
+  createdAt       DateTime       @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt       DateTime       @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  @@map("cliente")
+}
+
+/// gestao.fornecedor — dados do papel fornecedor (RF-023, RF-026).
+model Supplier {
+  partnerId         String         @id @map("parceiro_id") @db.Uuid
+  partner           Partner        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  companyId         String         @map("empresa_id") @db.Uuid
+  paymentTermId     String?        @map("condicao_pagamento_id") @db.Uuid
+  paymentTerm       PaymentTerm?   @relation(fields: [paymentTermId], references: [id])
+  paymentMethodId   String?        @map("forma_pagamento_id") @db.Uuid
+  paymentMethod     PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  deliveryDays      Int?           @map("prazo_entrega_dias") @db.SmallInt
+  defaultCategoryId String?        @map("categoria_financeira_padrao_id") @db.Uuid
+  isApproved        Boolean        @default(false) @map("homologado")
+  isBlocked         Boolean        @default(false) @map("bloqueado")
+  blockReason       String?        @map("motivo_bloqueio")
+  createdAt         DateTime       @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt         DateTime       @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  @@map("fornecedor")
+}
+
+/// gestao.contato — pessoa de contato do parceiro (RF-024).
+model Contact {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @map("empresa_id") @db.Uuid
+  partnerId String?  @map("parceiro_id") @db.Uuid
+  partner   Partner? @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  branchId  String?  @map("filial_id") @db.Uuid
+  name      String   @map("nome") @db.VarChar(255)
+  role      String?  @map("cargo") @db.VarChar(120)
+  email     String?  @db.VarChar(255)
+  phone     String?  @map("telefone") @db.VarChar(20)
+  mobile    String?  @map("celular") @db.VarChar(20)
+  note      String?  @map("observacao")
+  isPrimary Boolean  @default(false) @map("principal")
+  createdAt DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  @@map("contato")
+}
+
+/// gestao.forma_pagamento — meio de liquidação (RF-026).
+model PaymentMethod {
+  id        String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String            @map("empresa_id") @db.Uuid
+  code      String            @map("codigo") @db.VarChar(30)
+  name      String            @map("nome") @db.VarChar(120)
+  method    PaymentMethodType @map("metodo")
+  isActive  Boolean           @default(true) @map("ativo")
+  createdAt DateTime          @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt DateTime          @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  customers Customer[]
+  suppliers Supplier[]
+
+  @@unique([companyId, code], map: "uq_forma_pagamento")
+  @@map("forma_pagamento")
+}
+
+/// gestao.condicao_pagamento — parcelamento e desconto (RF-026).
+model PaymentTerm {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId       String   @map("empresa_id") @db.Uuid
+  code            String   @map("codigo") @db.VarChar(30)
+  name            String   @map("nome") @db.VarChar(120)
+  installments    Int      @default(1) @map("quantidade_parcelas") @db.SmallInt
+  intervalDays    Int      @default(30) @map("intervalo_dias") @db.SmallInt
+  firstDueDays    Int      @default(30) @map("dias_primeira_parcela") @db.SmallInt
+  discountPercent Decimal  @default(0) @map("percentual_desconto") @db.Decimal(9, 6)
+  isActive        Boolean  @default(true) @map("ativo")
+  createdAt       DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  customers Customer[]
+  suppliers Supplier[]
+
+  @@unique([companyId, code], map: "uq_condicao_pagamento")
+  @@map("condicao_pagamento")
+}
+
+// ---------------------------------------------------------------------------
+// M05 — Produtos e Serviços (cadastro; estoque fica na Sprint 5)
+// ---------------------------------------------------------------------------
+
+/// gestao.unidade_medida — unidade comercial do item (RF-029).
+model UnitOfMeasure {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String  @map("empresa_id") @db.Uuid
+  symbol      String  @map("sigla") @db.VarChar(6)
+  description String  @map("descricao") @db.VarChar(60)
+  isActive    Boolean @default(true) @map("ativo")
+
+  products Product[]
+
+  @@unique([companyId, symbol], map: "uq_unidade_medida")
+  @@map("unidade_medida")
+}
+
+/// gestao.categoria_produto — categoria hierárquica do catálogo (RF-029).
+model ProductCategory {
+  id        String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String            @map("empresa_id") @db.Uuid
+  parentId  String?           @map("categoria_pai_id") @db.Uuid
+  parent    ProductCategory?  @relation("ProductCategoryTree", fields: [parentId], references: [id])
+  children  ProductCategory[] @relation("ProductCategoryTree")
+  code      String            @map("codigo") @db.VarChar(30)
+  name      String            @map("nome") @db.VarChar(255)
+  isActive  Boolean           @default(true) @map("ativo")
+  createdAt DateTime          @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  products Product[]
+
+  @@unique([companyId, code], map: "uq_categoria_produto")
+  @@map("categoria_produto")
+}
+
+/// gestao.produto — produto ou serviço (RF-028, RF-029, RF-030).
+///
+/// `custo_medio`, `custo_ultima_compra` e `data_ultima_compra` são projetados
+/// pela movimentação de estoque e pelas compras (Sprints 5 e 8): a API desta
+/// sprint não os escreve.
+model Product {
+  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId           String           @map("empresa_id") @db.Uuid
+  type                ItemType         @default(PRODUTO) @map("tipo")
+  code                String           @map("codigo") @db.VarChar(60)
+  barcode             String?          @map("codigo_barras") @db.VarChar(30)
+  description         String           @map("descricao") @db.VarChar(255)
+  extraDescription    String?          @map("descricao_complementar")
+  categoryId          String?          @map("categoria_produto_id") @db.Uuid
+  category            ProductCategory? @relation(fields: [categoryId], references: [id])
+  unitId              String?          @map("unidade_medida_id") @db.Uuid
+  unit                UnitOfMeasure?   @relation(fields: [unitId], references: [id])
+  ncm                 String?          @db.VarChar(8)
+  cest                String?          @db.VarChar(7)
+  defaultInboundCfop  String?          @map("cfop_padrao_entrada") @db.VarChar(4)
+  defaultOutboundCfop String?          @map("cfop_padrao_saida") @db.VarChar(4)
+  goodsOrigin         Int?             @map("origem_mercadoria") @db.SmallInt
+  serviceCodeLc116    String?          @map("codigo_servico_lc116") @db.VarChar(10)
+  averageCost         Decimal          @default(0) @map("custo_medio") @db.Decimal(18, 6)
+  lastPurchaseCost    Decimal?         @map("custo_ultima_compra") @db.Decimal(18, 6)
+  lastPurchaseDate    DateTime?        @map("data_ultima_compra") @db.Date
+  salePrice           Decimal?         @map("preco_venda") @db.Decimal(18, 6)
+  defaultMargin       Decimal?         @map("margem_padrao") @db.Decimal(9, 6)
+  tracksStock         Boolean          @default(true) @map("controla_estoque")
+  minStock            Decimal          @default(0) @map("estoque_minimo") @db.Decimal(18, 6)
+  maxStock            Decimal?         @map("estoque_maximo") @db.Decimal(18, 6)
+  netWeight           Decimal?         @map("peso_liquido") @db.Decimal(14, 4)
+  grossWeight         Decimal?         @map("peso_bruto") @db.Decimal(14, 4)
+  isActive            Boolean          @default(true) @map("ativo")
+  createdAt           DateTime         @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt           DateTime         @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  suppliers ProductSupplier[]
+
+  @@unique([companyId, code], map: "uq_produto_codigo")
+  @@map("produto")
+}
+
+/// gestao.produto_fornecedor — fornecedores homologados do item (RF-027).
+model ProductSupplier {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String   @map("empresa_id") @db.Uuid
+  productId      String   @map("produto_id") @db.Uuid
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  partnerId      String   @map("parceiro_id") @db.Uuid
+  partner        Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  supplierCode   String?  @map("codigo_no_fornecedor") @db.VarChar(60)
+  referencePrice Decimal? @map("preco_referencia") @db.Decimal(18, 6)
+  deliveryDays   Int?     @map("prazo_entrega_dias") @db.SmallInt
+  isPreferred    Boolean  @default(false) @map("preferencial")
+  createdAt      DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  @@unique([productId, partnerId], map: "uq_produto_fornecedor")
+  @@map("produto_fornecedor")
+}
+
+// ---------------------------------------------------------------------------
+// Projeções somente leitura para o histórico do parceiro (RF-025)
+//
+// As tabelas pertencem a módulos de sprints futuras (M06 Compras, M08 Contas a
+// Pagar/Receber). O mapeamento abaixo cobre apenas as colunas que o resumo
+// consulta — nenhum serviço desta sprint escreve nelas.
+// ---------------------------------------------------------------------------
+
+/// gestao.titulo — título a pagar/receber. Leitura no histórico do parceiro.
+model FinancialEntry {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId     String      @map("empresa_id") @db.Uuid
+  type          EntryType   @map("tipo")
+  number        String      @map("numero") @db.VarChar(30)
+  partnerId     String?     @map("parceiro_id") @db.Uuid
+  description   String      @map("descricao") @db.VarChar(255)
+  issueDate     DateTime    @map("data_emissao") @db.Date
+  netAmount     Decimal     @map("valor_liquido") @db.Decimal(18, 2)
+  settledAmount Decimal     @map("valor_liquidado") @db.Decimal(18, 2)
+  balance       Decimal     @map("saldo") @db.Decimal(18, 2)
+  status        EntryStatus @map("status")
+
+  @@map("titulo")
+}
+
+/// gestao.pedido_compra — pedido de compra. Leitura no histórico do parceiro.
+model PurchaseOrder {
+  id          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String              @map("empresa_id") @db.Uuid
+  number      String              @map("numero") @db.VarChar(30)
+  partnerId   String              @map("parceiro_id") @db.Uuid
+  orderDate   DateTime            @map("data_pedido") @db.Date
+  totalAmount Decimal             @map("valor_total") @db.Decimal(18, 2)
+  status      PurchaseOrderStatus @map("status")
+
+  @@map("pedido_compra")
+}
+
+// ---------------------------------------------------------------------------
 // M16 — Auditoria
 // ---------------------------------------------------------------------------
 
@@ -688,22 +1026,22 @@ model StoredDocument {
 /// Somente leitura pela API. UPDATE e DELETE são barrados no banco por trigger
 /// (bd/03) e por ausência de privilégio (bd/05) — não exponha mutação aqui.
 model AuditLog {
-  id             BigInt     @default(autoincrement())
-  companyId      String?    @map("empresa_id") @db.Uuid
-  userId         String?    @map("usuario_id") @db.Uuid
-  userName       String?    @map("usuario_nome") @db.VarChar(255)
-  event          AuditEvent @map("evento")
-  entity         String     @map("entidade") @db.VarChar(60)
-  entityId       String?    @map("entidade_id") @db.Uuid
-  previousValue  Json?      @map("valor_anterior")
-  currentValue   Json?      @map("valor_posterior")
-  changedFields  String[]   @map("campos_alterados")
-  origin         String?    @map("origem") @db.VarChar(40)
-  ip             String?    @db.Inet
-  userAgent      String?    @map("user_agent")
-  correlationId  String?    @map("correlation_id") @db.VarChar(60)
-  note           String?    @map("observacao")
-  occurredAt     DateTime   @default(now()) @map("ocorrido_em") @db.Timestamptz(6)
+  id            BigInt     @default(autoincrement())
+  companyId     String?    @map("empresa_id") @db.Uuid
+  userId        String?    @map("usuario_id") @db.Uuid
+  userName      String?    @map("usuario_nome") @db.VarChar(255)
+  event         AuditEvent @map("evento")
+  entity        String     @map("entidade") @db.VarChar(60)
+  entityId      String?    @map("entidade_id") @db.Uuid
+  previousValue Json?      @map("valor_anterior")
+  currentValue  Json?      @map("valor_posterior")
+  changedFields String[]   @map("campos_alterados")
+  origin        String?    @map("origem") @db.VarChar(40)
+  ip            String?    @db.Inet
+  userAgent     String?    @map("user_agent")
+  correlationId String?    @map("correlation_id") @db.VarChar(60)
+  note          String?    @map("observacao")
+  occurredAt    DateTime   @default(now()) @map("ocorrido_em") @db.Timestamptz(6)
 
   @@id([id, occurredAt])
   @@index([companyId, occurredAt(sort: Desc)], map: "ix_auditoria_empresa_periodo")
@@ -713,13 +1051,13 @@ model AuditLog {
 
 /// gestao.alcada_aprovador — quem aprova a alçada: um perfil OU um usuário.
 model ApprovalApprover {
-  id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  thresholdId String           @map("alcada_id") @db.Uuid
-  threshold  ApprovalThreshold @relation(fields: [thresholdId], references: [id], onDelete: Cascade)
-  userId     String?           @map("usuario_id") @db.Uuid
-  user       User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  roleId     String?           @map("perfil_id") @db.Uuid
-  role       Role?             @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  thresholdId String            @map("alcada_id") @db.Uuid
+  threshold   ApprovalThreshold @relation(fields: [thresholdId], references: [id], onDelete: Cascade)
+  userId      String?           @map("usuario_id") @db.Uuid
+  user        User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId      String?           @map("perfil_id") @db.Uuid
+  role        Role?             @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@map("alcada_aprovador")
 }

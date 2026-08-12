@@ -9,7 +9,7 @@
 -- Ele recria o ambiente do zero. NAO rode em base com dados que importam.
 -- ############################################################################
 --
--- Por que dropar: os scripts 01 a 06 nao sao um sistema de migracao -- eles
+-- Por que dropar: os scripts 01 a 07 nao sao um sistema de migracao -- eles
 -- montam o schema do zero. Reexecutar sobre um banco existente falharia no
 -- primeiro CREATE TABLE. Recriar e o caminho previsto para desenvolvimento.
 --
@@ -65,7 +65,7 @@ CREATE DATABASE gestao_empresarial OWNER gestao_owner;
 
 -- A partir daqui, conectar como gestao_owner:
 --   psql -U gestao_owner -h localhost -d gestao_empresarial -f 01_schema_core.sql
---   ... ate 06_rh_sprint3.sql
+--   ... ate 07_parceiros_produtos_sprint4.sql
 --
 -- As quatro extensoes usadas (pgcrypto, pg_trgm, btree_gist, unaccent) sao
 -- "trusted" no PostgreSQL 13+, entao o proprio gestao_owner consegue cria-las.

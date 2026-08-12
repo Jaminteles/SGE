@@ -4,8 +4,8 @@ import { RequirePermissions } from '../../common/decorators/require-permissions.
 import { ActiveCompanyId } from '../../common/decorators/active-company.decorator';
 import { PERMISSIONS } from '../../common/authorization/permission-catalog';
 import { BankAccountsService } from './bank-accounts.service';
-import { CreateBankAccountDto } from './dto/create-bank-account.dto';
-import { UpdateBankAccountDto } from './dto/update-bank-account.dto';
+import { CreateBankAccountDto } from '../../common/banking/dto/create-bank-account.dto';
+import { UpdateBankAccountDto } from '../../common/banking/dto/update-bank-account.dto';
 
 @ApiTags('RH — Dados bancários')
 @ApiBearerAuth()

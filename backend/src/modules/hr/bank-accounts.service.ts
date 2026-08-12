@@ -1,8 +1,12 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CreateBankAccountDto } from '../../common/banking/dto/create-bank-account.dto';
+import { UpdateBankAccountDto } from '../../common/banking/dto/update-bank-account.dto';
+import {
+  assertPayableAccount,
+  toBankAccountColumns,
+} from '../../common/banking/bank-account.mapper';
 import { EmployeesService } from './employees.service';
-import { CreateBankAccountDto } from './dto/create-bank-account.dto';
-import { UpdateBankAccountDto } from './dto/update-bank-account.dto';
 
 /**
  * Dados bancários do funcionário (RF-013) — `gestao.dado_bancario`.
@@ -20,21 +24,26 @@ export class BankAccountsService {
 
   async create(companyId: string, employeeId: string, dto: CreateBankAccountDto) {
     await this.employees.findOne(companyId, employeeId);
-    this.assertPayable(dto);
+    assertPayableAccount(dto);
 
     return this.prisma.transaction(async () => {
       if (dto.isPrimary) {
         await this.clearPrimary(companyId, employeeId);
       }
-      return this.prisma.db.employeeBankAccount.create({
-        data: { companyId, employeeId, ...this.toColumns(dto), isPrimary: dto.isPrimary ?? false },
+      return this.prisma.db.bankAccount.create({
+        data: {
+          companyId,
+          employeeId,
+          ...toBankAccountColumns(dto),
+          isPrimary: dto.isPrimary ?? false,
+        },
       });
     });
   }
 
   async findAll(companyId: string, employeeId: string) {
     await this.employees.findOne(companyId, employeeId);
-    return this.prisma.db.employeeBankAccount.findMany({
+    return this.prisma.db.bankAccount.findMany({
       where: { companyId, employeeId },
       orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
     });
@@ -42,16 +51,16 @@ export class BankAccountsService {
 
   async update(companyId: string, employeeId: string, id: string, dto: UpdateBankAccountDto) {
     const current = await this.load(companyId, employeeId, id);
-    this.assertPayable({ ...current, ...dto } as CreateBankAccountDto);
+    assertPayableAccount({ ...current, ...dto } as CreateBankAccountDto);
 
     return this.prisma.transaction(async () => {
       if (dto.isPrimary) {
         await this.clearPrimary(companyId, employeeId);
       }
-      return this.prisma.db.employeeBankAccount.update({
+      return this.prisma.db.bankAccount.update({
         where: { id: current.id },
         data: {
-          ...this.toColumns(dto),
+          ...toBankAccountColumns(dto),
           ...(dto.isPrimary !== undefined ? { isPrimary: dto.isPrimary } : {}),
           ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
         },
@@ -62,14 +71,14 @@ export class BankAccountsService {
   /** Inativa: a conta que já recebeu crédito precisa continuar rastreável. */
   async remove(companyId: string, employeeId: string, id: string) {
     const current = await this.load(companyId, employeeId, id);
-    return this.prisma.db.employeeBankAccount.update({
+    return this.prisma.db.bankAccount.update({
       where: { id: current.id },
       data: { isActive: false, isPrimary: false },
     });
   }
 
   private async load(companyId: string, employeeId: string, id: string) {
-    const account = await this.prisma.db.employeeBankAccount.findFirst({
+    const account = await this.prisma.db.bankAccount.findFirst({
       where: { id, companyId, employeeId },
     });
     if (!account) {
@@ -80,36 +89,9 @@ export class BankAccountsService {
 
   /** Só existe uma conta padrão por funcionário. */
   private async clearPrimary(companyId: string, employeeId: string) {
-    await this.prisma.db.employeeBankAccount.updateMany({
+    await this.prisma.db.bankAccount.updateMany({
       where: { companyId, employeeId, isPrimary: true },
       data: { isPrimary: false },
     });
-  }
-
-  /** Uma conta sem chave PIX e sem agência/conta não credita nada. */
-  private assertPayable(dto: CreateBankAccountDto) {
-    const hasAccount = Boolean(dto.bankCode && dto.agency && dto.account);
-    const hasPix = Boolean(dto.pixKey && dto.pixKeyType);
-    if (!hasAccount && !hasPix) {
-      throw new BadRequestException(
-        'Informe banco, agência e conta ou uma chave PIX com o respectivo tipo.',
-      );
-    }
-  }
-
-  private toColumns(dto: UpdateBankAccountDto) {
-    return {
-      ...(dto.bankCode !== undefined ? { bankCode: dto.bankCode } : {}),
-      ...(dto.bankName !== undefined ? { bankName: dto.bankName } : {}),
-      ...(dto.agency !== undefined ? { agency: dto.agency } : {}),
-      ...(dto.agencyDigit !== undefined ? { agencyDigit: dto.agencyDigit } : {}),
-      ...(dto.account !== undefined ? { account: dto.account } : {}),
-      ...(dto.accountDigit !== undefined ? { accountDigit: dto.accountDigit } : {}),
-      ...(dto.accountType !== undefined ? { accountType: dto.accountType } : {}),
-      ...(dto.holderName !== undefined ? { holderName: dto.holderName } : {}),
-      ...(dto.holderDocument !== undefined ? { holderDocument: dto.holderDocument } : {}),
-      ...(dto.pixKey !== undefined ? { pixKey: dto.pixKey } : {}),
-      ...(dto.pixKeyType !== undefined ? { pixKeyType: dto.pixKeyType } : {}),
-    };
   }
 }

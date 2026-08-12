@@ -16,6 +16,7 @@ import { TenantContextMiddleware } from './common/middleware/tenant-context.midd
 import { TransactionInterceptor } from './common/interceptors/transaction.interceptor';
 import { AuditModule } from './common/audit/audit.module';
 import { StorageModule } from './common/storage/storage.module';
+import { ReferencesModule } from './common/references/references.module';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -27,6 +28,8 @@ import { ConfigurationsModule } from './modules/configurations/configurations.mo
 import { ApprovalsModule } from './modules/approvals/approvals.module';
 import { AuditQueryModule } from './modules/audit/audit.module';
 import { HrModule } from './modules/hr/hr.module';
+import { PartnersModule } from './modules/partners/partners.module';
+import { CatalogModule } from './modules/catalog/catalog.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -70,6 +73,8 @@ import { HealthModule } from './modules/health/health.module';
     AuditModule,
     // Global: armazenamento de arquivos (comprovantes — RF-019).
     StorageModule,
+    // Global: valida referências entre cadastros dentro da empresa (RF-005).
+    ReferencesModule,
 
     AuthModule,
     UsersModule,
@@ -81,6 +86,8 @@ import { HealthModule } from './modules/health/health.module';
     ApprovalsModule,
     AuditQueryModule,
     HrModule,
+    PartnersModule,
+    CatalogModule,
     HealthModule,
   ],
   providers: [

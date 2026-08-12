@@ -9,6 +9,17 @@ import {
 import { Prisma } from '@prisma/client';
 import { Request, Response } from 'express';
 
+/**
+ * Erro do PostgreSQL como o Prisma o repassa quando não tem código próprio
+ * para ele — o texto do driver traz o SQLSTATE e a mensagem original.
+ */
+const POSTGRES_ERROR = /PostgresError \{ code: "(?<code>[^"]+)", message: "(?<message>[^"]*)"/;
+
+/** `RAISE EXCEPTION` nas funções de `bd/*.sql`. */
+const RAISE_EXCEPTION = 'P0001';
+/** Violação de CHECK. */
+const CHECK_VIOLATION = '23514';
+
 interface ErrorBody {
   statusCode: number;
   error: string;
@@ -67,6 +78,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return { status, error: exception.name, message };
     }
 
+    // Antes do mapeamento por código do Prisma: uma regra de negócio recusada
+    // pelo banco é erro de quem chamou, e o Prisma não tem código próprio para
+    // ela — sem isto, um ciclo de hierarquia ou um papel incompatível viraria
+    // 500, escondendo do cliente o que ele precisa corrigir.
+    const rule = this.resolveDatabaseRule(exception);
+    if (rule) {
+      return rule;
+    }
+
     if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       return this.resolvePrisma(exception);
     }
@@ -76,6 +96,43 @@ export class AllExceptionsFilter implements ExceptionFilter {
       error: 'InternalServerError',
       message: 'Erro interno do servidor.',
     };
+  }
+
+  /**
+   * Regras implementadas no banco (`bd/06`, `bd/07`) falam com o usuário: as
+   * mensagens de `RAISE EXCEPTION` são escritas nos scripts para explicar o que
+   * foi recusado — hierarquia com ciclo, papel incompatível, evento imutável.
+   *
+   * Violação de CHECK responde genérico de propósito: o texto do PostgreSQL cita
+   * a relação e a restrição, e é detalhe interno. Os services validam essas
+   * mesmas regras antes de escrever; aqui é a rede de segurança.
+   *
+   * Fora desta lista o erro do banco continua 500 — inclusive `42501` (RLS), que
+   * significa a aplicação tentando escrever fora do escopo da empresa: é defeito
+   * do servidor, e mascará-lo como 4xx atrasaria o diagnóstico.
+   */
+  private resolveDatabaseRule(
+    exception: unknown,
+  ): { status: number; error: string; message: string } | null {
+    const isPrismaError =
+      exception instanceof Prisma.PrismaClientKnownRequestError ||
+      exception instanceof Prisma.PrismaClientUnknownRequestError;
+    if (!isPrismaError) {
+      return null;
+    }
+
+    const groups = POSTGRES_ERROR.exec(exception.message)?.groups;
+    if (groups?.code === RAISE_EXCEPTION) {
+      return { status: HttpStatus.BAD_REQUEST, error: 'BadRequest', message: groups.message };
+    }
+    if (groups?.code === CHECK_VIOLATION) {
+      return {
+        status: HttpStatus.BAD_REQUEST,
+        error: 'BadRequest',
+        message: 'Requisição viola uma regra de consistência do cadastro.',
+      };
+    }
+    return null;
   }
 
   private resolvePrisma(exception: Prisma.PrismaClientKnownRequestError): {

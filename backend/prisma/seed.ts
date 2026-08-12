@@ -1,6 +1,10 @@
 import { PrismaClient } from '@prisma/client';
 import { hash } from '@node-rs/argon2';
-import { PERMISSION_CATALOG, PERMISSIONS } from '../src/common/authorization/permission-catalog';
+import {
+  PERMISSION_CATALOG,
+  PERMISSIONS,
+  RESOURCES,
+} from '../src/common/authorization/permission-catalog';
 
 /**
  * Carga inicial do backend sobre o banco criado por `bd/*.sql`.
@@ -57,6 +61,35 @@ async function seedSystemRoles(): Promise<void> {
       codes: PERMISSION_CATALOG.filter(
         (p) => p.module === 'M03' && p.code !== PERMISSIONS.REIMBURSEMENTS_APPROVE,
       ).map((p) => p.code),
+    },
+    // M04/M05: Compras mantém parceiros e catálogo. O dado bancário do parceiro
+    // fica de fora — é a conta para onde o pagamento vai, e quem negocia o
+    // preço não deve poder redirecionar o crédito (mesma razão do M03).
+    {
+      role: 'COMPRAS',
+      codes: PERMISSION_CATALOG.filter(
+        (p) =>
+          (p.module === 'M04' || p.module === 'M05') &&
+          p.resource !== RESOURCES.PARTNER_BANK_ACCOUNTS,
+      ).map((p) => p.code),
+    },
+    // Financeiro é quem paga: precisa da conta do parceiro e do histórico.
+    {
+      role: 'FINANCEIRO',
+      codes: [
+        ...PERMISSION_CATALOG.filter((p) => p.resource === RESOURCES.PARTNER_BANK_ACCOUNTS).map(
+          (p) => p.code,
+        ),
+        PERMISSIONS.PARTNERS_READ,
+        PERMISSIONS.PARTNER_HISTORY_READ,
+        PERMISSIONS.PAYMENT_METHODS_READ,
+        PERMISSIONS.PAYMENT_TERMS_READ,
+      ],
+    },
+    // Operacional cadastra e consulta o catálogo, sem tocar em parceiros.
+    {
+      role: 'OPERACIONAL',
+      codes: PERMISSION_CATALOG.filter((p) => p.module === 'M05').map((p) => p.code),
     },
   ];
 

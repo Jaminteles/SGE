@@ -1,4 +1,4 @@
-# SGE — Backend (Fases 1 e 2)
+# SGE — Backend (Fase 1 completa, Fase 2 em andamento)
 
 Backend do **Sistema de Gestão Empresarial e Financeira**, implementado conforme a
 stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
@@ -13,6 +13,11 @@ stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
   departamentos e gestores, histórico de admissão/desligamento e eventos
   administrativos, centro de custo, verbas, reembolsos com comprovante e
   consolidação para folha e contabilidade (RF-013 a RF-021).
+- **Sprint 4 — M04 (Clientes e Fornecedores) + M05 (Produtos e Serviços)**:
+  parceiros PF/PJ com papéis de cliente e fornecedor, contatos, endereços e
+  dados bancários, histórico comercial e financeiro, formas e condições de
+  pagamento, catálogo de produtos e serviços com dados fiscais e vínculo com
+  fornecedores (RF-022 a RF-030).
 
 ## Banco de dados
 
@@ -38,6 +43,7 @@ psql -U gestao_owner -h localhost -d gestao_empresarial -f 03_schema_contabil_go
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 04_ajustes_integracao_backend.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 05_auditoria_sprint2.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 06_rh_sprint3.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 07_parceiros_produtos_sprint4.sql
 ```
 
 ```bash
@@ -102,13 +108,18 @@ associações, mas não são editáveis pela API.
 
 `gestao.permissao` não tem coluna de código: a chave é a tripla
 (`modulo`, `recurso`, `acao`). A API deriva o código `recurso:AÇÃO` e grava seu
-catálogo com `modulo` = `M01`/`M02`/`M03`/`M16`. As permissões em português da
-carga inicial de `bd/03` continuam lá, reservadas para os módulos das próximas
-sprints.
+catálogo com `modulo` = `M01`/`M02`/`M03`/`M04`/`M05`/`M16`. As permissões em
+português da carga inicial de `bd/03` continuam lá, reservadas para os módulos
+das próximas sprints.
 
-O seed vincula ao perfil de sistema **RH** todas as permissões do M03 **exceto**
-`reimbursements:APPROVE`: quem lança a despesa não decide sobre ela (RN-003).
-Conceda a aprovação ao perfil que responde pela alçada.
+Vínculos feitos pelo seed nos perfis de sistema:
+
+| Perfil | Recebe | Não recebe, e por quê |
+| --- | --- | --- |
+| RH | Todo o M03 | `reimbursements:APPROVE` — quem lança a despesa não decide sobre ela (RN-003) |
+| COMPRAS | M04 e M05 | `partner-bank-accounts:*` — quem negocia o preço não redireciona o crédito |
+| FINANCEIRO | `partner-bank-accounts:*`, leitura de parceiros, histórico e condições | Escrita do cadastro comercial |
+| OPERACIONAL | Todo o M05 | M04 — catálogo não implica acesso a parceiros |
 
 ## Mapa de requisitos → endpoints
 
@@ -140,6 +151,15 @@ Conceda a aprovação ao perfil que responde pela alçada.
 | RF-019 | Armazenar comprovantes | `POST/GET /reimbursements/:id/items/:itemId/receipt` |
 | RF-020 | Férias, afastamentos e eventos administrativos | `POST /employees/:id/events` |
 | RF-021 | Informações para folha e contabilidade | `GET /payroll/summary?competence=YYYY-MM` |
+| RF-022 | Cadastrar clientes PF/PJ | `/partners` (CRUD) com `isCustomer` + bloco `customer` |
+| RF-023 | Cadastrar fornecedores PF/PJ | `/partners` (CRUD) com `isSupplier` + bloco `supplier` |
+| RF-024 | Contatos, endereços e dados bancários | `/partners/:id/contacts`, `/addresses`, `/bank-accounts` |
+| RF-025 | Histórico comercial e financeiro | `GET /partners/:id/history` (+ `GET /audit/entities/parceiro/:id`) |
+| RF-026 | Condições e formas de pagamento | `/payment-terms`, `/payment-methods` (CRUD) |
+| RF-027 | Associar fornecedores a produtos | `/products/:id/suppliers` (CRUD) + `GET /partners/:id/products` |
+| RF-028 | Cadastrar produtos e serviços | `/products` (CRUD) |
+| RF-029 | Unidade, código, categoria, custo e preço | `/units-of-measure`, `/product-categories`, campos de `/products` |
+| RF-030 | Dados fiscais (NCM, CEST) | `ncm`, `cest`, CFOPs, `goodsOrigin` e `serviceCodeLc116` em `/products` |
 
 ## Contrato da API — pontos de atenção
 
@@ -159,6 +179,10 @@ status. A API acompanha:
 - **Associação** aceita `branchId` (vazio = todas as filiais) e `isDefault`.
 - **Alçada** aceita `name`, `level` e `minApprovers`; o `requiredRoleId` vira uma
   linha em `gestao.alcada_aprovador` e a resposta traz `requiredRoles`.
+- **Regras do banco viram 400**, não 500: o que um trigger de `bd/06`/`bd/07`
+  recusa (`RAISE EXCEPTION`) chega ao cliente com a mensagem da regra — ciclo de
+  hierarquia, papel incompatível, evento imutável. Violação de RLS (`42501`)
+  segue como 500 de propósito: é defeito do servidor, não do chamador.
 - **Auditoria** é somente leitura e o `id` vem como **string**: a coluna é
   `bigint` e `JSON.stringify` não serializa `BigInt`. O filtro de período usa
   intervalo semiaberto — `from` inclusivo, `to` exclusivo.
@@ -166,6 +190,43 @@ status. A API acompanha:
   como número: `number` em JSON é ponto flutuante binário (RN-012).
 - **Datas de RH** (admissão, vigência, despesa, competência) são dias civis:
   `YYYY-MM-DD` (ou `YYYY-MM` na competência), sem hora e sem fuso.
+- **Parceiro** é um cadastro só com dois papéis (`isCustomer`/`isSupplier`) —
+  pelo menos um é obrigatório. O documento acompanha o `personType`: CNPJ para
+  `PJ`, CPF para `PF`, `foreignDocument` para `ESTRANGEIRO`; `personType` não é
+  editável depois de criado.
+- **Preços unitários** (`salePrice`, `referencePrice`) e **quantidades**
+  (`minStock`, `maxStock`) são decimais de até **6 casas**, também em string —
+  as colunas são `numeric(18,6)`, não `numeric(18,2)`.
+
+### M04 — papéis, perfis e bloqueio
+
+| Regra | Onde vale |
+| --- | --- |
+| Parceiro precisa exercer ao menos um papel | Service + CHECK `ck_parceiro_papel` (`bd/01`) |
+| Linha de `cliente`/`fornecedor` só para quem tem o papel | Trigger `trg_cliente_papel`/`trg_fornecedor_papel` (`bd/07`) |
+| Bloqueio exige motivo | Service + CHECK `ck_cliente_bloqueio`/`ck_fornecedor_bloqueio` (`bd/07`) |
+| Um endereço, contato e conta **principal** por parceiro | Service + índices únicos parciais (`bd/07`) |
+| Vínculo produto ↔ fornecedor só com quem tem `isSupplier` | Service + `trg_produto_fornecedor_papel` (`bd/07`) |
+
+Desabilitar um papel **não apaga** o perfil: limite de crédito, condição
+negociada e motivo de bloqueio são histórico comercial, e reativar o papel
+devolve o que já estava acordado.
+
+### M05 — o que o cadastro do item recusa
+
+| Regra | Motivo |
+| --- | --- |
+| `SERVICO` não controla estoque | Serviço não tem saldo; o banco recusa a combinação (`ck_produto_servico_estoque`) |
+| `SERVICO` exige `serviceCodeLc116` | Sem o código da LC 116 o item não é classificável na NFS-e (RF-030) |
+| `maxStock` ≥ `minStock`, preços e pesos ≥ 0 | Valor negativo entraria no item da nota e no custo médio |
+| NCM 8 dígitos, CEST 7, CFOP 4, origem 0–8 | Formato fixo da NF-e (`ck_produto_fiscal`, `bd/07`) |
+
+`averageCost`, `lastPurchaseCost` e `lastPurchaseDate` são **somente leitura**:
+quem os escreve é a movimentação de estoque e a compra (Sprints 5 e 8).
+
+`GET /partners/:id/history` (RF-025) consolida `titulo` e `pedido_compra` —
+tabelas dos módulos M08 e M06. Até essas sprints entrarem, o resumo responde
+zerado, que é o retrato correto de um parceiro sem movimento.
 
 ### M03 — o que o cadastro não deixa você escrever
 
@@ -202,6 +263,13 @@ disponível até a aprovação e `PAGO` reservado à liquidação financeira (M0
 | `LOGIN`, `LOGOUT`, e futuros `APROVACAO`/`PAGAMENTO`/... | `AuditService.record()` | Não — acompanha a transação |
 | `ACESSO_NEGADO` | `AuditService.recordOutOfBand()` | **Sim** — gravado fora da transação |
 
+A gravação usa `createMany`, e não `create`: `create` emite `INSERT ... RETURNING`,
+e o `RETURNING` é submetido à política de leitura da trilha
+(`empresa_id = fn_empresa_corrente()`). Um evento de plataforma — login e logout
+têm `empresa_id` nulo — nunca satisfaz essa condição, e o INSERT era recusado com
+`42501`, derrubando a requisição. A trilha é append-only e ninguém precisa da
+linha de volta, então não devolvê-la sai mais barato que afrouxar a leitura.
+
 A distinção importa: o `TenantContextMiddleware` reverte a transação da
 requisição em respostas 4xx/5xx. Um evento de segurança gravado dentro dela
 desapareceria exatamente no caso que mais interessa auditar. Em contrapartida,
@@ -226,17 +294,18 @@ estrita, para não vazar atividade entre empresas.
   da aplicação. Hashes de senha e de token são removidos do valor auditado.
 - **RNF-012**: testes automatizados das regras críticas (autenticação, RBAC,
   isolamento, CPF/CNPJ, máquina de estados e alçada do reembolso, armazenamento
-  de comprovantes).
-- **RN-001 estrutural (Sprint 3)**: as referências do M03 usam **FK composta**
+  de comprovantes, papéis do parceiro e consistência do catálogo).
+- **RN-001 estrutural (Sprints 3 e 4)**: as referências do M03, M04 e M05 usam **FK composta**
   `(empresa_id, <coluna>)`. A verificação de chave estrangeira roda no sistema,
   sem RLS: sem isso, um defeito na API poderia vincular funcionário da empresa A
   ao centro de custo da empresa B. Como FK composta não aceita `ON DELETE SET
   NULL` no PostgreSQL 14, o que era `SET NULL` virou `RESTRICT` — cadastro em
   uso é **inativado**, não removido.
-- **Segregação de dados sensíveis**: dado bancário (`employee-bank-accounts`),
-  remuneração (`compensation`) e folha (`payroll`) são recursos com permissão
-  própria — quem mantém o cadastro funcional não recebe nenhum dos três por
-  tabela. `GET /payroll/summary` é registrado na trilha como `EXPORTACAO`.
+- **Segregação de dados sensíveis**: dado bancário (`employee-bank-accounts` e
+  `partner-bank-accounts`), remuneração (`compensation`), folha (`payroll`) e
+  histórico do parceiro (`partner-history`) são recursos com permissão própria —
+  quem mantém o cadastro não recebe nenhum deles por tabela.
+  `GET /payroll/summary` é registrado na trilha como `EXPORTACAO`.
 - **Upload de comprovantes**: a chave de armazenamento é gerada pelo servidor
   (empresa + uuid), o caminho é conferido contra a raiz configurada, o tipo é
   validado pela assinatura do arquivo e o download responde sempre como

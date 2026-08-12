@@ -79,7 +79,16 @@ export class AuditService {
     const meta = this.prisma.currentRequestMetadata;
     const user = this.prisma.currentUser;
 
-    await client.auditLog.create({
+    // `createMany` — e não `create` — porque `create` emite INSERT ... RETURNING,
+    // e o RETURNING é submetido à política de SELECT da trilha, que é estrita
+    // (`empresa_id = fn_empresa_corrente()`, bd/05). Um evento de plataforma
+    // (login, logout: `empresa_id` nulo) nunca satisfaz essa condição e o INSERT
+    // era recusado com 42501, derrubando a requisição inteira.
+    //
+    // Enfraquecer a política de leitura para devolver a linha seria pagar
+    // isolamento por um dado que ninguém usa: a trilha é append-only e nenhum
+    // chamador precisa do registro de volta.
+    await client.auditLog.createMany({
       data: {
         event: input.event,
         entity: input.entity,

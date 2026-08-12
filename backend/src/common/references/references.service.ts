@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
-/** Referências que o M03 faz a cadastros de outros módulos ou dele mesmo. */
+/** Cadastros que um módulo pode referenciar dentro da própria empresa. */
 export type ReferenceKind =
   | 'branchId'
   | 'costCenterId'
@@ -10,24 +10,32 @@ export type ReferenceKind =
   | 'departmentId'
   | 'employeeId'
   | 'managerId'
-  | 'payrollItemId';
+  | 'payrollItemId'
+  | 'partnerId'
+  | 'customerId'
+  | 'supplierId'
+  | 'paymentMethodId'
+  | 'paymentTermId'
+  | 'productId'
+  | 'productCategoryId'
+  | 'unitId';
 
 type Reference = Partial<Record<ReferenceKind, string | null | undefined>>;
 
 /**
  * Confere que toda referência informada existe **dentro da empresa ativa**.
  *
- * O banco já impede o vínculo entre empresas por FK composta (bd/06); esta
- * camada existe para transformar o que seria um 500 de violação de chave numa
- * mensagem clara, e para responder 400 em vez de revelar, por diferença de erro,
- * que o id existe em outra empresa (RF-005).
+ * O banco já impede o vínculo entre empresas por FK composta (bd/06 e bd/07);
+ * esta camada existe para transformar o que seria um 500 de violação de chave
+ * numa mensagem clara, e para responder 400 em vez de revelar, por diferença de
+ * erro, que o id existe em outra empresa (RF-005).
  *
- * Fica num serviço só porque as mesmas cinco perguntas aparecem em funcionário,
- * evento, verba e reembolso — repetir `ensureX` em cada service era o caminho
- * curto para uma delas ficar sem o filtro de empresa.
+ * Fica num serviço só porque as mesmas perguntas aparecem em funcionário,
+ * reembolso, parceiro e produto — repetir `ensureX` em cada service era o
+ * caminho curto para uma delas ficar sem o filtro de empresa.
  */
 @Injectable()
-export class HrReferencesService {
+export class ReferencesService {
   constructor(private readonly prisma: PrismaService) {}
 
   private readonly lookups: Record<
@@ -73,6 +81,57 @@ export class HrReferencesService {
       label: 'Verba',
       find: (companyId, id) =>
         this.prisma.db.payrollItem.findFirst({ where: { id, companyId }, select: { id: true } }),
+    },
+    partnerId: {
+      label: 'Parceiro',
+      find: (companyId, id) =>
+        this.prisma.db.partner.findFirst({ where: { id, companyId }, select: { id: true } }),
+    },
+    // Papel, e não só existência: um título a receber emitido contra quem nunca
+    // foi cliente é erro de cadastro, não de digitação (RF-022/RF-023).
+    customerId: {
+      label: 'Cliente',
+      find: (companyId, id) =>
+        this.prisma.db.partner.findFirst({
+          where: { id, companyId, isCustomer: true },
+          select: { id: true },
+        }),
+    },
+    supplierId: {
+      label: 'Fornecedor',
+      find: (companyId, id) =>
+        this.prisma.db.partner.findFirst({
+          where: { id, companyId, isSupplier: true },
+          select: { id: true },
+        }),
+    },
+    paymentMethodId: {
+      label: 'Forma de pagamento',
+      find: (companyId, id) =>
+        this.prisma.db.paymentMethod.findFirst({ where: { id, companyId }, select: { id: true } }),
+    },
+    paymentTermId: {
+      label: 'Condição de pagamento',
+      find: (companyId, id) =>
+        this.prisma.db.paymentTerm.findFirst({ where: { id, companyId }, select: { id: true } }),
+    },
+    productId: {
+      label: 'Produto',
+      find: (companyId, id) =>
+        this.prisma.db.product.findFirst({ where: { id, companyId }, select: { id: true } }),
+    },
+    productCategoryId: {
+      label: 'Categoria de produto',
+      find: (companyId, id) =>
+        this.prisma.db.productCategory.findFirst({
+          where: { id, companyId },
+          select: { id: true },
+        }),
+    },
+    unitId: {
+      label: 'Unidade de medida',
+      find: (companyId, id) =>
+        this.prisma.db.unitOfMeasure.findFirst({ where: { id, companyId }, select: { id: true } }),
     },
   };
 

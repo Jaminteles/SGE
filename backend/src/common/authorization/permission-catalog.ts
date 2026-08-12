@@ -1,7 +1,7 @@
 import { PermissionAction } from '../enums';
 
 /**
- * Catálogo de permissões da Sprint 1 (RF-011).
+ * Catálogo de permissões da API (RF-011).
  *
  * Fonte única de verdade do backend: usado pelo seed (para popular
  * `gestao.permissao`) e pelos controllers (via @RequirePermissions).
@@ -37,6 +37,16 @@ export const RESOURCES = {
   COMPENSATION: 'compensation',
   REIMBURSEMENTS: 'reimbursements',
   PAYROLL: 'payroll',
+  PARTNERS: 'partners',
+  PARTNER_CONTACTS: 'partner-contacts',
+  PARTNER_BANK_ACCOUNTS: 'partner-bank-accounts',
+  PARTNER_HISTORY: 'partner-history',
+  PAYMENT_METHODS: 'payment-methods',
+  PAYMENT_TERMS: 'payment-terms',
+  PRODUCTS: 'products',
+  PRODUCT_CATEGORIES: 'product-categories',
+  UNITS_OF_MEASURE: 'units-of-measure',
+  PRODUCT_SUPPLIERS: 'product-suppliers',
 } as const;
 
 export interface PermissionDefinition {
@@ -176,6 +186,70 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     { action: A.READ, description: 'Consultar a consolidação para folha e contabilidade' },
     { action: A.EXPORT, description: 'Exportar a consolidação para folha e contabilidade' },
   ]),
+  // M04 — Clientes e Fornecedores.
+  //
+  // Cliente e fornecedor são papéis do mesmo cadastro (`parceiro`), por isso um
+  // recurso só. Dado bancário e histórico financeiro são separados pelo mesmo
+  // motivo do M03: conta de crédito é alvo de fraude e o histórico expõe o
+  // relacionamento comercial inteiro.
+  ...build('M04', RESOURCES.PARTNERS, [
+    { action: A.CREATE, description: 'Cadastrar clientes e fornecedores' },
+    { action: A.READ, description: 'Consultar clientes e fornecedores' },
+    { action: A.UPDATE, description: 'Editar clientes e fornecedores' },
+    { action: A.DELETE, description: 'Inativar clientes e fornecedores' },
+  ]),
+  ...build('M04', RESOURCES.PARTNER_CONTACTS, [
+    { action: A.CREATE, description: 'Cadastrar contatos e endereços de parceiros' },
+    { action: A.READ, description: 'Consultar contatos e endereços de parceiros' },
+    { action: A.UPDATE, description: 'Editar contatos e endereços de parceiros' },
+    { action: A.DELETE, description: 'Remover contatos e endereços de parceiros' },
+  ]),
+  ...build('M04', RESOURCES.PARTNER_BANK_ACCOUNTS, [
+    { action: A.CREATE, description: 'Cadastrar dados bancários de parceiros' },
+    { action: A.READ, description: 'Consultar dados bancários de parceiros' },
+    { action: A.UPDATE, description: 'Editar dados bancários de parceiros' },
+    { action: A.DELETE, description: 'Inativar dados bancários de parceiros' },
+  ]),
+  ...build('M04', RESOURCES.PARTNER_HISTORY, [
+    { action: A.READ, description: 'Consultar o histórico comercial e financeiro do parceiro' },
+  ]),
+  ...build('M04', RESOURCES.PAYMENT_METHODS, [
+    { action: A.CREATE, description: 'Cadastrar formas de pagamento' },
+    { action: A.READ, description: 'Consultar formas de pagamento' },
+    { action: A.UPDATE, description: 'Editar formas de pagamento' },
+    { action: A.DELETE, description: 'Inativar formas de pagamento' },
+  ]),
+  ...build('M04', RESOURCES.PAYMENT_TERMS, [
+    { action: A.CREATE, description: 'Cadastrar condições de pagamento' },
+    { action: A.READ, description: 'Consultar condições de pagamento' },
+    { action: A.UPDATE, description: 'Editar condições de pagamento' },
+    { action: A.DELETE, description: 'Inativar condições de pagamento' },
+  ]),
+  // M05 — Produtos, Serviços e Estoque (cadastro; estoque na Sprint 5).
+  ...build('M05', RESOURCES.PRODUCTS, [
+    { action: A.CREATE, description: 'Cadastrar produtos e serviços' },
+    { action: A.READ, description: 'Consultar produtos e serviços' },
+    { action: A.UPDATE, description: 'Editar produtos e serviços' },
+    { action: A.DELETE, description: 'Inativar produtos e serviços' },
+  ]),
+  ...build('M05', RESOURCES.PRODUCT_CATEGORIES, [
+    { action: A.CREATE, description: 'Cadastrar categorias de produto' },
+    { action: A.READ, description: 'Consultar categorias de produto' },
+    { action: A.UPDATE, description: 'Editar categorias de produto' },
+    { action: A.DELETE, description: 'Inativar categorias de produto' },
+  ]),
+  ...build('M05', RESOURCES.UNITS_OF_MEASURE, [
+    { action: A.CREATE, description: 'Cadastrar unidades de medida' },
+    { action: A.READ, description: 'Consultar unidades de medida' },
+    { action: A.UPDATE, description: 'Editar unidades de medida' },
+    { action: A.DELETE, description: 'Inativar unidades de medida' },
+  ]),
+  ...build('M05', RESOURCES.PRODUCT_SUPPLIERS, [
+    { action: A.CREATE, description: 'Associar fornecedores a produtos e serviços' },
+    { action: A.READ, description: 'Consultar fornecedores de produtos e serviços' },
+    { action: A.UPDATE, description: 'Editar o vínculo entre fornecedor e produto' },
+    { action: A.DELETE, description: 'Remover o vínculo entre fornecedor e produto' },
+  ]),
 ];
 
 /** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
@@ -262,4 +336,51 @@ export const PERMISSIONS = {
 
   PAYROLL_READ: permissionCode(RESOURCES.PAYROLL, A.READ),
   PAYROLL_EXPORT: permissionCode(RESOURCES.PAYROLL, A.EXPORT),
+
+  PARTNERS_CREATE: permissionCode(RESOURCES.PARTNERS, A.CREATE),
+  PARTNERS_READ: permissionCode(RESOURCES.PARTNERS, A.READ),
+  PARTNERS_UPDATE: permissionCode(RESOURCES.PARTNERS, A.UPDATE),
+  PARTNERS_DELETE: permissionCode(RESOURCES.PARTNERS, A.DELETE),
+
+  PARTNER_CONTACTS_CREATE: permissionCode(RESOURCES.PARTNER_CONTACTS, A.CREATE),
+  PARTNER_CONTACTS_READ: permissionCode(RESOURCES.PARTNER_CONTACTS, A.READ),
+  PARTNER_CONTACTS_UPDATE: permissionCode(RESOURCES.PARTNER_CONTACTS, A.UPDATE),
+  PARTNER_CONTACTS_DELETE: permissionCode(RESOURCES.PARTNER_CONTACTS, A.DELETE),
+
+  PARTNER_BANK_ACCOUNTS_CREATE: permissionCode(RESOURCES.PARTNER_BANK_ACCOUNTS, A.CREATE),
+  PARTNER_BANK_ACCOUNTS_READ: permissionCode(RESOURCES.PARTNER_BANK_ACCOUNTS, A.READ),
+  PARTNER_BANK_ACCOUNTS_UPDATE: permissionCode(RESOURCES.PARTNER_BANK_ACCOUNTS, A.UPDATE),
+  PARTNER_BANK_ACCOUNTS_DELETE: permissionCode(RESOURCES.PARTNER_BANK_ACCOUNTS, A.DELETE),
+
+  PARTNER_HISTORY_READ: permissionCode(RESOURCES.PARTNER_HISTORY, A.READ),
+
+  PAYMENT_METHODS_CREATE: permissionCode(RESOURCES.PAYMENT_METHODS, A.CREATE),
+  PAYMENT_METHODS_READ: permissionCode(RESOURCES.PAYMENT_METHODS, A.READ),
+  PAYMENT_METHODS_UPDATE: permissionCode(RESOURCES.PAYMENT_METHODS, A.UPDATE),
+  PAYMENT_METHODS_DELETE: permissionCode(RESOURCES.PAYMENT_METHODS, A.DELETE),
+
+  PAYMENT_TERMS_CREATE: permissionCode(RESOURCES.PAYMENT_TERMS, A.CREATE),
+  PAYMENT_TERMS_READ: permissionCode(RESOURCES.PAYMENT_TERMS, A.READ),
+  PAYMENT_TERMS_UPDATE: permissionCode(RESOURCES.PAYMENT_TERMS, A.UPDATE),
+  PAYMENT_TERMS_DELETE: permissionCode(RESOURCES.PAYMENT_TERMS, A.DELETE),
+
+  PRODUCTS_CREATE: permissionCode(RESOURCES.PRODUCTS, A.CREATE),
+  PRODUCTS_READ: permissionCode(RESOURCES.PRODUCTS, A.READ),
+  PRODUCTS_UPDATE: permissionCode(RESOURCES.PRODUCTS, A.UPDATE),
+  PRODUCTS_DELETE: permissionCode(RESOURCES.PRODUCTS, A.DELETE),
+
+  PRODUCT_CATEGORIES_CREATE: permissionCode(RESOURCES.PRODUCT_CATEGORIES, A.CREATE),
+  PRODUCT_CATEGORIES_READ: permissionCode(RESOURCES.PRODUCT_CATEGORIES, A.READ),
+  PRODUCT_CATEGORIES_UPDATE: permissionCode(RESOURCES.PRODUCT_CATEGORIES, A.UPDATE),
+  PRODUCT_CATEGORIES_DELETE: permissionCode(RESOURCES.PRODUCT_CATEGORIES, A.DELETE),
+
+  UNITS_OF_MEASURE_CREATE: permissionCode(RESOURCES.UNITS_OF_MEASURE, A.CREATE),
+  UNITS_OF_MEASURE_READ: permissionCode(RESOURCES.UNITS_OF_MEASURE, A.READ),
+  UNITS_OF_MEASURE_UPDATE: permissionCode(RESOURCES.UNITS_OF_MEASURE, A.UPDATE),
+  UNITS_OF_MEASURE_DELETE: permissionCode(RESOURCES.UNITS_OF_MEASURE, A.DELETE),
+
+  PRODUCT_SUPPLIERS_CREATE: permissionCode(RESOURCES.PRODUCT_SUPPLIERS, A.CREATE),
+  PRODUCT_SUPPLIERS_READ: permissionCode(RESOURCES.PRODUCT_SUPPLIERS, A.READ),
+  PRODUCT_SUPPLIERS_UPDATE: permissionCode(RESOURCES.PRODUCT_SUPPLIERS, A.UPDATE),
+  PRODUCT_SUPPLIERS_DELETE: permissionCode(RESOURCES.PRODUCT_SUPPLIERS, A.DELETE),
 } as const;

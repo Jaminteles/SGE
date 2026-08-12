@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { EmployeeStatus, HrEventType } from '@prisma/client';
 import { EmployeesService } from './employees.service';
-import { HrReferencesService } from './hr-references.service';
+import { ReferencesService } from '../../common/references/references.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 
@@ -34,7 +34,7 @@ function buildService(employee: Record<string, unknown> | null = EMPLOYEE) {
   const references = {
     assert: jest.fn().mockResolvedValue(undefined),
     assertUserBelongsToCompany: jest.fn().mockResolvedValue(undefined),
-  } as unknown as HrReferencesService;
+  } as unknown as ReferencesService;
 
   return {
     service: new EmployeesService(prisma, references),

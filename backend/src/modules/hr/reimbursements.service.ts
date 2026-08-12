@@ -12,7 +12,7 @@ import { AuditService, AUDIT_ENTITY } from '../../common/audit/audit.service';
 import { AuthenticatedUser } from '../../common/authorization/authenticated-user';
 import { toDateOnly } from '../../common/utils/date-only';
 import { ApprovalThresholdsService } from '../approvals/approval-thresholds.service';
-import { HrReferencesService } from './hr-references.service';
+import { ReferencesService } from '../../common/references/references.service';
 import { CreateReimbursementDto, ReimbursementItemDto } from './dto/create-reimbursement.dto';
 import { QueryReimbursementDto } from './dto/query-reimbursement.dto';
 import { ApproveReimbursementDto, RejectReimbursementDto } from './dto/review-reimbursement.dto';
@@ -73,7 +73,7 @@ type ReimbursementRow = Prisma.ReimbursementGetPayload<{ include: typeof reimbur
 export class ReimbursementsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly references: HrReferencesService,
+    private readonly references: ReferencesService,
     private readonly thresholds: ApprovalThresholdsService,
     private readonly audit: AuditService,
   ) {}

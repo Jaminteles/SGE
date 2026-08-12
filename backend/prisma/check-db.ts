@@ -31,15 +31,24 @@ async function main(): Promise<void> {
     detail: `current_schema() = ${schema?.v ?? '?'} (ajuste ?schema=gestao na DATABASE_URL)`,
   });
 
+  // Só tabelas base, e sem as partições de `auditoria`: a contagem precisa ser
+  // estável. `information_schema.tables` não serve aqui — inclui views, filtra
+  // por privilégio (o da trilha é revogado em bd/05) e cresce a cada partição
+  // mensal nova, o que faria o limiar envelhecer sozinho.
   const tables = await scalar(
     prisma.$queryRaw<{ n: bigint }[]>`
-      SELECT count(*) AS n FROM information_schema.tables WHERE table_schema = 'gestao'
+      SELECT count(*) AS n
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'gestao'
+         AND c.relkind IN ('r', 'p')
+         AND NOT c.relispartition
     `,
   );
   checks.push({
     label: 'tabelas do modelo físico criadas',
-    ok: Number(tables?.n ?? 0) >= 90,
-    detail: `${Number(tables?.n ?? 0)} tabelas (esperado ≥ 90 — rode bd/01, 02 e 03)`,
+    ok: Number(tables?.n ?? 0) >= 80,
+    detail: `${Number(tables?.n ?? 0)} tabelas base (esperado ≥ 80 — rode bd/01, 02 e 03)`,
   });
 
   const superAdmin = await scalar(
@@ -103,9 +112,9 @@ async function main(): Promise<void> {
     `,
   );
   checks.push({
-    label: 'referências de RH presas à empresa (bd/06)',
-    ok: Number(tenantFks?.n ?? 0) >= 22,
-    detail: `${Number(tenantFks?.n ?? 0)} FKs compostas (esperado ≥ 22) — rode bd/06_rh_sprint3.sql`,
+    label: 'referências de cadastro presas à empresa (bd/06 e bd/07)',
+    ok: Number(tenantFks?.n ?? 0) >= 40,
+    detail: `${Number(tenantFks?.n ?? 0)} FKs compostas (esperado ≥ 40) — rode bd/06 e bd/07`,
   });
 
   const hrTriggers = await scalar(
@@ -123,13 +132,44 @@ async function main(): Promise<void> {
     detail: `${Number(hrTriggers?.n ?? 0)} triggers de 6 — rode bd/06_rh_sprint3.sql`,
   });
 
+  // Sprint 4 (M04/M05): sem os triggers de papel, uma linha de fornecedor pode
+  // existir para quem não vende; sem os índices, há mais de um principal.
+  const partnerRules = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_trigger
+       WHERE NOT tgisinternal
+         AND tgname IN ('trg_cliente_papel', 'trg_fornecedor_papel',
+                        'trg_produto_fornecedor_papel', 'trg_categoria_produto_hierarquia')
+    `,
+  );
+  checks.push({
+    label: 'regras do M04/M05 aplicadas (bd/07)',
+    ok: Number(partnerRules?.n ?? 0) >= 4,
+    detail: `${Number(partnerRules?.n ?? 0)} triggers de 4 — rode bd/07_parceiros_produtos_sprint4.sql`,
+  });
+
+  const uniquePrimary = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_indexes
+       WHERE schemaname = 'gestao'
+         AND indexname IN ('ux_endereco_parceiro_principal', 'ux_contato_parceiro_principal',
+                           'ux_dado_bancario_parceiro_principal',
+                           'ux_produto_fornecedor_preferencial')
+    `,
+  );
+  checks.push({
+    label: 'um principal/preferencial por parceiro e item (bd/07)',
+    ok: Number(uniquePrimary?.n ?? 0) >= 4,
+    detail: `${Number(uniquePrimary?.n ?? 0)} índices de 4 — rode bd/07_parceiros_produtos_sprint4.sql`,
+  });
+
   const permissions = await prisma.permission.count({
-    where: { module: { in: ['M01', 'M02', 'M03', 'M16'] } },
+    where: { module: { in: ['M01', 'M02', 'M03', 'M04', 'M05', 'M16'] } },
   });
   checks.push({
     label: 'catálogo de permissões da API carregado',
     ok: permissions > 0,
-    detail: `${permissions} permissões M01/M02/M03/M16 — rode npm run db:seed`,
+    detail: `${permissions} permissões M01/M02/M03/M04/M05/M16 — rode npm run db:seed`,
   });
 
   const admins = await prisma.user.count({ where: { isSuperAdmin: true, isActive: true } });

@@ -11,6 +11,12 @@ import { Matches } from 'class-validator';
 export const MONEY_PATTERN = /^-?\d{1,16}(\.\d{1,2})?$/;
 /** `dom_percentual` é numeric(9,6): até 100.000000 nas verbas proporcionais. */
 export const PERCENTAGE_PATTERN = /^(100(\.0{1,6})?|\d{1,2}(\.\d{1,6})?)$/;
+/**
+ * `dom_valor_unit` e `dom_quantidade` são numeric(18,6). Preço unitário e
+ * quantidade não são negativos — o sinal pertence ao tipo do movimento, não ao
+ * valor (RF-029).
+ */
+export const UNIT_VALUE_PATTERN = /^\d{1,12}(\.\d{1,6})?$/;
 
 export function IsMoney(): PropertyDecorator {
   return applyDecorators(
@@ -22,6 +28,15 @@ export function IsPercentage(): PropertyDecorator {
   return applyDecorators(
     Matches(PERCENTAGE_PATTERN, {
       message: '$property deve ser um percentual de 0 a 100 com até 6 casas',
+    }),
+  );
+}
+
+/** Preço unitário, custo ou quantidade: não negativo, até 6 casas decimais. */
+export function IsUnitValue(): PropertyDecorator {
+  return applyDecorators(
+    Matches(UNIT_VALUE_PATTERN, {
+      message: '$property deve ser um valor não negativo com até 6 casas decimais',
     }),
   );
 }

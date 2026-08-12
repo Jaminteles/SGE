@@ -3,7 +3,7 @@ import { PayrollItemType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import { PaginatedResult } from '../../common/dto/paginated-result';
-import { HrReferencesService } from './hr-references.service';
+import { ReferencesService } from '../../common/references/references.service';
 import { CreatePayrollItemDto } from './dto/create-payroll-item.dto';
 import { UpdatePayrollItemDto } from './dto/update-payroll-item.dto';
 
@@ -12,7 +12,7 @@ import { UpdatePayrollItemDto } from './dto/update-payroll-item.dto';
 export class PayrollItemsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly references: HrReferencesService,
+    private readonly references: ReferencesService,
   ) {}
 
   async create(companyId: string, dto: CreatePayrollItemDto) {

@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { AuditEvent, Prisma, ReimbursementStatus } from '@prisma/client';
 import { ReimbursementsService } from './reimbursements.service';
-import { HrReferencesService } from './hr-references.service';
+import { ReferencesService } from '../../common/references/references.service';
 import { ApprovalThresholdsService } from '../approvals/approval-thresholds.service';
 import { AuditService } from '../../common/audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -47,7 +47,7 @@ function buildService(row: Record<string, unknown> = reimbursement(), requiresAp
 
   const references = {
     assert: jest.fn().mockResolvedValue(undefined),
-  } as unknown as HrReferencesService;
+  } as unknown as ReferencesService;
   const thresholds = {
     evaluate: jest.fn().mockResolvedValue({
       requiresApproval,

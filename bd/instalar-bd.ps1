@@ -4,14 +4,14 @@
 
 .DESCRIPTION
     ATENCAO: APAGA o banco informado, com todos os seus dados, antes de criar.
-    Os scripts 01 a 06 montam o schema do zero -- nao sao migracoes e nao se
+    Os scripts 01 a 07 montam o schema do zero -- nao sao migracoes e nao se
     aplicam sobre um banco existente. Recriar e o caminho previsto.
 
     Executa, em ordem:
       1. valida que o psql esta acessivel
       2. derruba o banco e as roles da aplicacao (app_gestao, sge_api)
       3. cria/atualiza a role gestao_owner e cria o banco
-      4. roda 01 a 06 (schema, ajustes de integracao, auditoria e RH)
+      4. roda 01 a 07 (schema, integracao, auditoria, RH, parceiros e catalogo)
       5. opcionalmente roda 99_smoke_test.sql
 
     Deve ser executado a partir da pasta que contem os arquivos .sql.
@@ -83,7 +83,8 @@ $scripts = @(
     '03_schema_contabil_governanca.sql',
     '04_ajustes_integracao_backend.sql',
     '05_auditoria_sprint2.sql',
-    '06_rh_sprint3.sql'
+    '06_rh_sprint3.sql',
+    '07_parceiros_produtos_sprint4.sql'
 )
 
 $faltando = $scripts | Where-Object { -not (Test-Path $_) }
@@ -141,7 +142,7 @@ if (Existe "SELECT 1 FROM pg_roles WHERE rolname = '$Owner';") {
     Escreve "Role '$Owner' criada." Green
 }
 
-# Recriar e o padrao: 01 a 06 montam o schema do zero e nao se aplicam sobre um
+# Recriar e o padrao: 01 a 07 montam o schema do zero e nao se aplicam sobre um
 # banco existente -- o CREATE TABLE falharia logo no primeiro.
 $existeBanco = Existe "SELECT 1 FROM pg_database WHERE datname = '$Banco';"
 

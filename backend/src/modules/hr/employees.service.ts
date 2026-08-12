@@ -8,7 +8,7 @@ import { EmployeeStatus, HrEventType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PaginatedResult } from '../../common/dto/paginated-result';
 import { toDateOnly } from '../../common/utils/date-only';
-import { HrReferencesService } from './hr-references.service';
+import { ReferencesService } from '../../common/references/references.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { QueryEmployeeDto } from './dto/query-employee.dto';
@@ -31,7 +31,7 @@ const employeeInclude = {
 export class EmployeesService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly references: HrReferencesService,
+    private readonly references: ReferencesService,
   ) {}
 
   async create(companyId: string, dto: CreateEmployeeDto, recordedBy?: string) {

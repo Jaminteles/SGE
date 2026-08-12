@@ -4,7 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import { PaginatedResult } from '../../common/dto/paginated-result';
 import { toDateOnly } from '../../common/utils/date-only';
-import { HrReferencesService } from './hr-references.service';
+import { ReferencesService } from '../../common/references/references.service';
 import { EmployeesService } from './employees.service';
 import { CreateEmployeeEventDto } from './dto/create-employee-event.dto';
 
@@ -26,7 +26,7 @@ export class EmployeeEventsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly employees: EmployeesService,
-    private readonly references: HrReferencesService,
+    private readonly references: ReferencesService,
   ) {}
 
   async create(

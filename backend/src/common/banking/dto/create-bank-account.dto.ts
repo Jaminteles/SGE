@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsIn, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
-import { onlyDigits } from '../../../common/validators/is-cnpj.validator';
+import { onlyDigits } from '../../validators/is-cnpj.validator';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 const digits = ({ value }: { value: unknown }) =>
@@ -11,10 +11,11 @@ export const ACCOUNT_TYPES = ['CORRENTE', 'POUPANCA', 'PAGAMENTO'] as const;
 export const PIX_KEY_TYPES = ['CPF', 'CNPJ', 'EMAIL', 'TELEFONE', 'ALEATORIA'] as const;
 
 /**
- * Dado bancário do funcionário (RF-013) — `gestao.dado_bancario`.
+ * Dado bancário de funcionário (RF-013) ou parceiro (RF-024) —
+ * `gestao.dado_bancario`. O contrato é o mesmo: muda só o dono da conta.
  *
- * É por aqui que o salário e o reembolso saem da empresa: toda alteração fica
- * na trilha de auditoria (bd/06) e o recurso tem permissão própria.
+ * É por aqui que o dinheiro sai da empresa: toda alteração fica na trilha de
+ * auditoria (bd/06, bd/07) e o recurso tem permissão própria em cada módulo.
  */
 export class CreateBankAccountDto {
   @ApiPropertyOptional({ description: 'Código COMPE do banco' })
@@ -57,7 +58,7 @@ export class CreateBankAccountDto {
   @IsIn(ACCOUNT_TYPES)
   accountType?: (typeof ACCOUNT_TYPES)[number];
 
-  @ApiPropertyOptional({ description: 'Titular, quando diferente do funcionário' })
+  @ApiPropertyOptional({ description: 'Titular, quando diferente do dono da conta' })
   @IsOptional()
   @IsString()
   @MaxLength(255)
