@@ -65,12 +65,16 @@ async function seedSystemRoles(): Promise<void> {
     // M04/M05: Compras mantém parceiros e catálogo. O dado bancário do parceiro
     // fica de fora — é a conta para onde o pagamento vai, e quem negocia o
     // preço não deve poder redirecionar o crédito (mesma razão do M03).
+    // Movimentar e ajustar estoque também não é de Compras: quem compra não
+    // deve poder dar baixa no que chegou.
     {
       role: 'COMPRAS',
       codes: PERMISSION_CATALOG.filter(
         (p) =>
           (p.module === 'M04' || p.module === 'M05') &&
-          p.resource !== RESOURCES.PARTNER_BANK_ACCOUNTS,
+          p.resource !== RESOURCES.PARTNER_BANK_ACCOUNTS &&
+          p.resource !== RESOURCES.STOCK_MOVEMENTS &&
+          p.resource !== RESOURCES.INVENTORIES,
       ).map((p) => p.code),
     },
     // Financeiro é quem paga: precisa da conta do parceiro e do histórico.
@@ -84,12 +88,25 @@ async function seedSystemRoles(): Promise<void> {
         PERMISSIONS.PARTNER_HISTORY_READ,
         PERMISSIONS.PAYMENT_METHODS_READ,
         PERMISSIONS.PAYMENT_TERMS_READ,
+        // RF-034: o estoque é ativo no balanço — a valorização é leitura do
+        // Financeiro, não de quem opera o depósito.
+        PERMISSIONS.STOCK_VALUATION_READ,
+        PERMISSIONS.STOCK_READ,
       ],
     },
-    // Operacional cadastra e consulta o catálogo, sem tocar em parceiros.
+    // Operacional cadastra e consulta o catálogo, movimenta e conta o estoque,
+    // sem tocar em parceiros. Duas exclusões: concluir o inventário, pela mesma
+    // razão do reembolso (RN-003) — quem conta não homologa a própria diferença,
+    // e o ajuste escreve uma perda ou uma sobra direto no ativo; e a
+    // valorização, que é a leitura financeira do mesmo saldo.
     {
       role: 'OPERACIONAL',
-      codes: PERMISSION_CATALOG.filter((p) => p.module === 'M05').map((p) => p.code),
+      codes: PERMISSION_CATALOG.filter(
+        (p) =>
+          p.module === 'M05' &&
+          p.code !== PERMISSIONS.INVENTORIES_APPROVE &&
+          p.resource !== RESOURCES.STOCK_VALUATION,
+      ).map((p) => p.code),
     },
   ];
 

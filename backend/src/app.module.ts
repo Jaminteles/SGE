@@ -30,6 +30,7 @@ import { AuditQueryModule } from './modules/audit/audit.module';
 import { HrModule } from './modules/hr/hr.module';
 import { PartnersModule } from './modules/partners/partners.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
+import { StockModule } from './modules/stock/stock.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -88,6 +89,7 @@ import { HealthModule } from './modules/health/health.module';
     HrModule,
     PartnersModule,
     CatalogModule,
+    StockModule,
     HealthModule,
   ],
   providers: [

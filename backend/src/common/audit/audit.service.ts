@@ -9,6 +9,8 @@ export const AUDIT_ENTITY = {
   COMPANY: 'empresa',
   EMPLOYEE: 'funcionario',
   REIMBURSEMENT: 'reembolso',
+  INVENTORY: 'inventario',
+  STOCK_MOVEMENT: 'movimento_estoque',
 } as const;
 
 export interface AuditEventInput {

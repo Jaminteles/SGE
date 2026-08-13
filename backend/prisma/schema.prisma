@@ -1,6 +1,7 @@
 // SGE - Sistema de Gestão Empresarial e Financeira
-// Sprint 1 (M01/M02), Sprint 2 (M16 Auditoria), Sprint 3 (M03 Funcionários e RH)
-// e Sprint 4 (M04 Clientes/Fornecedores + M05 Produtos e Serviços)
+// Sprint 1 (M01/M02), Sprint 2 (M16 Auditoria), Sprint 3 (M03 Funcionários e RH),
+// Sprint 4 (M04 Clientes/Fornecedores + M05 Produtos e Serviços) e
+// Sprint 5 (M05 Estoque: locais, saldos, movimentação e inventário)
 //
 // IMPORTANTE: este schema NÃO é dono do banco. O modelo físico vive em `bd/*.sql`
 // (schema `gestao`, PostgreSQL 14+) e é a fonte da verdade. Aqui há apenas o
@@ -175,6 +176,23 @@ enum PurchaseOrderStatus {
   @@map("enum_status_pedido_compra")
 }
 
+/// Direção do lançamento no razão do estoque (RF-032) — `enum_tipo_mov_estoque`.
+///
+/// `INVENTARIO` existe no tipo do banco mas não é lançável: bd/08 o recusa
+/// porque não tem sinal definido. O ajuste apurado na contagem entra como
+/// AJUSTE_POSITIVO/AJUSTE_NEGATIVO com `origin` = `INVENTARIO`.
+enum StockMovementType {
+  ENTRADA
+  SAIDA
+  TRANSFERENCIA_ENTRADA
+  TRANSFERENCIA_SAIDA
+  AJUSTE_POSITIVO
+  AJUSTE_NEGATIVO
+  INVENTARIO
+
+  @@map("enum_tipo_mov_estoque")
+}
+
 // ---------------------------------------------------------------------------
 // M02 — Usuários, Perfis e Permissões
 // ---------------------------------------------------------------------------
@@ -198,6 +216,8 @@ model User {
   sessions       Session[]
   passwordResets PasswordResetToken[]
   approverOf     ApprovalApprover[]
+  inventories    Inventory[]
+  stockMovements StockMovement[]
 
   @@map("usuario")
 }
@@ -354,8 +374,9 @@ model Branch {
   createdAt             DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
   updatedAt             DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  addresses   Address[]
-  memberships Membership[]
+  addresses      Address[]
+  memberships    Membership[]
+  stockLocations StockLocation[]
 
   @@unique([companyId, code], map: "uq_filial_codigo")
   @@map("filial")
@@ -951,7 +972,10 @@ model Product {
   createdAt           DateTime         @default(now()) @map("criado_em") @db.Timestamptz(6)
   updatedAt           DateTime         @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  suppliers ProductSupplier[]
+  suppliers      ProductSupplier[]
+  balances       StockBalance[]
+  movements      StockMovement[]
+  inventoryItems InventoryItem[]
 
   @@unique([companyId, code], map: "uq_produto_codigo")
   @@map("produto")
@@ -973,6 +997,134 @@ model ProductSupplier {
 
   @@unique([productId, partnerId], map: "uq_produto_fornecedor")
   @@map("produto_fornecedor")
+}
+
+// ---------------------------------------------------------------------------
+// M05 — Estoque (RF-031 a RF-035)
+//
+// `movimento_estoque` é o razão: append-only, e a única porta de entrada do
+// estoque. `estoque_saldo` é a projeção mantida por trigger (bd/08) e não é
+// gravável pela role da aplicação — por isso não há nenhum `create`/`update`
+// de StockBalance nos services.
+// ---------------------------------------------------------------------------
+
+/// gestao.local_estoque — depósito/almoxarifado de uma filial (RF-031).
+model StockLocation {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @map("empresa_id") @db.Uuid
+  branchId  String   @map("filial_id") @db.Uuid
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  code      String   @map("codigo") @db.VarChar(30)
+  name      String   @map("nome") @db.VarChar(255)
+  isDefault Boolean  @default(false) @map("padrao")
+  isActive  Boolean  @default(true) @map("ativo")
+  createdAt DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  balances      StockBalance[]
+  movements     StockMovement[] @relation("MovimentoLocal")
+  counterpartOf StockMovement[] @relation("MovimentoContraparte")
+  inventories   Inventory[]
+
+  @@unique([companyId, code], map: "uq_local_estoque")
+  @@map("local_estoque")
+}
+
+/// gestao.estoque_saldo — saldo e custo médio por produto/local (RF-031/RF-034).
+///
+/// Somente leitura pela API: o banco revoga INSERT/UPDATE/DELETE da role da
+/// aplicação (bd/08) e a projeção é escrita apenas pelo trigger do razão.
+model StockBalance {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String        @map("empresa_id") @db.Uuid
+  productId   String        @map("produto_id") @db.Uuid
+  product     Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  locationId  String        @map("local_estoque_id") @db.Uuid
+  location    StockLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  quantity    Decimal       @default(0) @map("quantidade") @db.Decimal(18, 6)
+  reserved    Decimal       @default(0) @map("quantidade_reservada") @db.Decimal(18, 6)
+  averageCost Decimal       @default(0) @map("custo_medio") @db.Decimal(18, 6)
+  totalValue  Decimal       @default(0) @map("valor_total") @db.Decimal(18, 2)
+  updatedAt   DateTime      @default(now()) @map("atualizado_em") @db.Timestamptz(6)
+
+  @@unique([productId, locationId], map: "uq_estoque_saldo")
+  @@map("estoque_saldo")
+}
+
+/// gestao.movimento_estoque — razão do estoque, append-only (RF-032).
+///
+/// `previousBalance`, `newBalance` e `totalValue` são calculados pelo trigger
+/// `trg_prepara_movimento_estoque` (bd/08): a API não os envia.
+model StockMovement {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId       String            @map("empresa_id") @db.Uuid
+  productId       String            @map("produto_id") @db.Uuid
+  product         Product           @relation(fields: [productId], references: [id])
+  locationId      String            @map("local_estoque_id") @db.Uuid
+  location        StockLocation     @relation("MovimentoLocal", fields: [locationId], references: [id])
+  /// Contraparte da transferência: o outro local envolvido na operação.
+  counterpartId   String?           @map("local_destino_id") @db.Uuid
+  counterpart     StockLocation?    @relation("MovimentoContraparte", fields: [counterpartId], references: [id])
+  type            StockMovementType @map("tipo")
+  movementDate    DateTime          @default(now()) @map("data_movimento") @db.Timestamptz(6)
+  quantity        Decimal           @map("quantidade") @db.Decimal(18, 6)
+  unitCost        Decimal           @default(0) @map("custo_unitario") @db.Decimal(18, 6)
+  totalValue      Decimal           @default(0) @map("valor_total") @db.Decimal(18, 2)
+  previousBalance Decimal?          @map("saldo_anterior") @db.Decimal(18, 6)
+  newBalance      Decimal?          @map("saldo_posterior") @db.Decimal(18, 6)
+  origin          String?           @map("origem_tipo") @db.VarChar(40)
+  originId        String?           @map("origem_id") @db.Uuid
+  batch           String?           @map("lote") @db.VarChar(60)
+  note            String?           @map("observacao")
+  userId          String?           @map("usuario_id") @db.Uuid
+  user            User?             @relation(fields: [userId], references: [id])
+  createdAt       DateTime          @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  @@index([productId, movementDate(sort: Desc)], map: "ix_movimento_estoque_produto")
+  @@map("movimento_estoque")
+}
+
+/// gestao.inventario — contagem física de um local (RF-033).
+model Inventory {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId     String        @map("empresa_id") @db.Uuid
+  locationId    String        @map("local_estoque_id") @db.Uuid
+  location      StockLocation @relation(fields: [locationId], references: [id])
+  number        String        @map("numero") @db.VarChar(30)
+  description   String?       @map("descricao") @db.VarChar(255)
+  startedAt     DateTime      @default(now()) @map("data_inicio") @db.Timestamptz(6)
+  finishedAt    DateTime?     @map("data_conclusao") @db.Timestamptz(6)
+  /// ABERTO | EM_CONTAGEM | CONCLUIDO | CANCELADO — CHECK em bd/08.
+  status        String        @default("ABERTO") @db.VarChar(20)
+  responsibleId String?       @map("responsavel_id") @db.Uuid
+  responsible   User?         @relation(fields: [responsibleId], references: [id])
+  createdAt     DateTime      @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  items InventoryItem[]
+
+  @@unique([companyId, number], map: "uq_inventario_numero")
+  @@map("inventario")
+}
+
+/// gestao.inventario_item — item contado. `difference` é coluna gerada no banco.
+model InventoryItem {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId       String    @map("empresa_id") @db.Uuid
+  inventoryId     String    @map("inventario_id") @db.Uuid
+  inventory       Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  productId       String    @map("produto_id") @db.Uuid
+  product         Product   @relation(fields: [productId], references: [id])
+  systemQuantity  Decimal   @default(0) @map("quantidade_sistema") @db.Decimal(18, 6)
+  countedQuantity Decimal?  @map("quantidade_contada") @db.Decimal(18, 6)
+  /// GENERATED ALWAYS AS (coalesce(contada,0) - sistema) STORED — leitura apenas.
+  /// O `@default` existe só para o Prisma não exigir a coluna no INSERT: quem a
+  /// calcula é o banco, e enviá-la seria erro de escrita em coluna gerada.
+  difference      Decimal   @default(0) @map("diferenca") @db.Decimal(18, 6)
+  unitCost        Decimal?  @map("custo_unitario") @db.Decimal(18, 6)
+  isAdjusted      Boolean   @default(false) @map("ajustado")
+  note            String?   @map("observacao")
+
+  @@unique([inventoryId, productId], map: "uq_inventario_item")
+  @@map("inventario_item")
 }
 
 // ---------------------------------------------------------------------------

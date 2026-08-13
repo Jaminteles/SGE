@@ -18,7 +18,8 @@ export type ReferenceKind =
   | 'paymentTermId'
   | 'productId'
   | 'productCategoryId'
-  | 'unitId';
+  | 'unitId'
+  | 'stockLocationId';
 
 type Reference = Partial<Record<ReferenceKind, string | null | undefined>>;
 
@@ -132,6 +133,11 @@ export class ReferencesService {
       label: 'Unidade de medida',
       find: (companyId, id) =>
         this.prisma.db.unitOfMeasure.findFirst({ where: { id, companyId }, select: { id: true } }),
+    },
+    stockLocationId: {
+      label: 'Local de estoque',
+      find: (companyId, id) =>
+        this.prisma.db.stockLocation.findFirst({ where: { id, companyId }, select: { id: true } }),
     },
   };
 

@@ -25,3 +25,14 @@ export enum SettingScope {
   FISCAL = 'FISCAL',
   GERAL = 'GERAL',
 }
+
+/**
+ * Situação do inventário (RF-033) — gravada em `inventario.status`, que é
+ * `varchar(20)` com CHECK no banco (bd/08), e não um enum do PostgreSQL.
+ */
+export enum InventoryStatus {
+  ABERTO = 'ABERTO',
+  EM_CONTAGEM = 'EM_CONTAGEM',
+  CONCLUIDO = 'CONCLUIDO',
+  CANCELADO = 'CANCELADO',
+}

@@ -1,4 +1,4 @@
-# SGE — Backend (Fase 1 completa, Fase 2 em andamento)
+# SGE — Backend (Fases 1 e 2 completas)
 
 Backend do **Sistema de Gestão Empresarial e Financeira**, implementado conforme a
 stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
@@ -18,6 +18,10 @@ stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
   dados bancários, histórico comercial e financeiro, formas e condições de
   pagamento, catálogo de produtos e serviços com dados fiscais e vínculo com
   fornecedores (RF-022 a RF-030).
+- **Sprint 5 — M05 (Estoque)**: locais de estoque por filial, saldo e custo médio
+  ponderado por local, entradas, saídas, transferências e ajustes num razão
+  append-only, inventário com contagem e ajuste, valorização e alerta de estoque
+  mínimo (RF-031 a RF-035).
 
 ## Banco de dados
 
@@ -44,7 +48,12 @@ psql -U gestao_owner -h localhost -d gestao_empresarial -f 04_ajustes_integracao
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 05_auditoria_sprint2.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 06_rh_sprint3.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 07_parceiros_produtos_sprint4.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 08_estoque_sprint5.sql
 ```
+
+Se o banco já existe e você só quer trazê-lo para a sprint atual **sem perder os
+dados**, rode `pwsh ../bd/instalar-bd.ps1 -Atualizar`: reaplica apenas `04` a
+`08`, que são idempotentes.
 
 ```bash
 # 2. Backend
@@ -117,9 +126,9 @@ Vínculos feitos pelo seed nos perfis de sistema:
 | Perfil | Recebe | Não recebe, e por quê |
 | --- | --- | --- |
 | RH | Todo o M03 | `reimbursements:APPROVE` — quem lança a despesa não decide sobre ela (RN-003) |
-| COMPRAS | M04 e M05 | `partner-bank-accounts:*` — quem negocia o preço não redireciona o crédito |
-| FINANCEIRO | `partner-bank-accounts:*`, leitura de parceiros, histórico e condições | Escrita do cadastro comercial |
-| OPERACIONAL | Todo o M05 | M04 — catálogo não implica acesso a parceiros |
+| COMPRAS | M04 e o catálogo do M05 | `partner-bank-accounts:*` — quem negocia o preço não redireciona o crédito; `stock-movements:*` e `inventories:*` — quem compra não dá baixa no que chegou |
+| FINANCEIRO | `partner-bank-accounts:*`, leitura de parceiros, histórico, condições, `stock:READ` e `stock-valuation:READ` | Escrita do cadastro comercial e do estoque |
+| OPERACIONAL | Catálogo, locais, movimentação e contagem do M05 | M04 — catálogo não implica acesso a parceiros; `inventories:APPROVE` — quem conta não homologa a própria diferença (RN-003); `stock-valuation:READ` — valor do ativo é leitura financeira |
 
 ## Mapa de requisitos → endpoints
 
@@ -160,6 +169,11 @@ Vínculos feitos pelo seed nos perfis de sistema:
 | RF-028 | Cadastrar produtos e serviços | `/products` (CRUD) |
 | RF-029 | Unidade, código, categoria, custo e preço | `/units-of-measure`, `/product-categories`, campos de `/products` |
 | RF-030 | Dados fiscais (NCM, CEST) | `ncm`, `cest`, CFOPs, `goodsOrigin` e `serviceCodeLc116` em `/products` |
+| RF-031 | Controlar estoque por filial/local | `/stock-locations` (CRUD), `GET /stock/balances`, `GET /stock/products/:productId` |
+| RF-032 | Entradas, saídas, transferências e ajustes | `POST /stock/movements`, `POST /stock/transfers`, `GET /stock/movements` |
+| RF-033 | Inventário e histórico | `/inventories` + `/start`, `/counts`, `/close`, `/cancel` |
+| RF-034 | Registrar custos | `unitCost` no movimento, `averageCost` no saldo e no item, `GET /stock/valuation` |
+| RF-035 | Alertar estoque mínimo | `GET /stock/alerts` (view `vw_estoque_alerta_minimo`) |
 
 ## Contrato da API — pontos de atenção
 
@@ -179,7 +193,7 @@ status. A API acompanha:
 - **Associação** aceita `branchId` (vazio = todas as filiais) e `isDefault`.
 - **Alçada** aceita `name`, `level` e `minApprovers`; o `requiredRoleId` vira uma
   linha em `gestao.alcada_aprovador` e a resposta traz `requiredRoles`.
-- **Regras do banco viram 400**, não 500: o que um trigger de `bd/06`/`bd/07`
+- **Regras do banco viram 400**, não 500: o que um trigger de `bd/06`/`bd/07`/`bd/08`
   recusa (`RAISE EXCEPTION`) chega ao cliente com a mensagem da regra — ciclo de
   hierarquia, papel incompatível, evento imutável. Violação de RLS (`42501`)
   segue como 500 de propósito: é defeito do servidor, não do chamador.
@@ -222,7 +236,48 @@ devolve o que já estava acordado.
 | NCM 8 dígitos, CEST 7, CFOP 4, origem 0–8 | Formato fixo da NF-e (`ck_produto_fiscal`, `bd/07`) |
 
 `averageCost`, `lastPurchaseCost` e `lastPurchaseDate` são **somente leitura**:
-quem os escreve é a movimentação de estoque e a compra (Sprints 5 e 8).
+quem escreve `averageCost` é a movimentação de estoque (Sprint 5, via trigger de
+`bd/08`); os dois últimos vêm da compra (Sprint 8).
+
+### M05 — Estoque: o razão é a única porta de entrada (RF-031 a RF-035)
+
+Saldo e custo médio **não são escritos pela API**. Todo movimento entra em
+`gestao.movimento_estoque` e o banco projeta `gestao.estoque_saldo` e
+`produto.custo_medio` por trigger (`bd/08`). A garantia é de privilégio, não de
+disciplina: a role da aplicação perdeu `INSERT`/`UPDATE`/`DELETE` sobre
+`estoque_saldo`, e só o trigger `SECURITY DEFINER` a escreve.
+
+| Regra | Onde vale |
+| --- | --- |
+| Razão **append-only** — estorno é movimento contrário | Sem rota de escrita + trigger `trg_movimento_estoque_imutavel` + `REVOKE UPDATE/DELETE` (`bd/08`) |
+| Saldo nunca fica negativo | Trigger `trg_prepara_movimento_estoque` + CHECK `ck_estoque_saldo_quantidade` |
+| Entrada exige custo unitário > 0 | Service (RF-034) — sem custo, a média ponderada iria a zero |
+| Saída e ajuste positivo saem pelo custo médio corrente | Service + trigger (`bd/08`) |
+| Ajuste exige justificativa | Service — ajuste sem motivo é indistinguível de desvio |
+| Transferência é atômica e entre locais distintos | Duas pernas na mesma transação + CHECK `ck_movimento_locais_distintos` |
+| Um local **padrão** por filial | Service + índice único parcial `ux_local_estoque_padrao` |
+| Uma contagem aberta por local | Service + índice único parcial `ux_inventario_local_aberto` |
+| Local com saldo não é inativado | Service — inativar esconderia estoque que existe |
+
+O tipo `INVENTARIO` de `enum_tipo_mov_estoque` **não é lançável**: não tem sinal
+definido, e aplicá-lo produzia uma linha de delta zero no razão. O ajuste
+apurado na contagem entra como `AJUSTE_POSITIVO`/`AJUSTE_NEGATIVO` com
+`origin = 'INVENTARIO'` e `originId` = o inventário. Transferências ligam as duas
+pernas por um `originId` comum (`origin = 'TRANSFERENCIA'`).
+
+`local_destino_id` é a **contraparte**, não "o destino" em todo caso: na perna de
+saída é o local que recebe; na de entrada, o que enviou.
+
+### Inventário: fluxo e barreiras (RF-033)
+
+`ABERTO → EM_CONTAGEM → CONCLUIDO`, com `CANCELADO` disponível até a conclusão.
+
+- a abertura fotografa os saldos do local; `quantidade_sistema` é imutável
+  (`bd/08`) — é contra ela que a diferença foi apurada;
+- concluir exige `inventories:APPROVE`, todos os itens contados e **não ser o
+  responsável pela contagem** (RN-003);
+- a conclusão gera os ajustes no razão e vai à trilha como `FECHAMENTO`; o
+  cancelamento exige motivo, que também vai à trilha (não há coluna para ele).
 
 `GET /partners/:id/history` (RF-025) consolida `titulo` e `pedido_compra` —
 tabelas dos módulos M08 e M06. Até essas sprints entrarem, o resumo responde
@@ -294,8 +349,14 @@ estrita, para não vazar atividade entre empresas.
   da aplicação. Hashes de senha e de token são removidos do valor auditado.
 - **RNF-012**: testes automatizados das regras críticas (autenticação, RBAC,
   isolamento, CPF/CNPJ, máquina de estados e alçada do reembolso, armazenamento
-  de comprovantes, papéis do parceiro e consistência do catálogo).
-- **RN-001 estrutural (Sprints 3 e 4)**: as referências do M03, M04 e M05 usam **FK composta**
+  de comprovantes, papéis do parceiro, consistência do catálogo, movimentação e
+  transferência de estoque e máquina de estados do inventário).
+- **Estoque (Sprint 5)**: `estoque_saldo` é projeção e a role da aplicação não
+  tem privilégio de escrita sobre ela; `movimento_estoque` é append-only nas
+  mesmas três camadas da trilha de auditoria. Movimentar, valorizar e concluir
+  inventário são recursos de permissão separados — quem opera o depósito não
+  homologa a diferença nem lê o valor do ativo.
+- **RN-001 estrutural (Sprints 3 a 5)**: as referências do M03, M04 e M05 usam **FK composta**
   `(empresa_id, <coluna>)`. A verificação de chave estrangeira roda no sistema,
   sem RLS: sem isso, um defeito na API poderia vincular funcionário da empresa A
   ao centro de custo da empresa B. Como FK composta não aceita `ON DELETE SET

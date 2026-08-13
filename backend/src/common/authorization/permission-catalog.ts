@@ -47,6 +47,11 @@ export const RESOURCES = {
   PRODUCT_CATEGORIES: 'product-categories',
   UNITS_OF_MEASURE: 'units-of-measure',
   PRODUCT_SUPPLIERS: 'product-suppliers',
+  STOCK_LOCATIONS: 'stock-locations',
+  STOCK: 'stock',
+  STOCK_MOVEMENTS: 'stock-movements',
+  STOCK_VALUATION: 'stock-valuation',
+  INVENTORIES: 'inventories',
 } as const;
 
 export interface PermissionDefinition {
@@ -250,6 +255,35 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     { action: A.UPDATE, description: 'Editar o vínculo entre fornecedor e produto' },
     { action: A.DELETE, description: 'Remover o vínculo entre fornecedor e produto' },
   ]),
+  // M05 — Estoque (RF-031 a RF-035).
+  //
+  // Três separações intencionais: quem cadastra o depósito não movimenta o que
+  // está dentro dele; movimentar não inclui apagar (o razão é append-only, e
+  // por isso não existe `stock-movements:DELETE`); e a valorização é recurso
+  // próprio porque expõe o valor do ativo em estoque, não só a quantidade.
+  ...build('M05', RESOURCES.STOCK_LOCATIONS, [
+    { action: A.CREATE, description: 'Cadastrar locais de estoque' },
+    { action: A.READ, description: 'Consultar locais de estoque' },
+    { action: A.UPDATE, description: 'Editar locais de estoque' },
+    { action: A.DELETE, description: 'Inativar locais de estoque' },
+  ]),
+  ...build('M05', RESOURCES.STOCK, [
+    { action: A.READ, description: 'Consultar saldos e alertas de estoque mínimo' },
+  ]),
+  ...build('M05', RESOURCES.STOCK_MOVEMENTS, [
+    { action: A.CREATE, description: 'Registrar entradas, saídas, transferências e ajustes' },
+    { action: A.READ, description: 'Consultar a movimentação de estoque' },
+  ]),
+  ...build('M05', RESOURCES.STOCK_VALUATION, [
+    { action: A.READ, description: 'Consultar a valorização do estoque a custo médio' },
+  ]),
+  ...build('M05', RESOURCES.INVENTORIES, [
+    { action: A.CREATE, description: 'Abrir inventários de contagem' },
+    { action: A.READ, description: 'Consultar inventários e contagens' },
+    { action: A.UPDATE, description: 'Lançar contagens do inventário' },
+    { action: A.DELETE, description: 'Cancelar inventários' },
+    { action: A.APPROVE, description: 'Concluir o inventário e ajustar o estoque' },
+  ]),
 ];
 
 /** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
@@ -383,4 +417,22 @@ export const PERMISSIONS = {
   PRODUCT_SUPPLIERS_READ: permissionCode(RESOURCES.PRODUCT_SUPPLIERS, A.READ),
   PRODUCT_SUPPLIERS_UPDATE: permissionCode(RESOURCES.PRODUCT_SUPPLIERS, A.UPDATE),
   PRODUCT_SUPPLIERS_DELETE: permissionCode(RESOURCES.PRODUCT_SUPPLIERS, A.DELETE),
+
+  STOCK_LOCATIONS_CREATE: permissionCode(RESOURCES.STOCK_LOCATIONS, A.CREATE),
+  STOCK_LOCATIONS_READ: permissionCode(RESOURCES.STOCK_LOCATIONS, A.READ),
+  STOCK_LOCATIONS_UPDATE: permissionCode(RESOURCES.STOCK_LOCATIONS, A.UPDATE),
+  STOCK_LOCATIONS_DELETE: permissionCode(RESOURCES.STOCK_LOCATIONS, A.DELETE),
+
+  STOCK_READ: permissionCode(RESOURCES.STOCK, A.READ),
+
+  STOCK_MOVEMENTS_CREATE: permissionCode(RESOURCES.STOCK_MOVEMENTS, A.CREATE),
+  STOCK_MOVEMENTS_READ: permissionCode(RESOURCES.STOCK_MOVEMENTS, A.READ),
+
+  STOCK_VALUATION_READ: permissionCode(RESOURCES.STOCK_VALUATION, A.READ),
+
+  INVENTORIES_CREATE: permissionCode(RESOURCES.INVENTORIES, A.CREATE),
+  INVENTORIES_READ: permissionCode(RESOURCES.INVENTORIES, A.READ),
+  INVENTORIES_UPDATE: permissionCode(RESOURCES.INVENTORIES, A.UPDATE),
+  INVENTORIES_DELETE: permissionCode(RESOURCES.INVENTORIES, A.DELETE),
+  INVENTORIES_APPROVE: permissionCode(RESOURCES.INVENTORIES, A.APPROVE),
 } as const;

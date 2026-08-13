@@ -103,8 +103,8 @@ async function main(): Promise<void> {
     detail: `${Number(auditWritable?.n ?? 0)} privilégio(s) de UPDATE/DELETE concedidos — rode bd/05`,
   });
 
-  // Sprint 3 (M03): sem as FKs compostas, um cadastro de RH pode apontar para
-  // outra empresa; sem os triggers, salário e dado bancário mudam sem trilha.
+  // Sprints 3 a 5: sem as FKs compostas, um cadastro pode apontar para outra
+  // empresa; sem os triggers, salário e dado bancário mudam sem trilha.
   const tenantFks = await scalar(
     prisma.$queryRaw<{ n: bigint }[]>`
       SELECT count(*) AS n FROM pg_constraint
@@ -112,9 +112,9 @@ async function main(): Promise<void> {
     `,
   );
   checks.push({
-    label: 'referências de cadastro presas à empresa (bd/06 e bd/07)',
-    ok: Number(tenantFks?.n ?? 0) >= 40,
-    detail: `${Number(tenantFks?.n ?? 0)} FKs compostas (esperado ≥ 40) — rode bd/06 e bd/07`,
+    label: 'referências de cadastro presas à empresa (bd/06 a bd/08)',
+    ok: Number(tenantFks?.n ?? 0) >= 49,
+    detail: `${Number(tenantFks?.n ?? 0)} FKs compostas (esperado ≥ 49) — rode bd/06, bd/07 e bd/08`,
   });
 
   const hrTriggers = await scalar(
@@ -161,6 +161,40 @@ async function main(): Promise<void> {
     label: 'um principal/preferencial por parceiro e item (bd/07)',
     ok: Number(uniquePrimary?.n ?? 0) >= 4,
     detail: `${Number(uniquePrimary?.n ?? 0)} índices de 4 — rode bd/07_parceiros_produtos_sprint4.sql`,
+  });
+
+  // Sprint 5 (M05 Estoque): sem os triggers, o saldo é gravado sem o
+  // lançamento que o explica e o custo médio fica incoerente com o valor.
+  const stockRules = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_trigger
+       WHERE NOT tgisinternal
+         AND tgname IN ('trg_prepara_movimento_estoque', 'trg_aplica_movimento_estoque',
+                        'trg_movimento_estoque_imutavel', 'trg_inventario_status',
+                        'trg_inventario_item_valida')
+    `,
+  );
+  checks.push({
+    label: 'regras do estoque aplicadas (bd/08)',
+    ok: Number(stockRules?.n ?? 0) >= 5,
+    detail: `${Number(stockRules?.n ?? 0)} triggers de 5 — rode bd/08_estoque_sprint5.sql`,
+  });
+
+  // O razão é a única porta de entrada do estoque (RF-031/RF-032): com UPDATE
+  // em `estoque_saldo`, um saldo pode ser acertado sem deixar lançamento.
+  const stockWritable = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM information_schema.table_privileges
+       WHERE table_schema = 'gestao'
+         AND table_name IN ('estoque_saldo', 'movimento_estoque')
+         AND grantee IN ('app_gestao', 'sge_api')
+         AND privilege_type IN ('UPDATE', 'DELETE')
+    `,
+  );
+  checks.push({
+    label: 'saldo projetado e razão append-only (RF-031/RF-032)',
+    ok: Number(stockWritable?.n ?? 0) === 0,
+    detail: `${Number(stockWritable?.n ?? 0)} privilégio(s) de UPDATE/DELETE concedidos — rode bd/08`,
   });
 
   const permissions = await prisma.permission.count({
