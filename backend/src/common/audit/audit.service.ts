@@ -11,6 +11,8 @@ export const AUDIT_ENTITY = {
   REIMBURSEMENT: 'reembolso',
   INVENTORY: 'inventario',
   STOCK_MOVEMENT: 'movimento_estoque',
+  FINANCIAL_ENTRY: 'titulo',
+  SETTLEMENT: 'titulo_baixa',
 } as const;
 
 export interface AuditEventInput {

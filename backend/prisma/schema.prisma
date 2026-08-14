@@ -193,6 +193,48 @@ enum StockMovementType {
   @@map("enum_tipo_mov_estoque")
 }
 
+/// Situação da parcela (RF-053/RF-057) — `enum_status_parcela`.
+///
+/// Projetada pelo banco a partir das baixas (bd/09): a API não a escreve.
+enum InstallmentStatus {
+  ABERTA
+  PARCIALMENTE_LIQUIDADA
+  LIQUIDADA
+  CANCELADA
+  RENEGOCIADA
+
+  @@map("enum_status_parcela")
+}
+
+/// Situação da aprovação de um título (RF-056) — `enum_status_aprovacao`.
+///
+/// `NAO_REQUERIDA` é o título abaixo da alçada; `PENDENTE` bloqueia a baixa até
+/// a decisão (bd/09). Aprovado e reprovado são terminais.
+enum ApprovalStatus {
+  NAO_REQUERIDA
+  PENDENTE
+  APROVADO
+  REPROVADO
+  CANCELADO
+
+  @@map("enum_status_aprovacao")
+}
+
+/// Periodicidade da recorrência (RF-053) — `enum_periodicidade`.
+enum Periodicity {
+  UNICA
+  DIARIA
+  SEMANAL
+  QUINZENAL
+  MENSAL
+  BIMESTRAL
+  TRIMESTRAL
+  SEMESTRAL
+  ANUAL
+
+  @@map("enum_periodicidade")
+}
+
 // ---------------------------------------------------------------------------
 // M02 — Usuários, Perfis e Permissões
 // ---------------------------------------------------------------------------
@@ -212,12 +254,14 @@ model User {
   createdAt         DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
   updatedAt         DateTime  @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  memberships    Membership[]
-  sessions       Session[]
-  passwordResets PasswordResetToken[]
-  approverOf     ApprovalApprover[]
-  inventories    Inventory[]
-  stockMovements StockMovement[]
+  memberships      Membership[]
+  sessions         Session[]
+  passwordResets   PasswordResetToken[]
+  approverOf       ApprovalApprover[]
+  inventories      Inventory[]
+  stockMovements   StockMovement[]
+  financialEntries FinancialEntry[]
+  settlements      Settlement[]
 
   @@map("usuario")
 }
@@ -374,9 +418,10 @@ model Branch {
   createdAt             DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
   updatedAt             DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  addresses      Address[]
-  memberships    Membership[]
-  stockLocations StockLocation[]
+  addresses        Address[]
+  memberships      Membership[]
+  stockLocations   StockLocation[]
+  financialEntries FinancialEntry[]
 
   @@unique([companyId, code], map: "uq_filial_codigo")
   @@map("filial")
@@ -427,6 +472,9 @@ model Category {
   createdAt    DateTime   @default(now()) @map("criado_em") @db.Timestamptz(6)
   updatedAt    DateTime   @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
+  financialEntries FinancialEntry[]
+  recurrences      Recurrence[]
+
   @@unique([companyId, code], map: "uq_categoria_financeira_codigo")
   @@map("categoria_financeira")
 }
@@ -447,6 +495,9 @@ model CostCenter {
   isActive     Boolean      @default(true) @map("ativo")
   createdAt    DateTime     @default(now()) @map("criado_em") @db.Timestamptz(6)
   updatedAt    DateTime     @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  financialEntries FinancialEntry[]
+  recurrences      Recurrence[]
 
   @@unique([companyId, code], map: "uq_centro_custo_codigo")
   @@map("centro_custo")
@@ -575,10 +626,11 @@ model Employee {
   createdAt         DateTime       @default(now()) @map("criado_em") @db.Timestamptz(6)
   updatedAt         DateTime       @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  bankAccounts   BankAccount[]
-  events         EmployeeEvent[]
-  payrollItems   EmployeePayrollItem[]
-  reimbursements Reimbursement[]
+  bankAccounts     BankAccount[]
+  events           EmployeeEvent[]
+  payrollItems     EmployeePayrollItem[]
+  reimbursements   Reimbursement[]
+  financialEntries FinancialEntry[]
 
   @@unique([companyId, registration], map: "uq_funcionario_matricula")
   @@unique([companyId, taxId], map: "uq_funcionario_cpf")
@@ -790,12 +842,14 @@ model Partner {
   createdAt             DateTime   @default(now()) @map("criado_em") @db.Timestamptz(6)
   updatedAt             DateTime   @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  customer     Customer?
-  supplier     Supplier?
-  addresses    Address[]
-  contacts     Contact[]
-  bankAccounts BankAccount[]
-  products     ProductSupplier[]
+  customer         Customer?
+  supplier         Supplier?
+  addresses        Address[]
+  contacts         Contact[]
+  bankAccounts     BankAccount[]
+  products         ProductSupplier[]
+  financialEntries FinancialEntry[]
+  recurrences      Recurrence[]
 
   @@map("parceiro")
 }
@@ -871,8 +925,10 @@ model PaymentMethod {
   createdAt DateTime          @default(now()) @map("criado_em") @db.Timestamptz(6)
   updatedAt DateTime          @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  customers Customer[]
-  suppliers Supplier[]
+  customers        Customer[]
+  suppliers        Supplier[]
+  financialEntries FinancialEntry[]
+  settlements      Settlement[]
 
   @@unique([companyId, code], map: "uq_forma_pagamento")
   @@map("forma_pagamento")
@@ -892,8 +948,9 @@ model PaymentTerm {
   createdAt       DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  customers Customer[]
-  suppliers Supplier[]
+  customers        Customer[]
+  suppliers        Supplier[]
+  financialEntries FinancialEntry[]
 
   @@unique([companyId, code], map: "uq_condicao_pagamento")
   @@map("condicao_pagamento")
@@ -1128,29 +1185,189 @@ model InventoryItem {
 }
 
 // ---------------------------------------------------------------------------
-// Projeções somente leitura para o histórico do parceiro (RF-025)
+// M08 — Contas a Pagar e Receber (RF-051 a RF-058)
 //
-// As tabelas pertencem a módulos de sprints futuras (M06 Compras, M08 Contas a
-// Pagar/Receber). O mapeamento abaixo cobre apenas as colunas que o resumo
-// consulta — nenhum serviço desta sprint escreve nelas.
+// Uma entidade só (`titulo`) discriminada por `type`: a pagar e a receber
+// compartilham parcelas, baixas, encargos e aprovação — separá-las duplicaria
+// toda a mecânica para trocar o sinal do fluxo.
+//
+// Saldo e situação **não são escritos pela API**. A única porta de entrada da
+// liquidação é um INSERT em `titulo_baixa`; o banco projeta a parcela a partir
+// das baixas vivas e o título a partir das parcelas (bd/09). Como no estoque, a
+// garantia é de privilégio: a role da aplicação não tem UPDATE nem DELETE sobre
+// as baixas — estorno é lançamento contrário, não edição.
 // ---------------------------------------------------------------------------
 
-/// gestao.titulo — título a pagar/receber. Leitura no histórico do parceiro.
-model FinancialEntry {
-  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId     String      @map("empresa_id") @db.Uuid
-  type          EntryType   @map("tipo")
-  number        String      @map("numero") @db.VarChar(30)
-  partnerId     String?     @map("parceiro_id") @db.Uuid
-  description   String      @map("descricao") @db.VarChar(255)
-  issueDate     DateTime    @map("data_emissao") @db.Date
-  netAmount     Decimal     @map("valor_liquido") @db.Decimal(18, 2)
-  settledAmount Decimal     @map("valor_liquidado") @db.Decimal(18, 2)
-  balance       Decimal     @map("saldo") @db.Decimal(18, 2)
-  status        EntryStatus @map("status")
+/// gestao.recorrencia — contrato que gera títulos periodicamente (RF-053).
+model Recurrence {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String      @map("empresa_id") @db.Uuid
+  description    String      @map("descricao") @db.VarChar(255)
+  type           EntryType   @map("tipo")
+  periodicity    Periodicity @map("periodicidade")
+  /// Dia desejado do vencimento; o banco reduz para o último dia do mês curto.
+  dueDay         Int?        @map("dia_vencimento") @db.SmallInt
+  defaultAmount  Decimal?    @map("valor_padrao") @db.Decimal(18, 2)
+  partnerId      String?     @map("parceiro_id") @db.Uuid
+  partner        Partner?    @relation(fields: [partnerId], references: [id])
+  categoryId     String?     @map("categoria_financeira_id") @db.Uuid
+  category       Category?   @relation(fields: [categoryId], references: [id])
+  costCenterId   String?     @map("centro_custo_id") @db.Uuid
+  costCenter     CostCenter? @relation(fields: [costCenterId], references: [id])
+  startDate      DateTime    @map("data_inicio") @db.Date
+  endDate        DateTime?   @map("data_fim") @db.Date
+  maxOccurrences Int?        @map("ocorrencias_max") @db.SmallInt
+  generatedCount Int         @default(0) @map("ocorrencias_geradas") @db.SmallInt
+  nextRunDate    DateTime?   @map("proxima_geracao") @db.Date
+  isActive       Boolean     @default(true) @map("ativo")
+  createdAt      DateTime    @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt      DateTime    @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
+  entries FinancialEntry[]
+
+  @@map("recorrencia")
+}
+
+/// gestao.titulo — título a pagar ou a receber (RF-051 a RF-058).
+///
+/// `netAmount` é derivado (`grossAmount - discountAmount`), e `settledAmount`,
+/// `balance` e `status` são projeção das parcelas: todos escritos por trigger
+/// (bd/09). A API os envia apenas na leitura.
+model FinancialEntry {
+  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String         @map("empresa_id") @db.Uuid
+  branchId          String?        @map("filial_id") @db.Uuid
+  branch            Branch?        @relation(fields: [branchId], references: [id])
+  type              EntryType      @map("tipo")
+  number            String         @map("numero") @db.VarChar(30)
+  documentReference String?        @map("documento_referencia") @db.VarChar(60)
+  partnerId         String?        @map("parceiro_id") @db.Uuid
+  partner           Partner?       @relation(fields: [partnerId], references: [id])
+  /// Contraparte funcionário: reembolso aprovado vira título a pagar (RF-018).
+  employeeId        String?        @map("funcionario_id") @db.Uuid
+  employee          Employee?      @relation(fields: [employeeId], references: [id])
+  description       String         @map("descricao") @db.VarChar(255)
+  issueDate         DateTime       @default(now()) @map("data_emissao") @db.Date
+  competenceDate    DateTime       @default(now()) @map("data_competencia") @db.Date
+  grossAmount       Decimal        @map("valor_bruto") @db.Decimal(18, 2)
+  discountAmount    Decimal        @default(0) @map("valor_desconto") @db.Decimal(18, 2)
+  netAmount         Decimal        @map("valor_liquido") @db.Decimal(18, 2)
+  /// Caixa movimentado nas baixas vivas — inclui juros e multa recebidos/pagos.
+  settledAmount     Decimal        @default(0) @map("valor_liquidado") @db.Decimal(18, 2)
+  /// Principal ainda em aberto: a soma do saldo das parcelas não canceladas.
+  balance           Decimal        @default(0) @map("saldo") @db.Decimal(18, 2)
+  categoryId        String?        @map("categoria_financeira_id") @db.Uuid
+  category          Category?      @relation(fields: [categoryId], references: [id])
+  costCenterId      String?        @map("centro_custo_id") @db.Uuid
+  costCenter        CostCenter?    @relation(fields: [costCenterId], references: [id])
+  /// Conta contábil (M11): classificada aqui, usada na partida dobrada.
+  ledgerAccountId   String?        @map("conta_contabil_id") @db.Uuid
+  paymentMethodId   String?        @map("forma_pagamento_id") @db.Uuid
+  paymentMethod     PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  paymentTermId     String?        @map("condicao_pagamento_id") @db.Uuid
+  paymentTerm       PaymentTerm?   @relation(fields: [paymentTermId], references: [id])
+  /// MANUAL | RECORRENCIA | REEMBOLSO | DOCUMENTO_FISCAL | PEDIDO_COMPRA.
+  origin            String?        @map("origem_tipo") @db.VarChar(40)
+  originId          String?        @map("origem_id") @db.Uuid
+  recurrenceId      String?        @map("recorrencia_id") @db.Uuid
+  recurrence        Recurrence?    @relation(fields: [recurrenceId], references: [id])
+  status            EntryStatus    @default(ABERTO) @map("status")
+  approvalStatus    ApprovalStatus @default(NAO_REQUERIDA) @map("status_aprovacao")
+  canceledAt        DateTime?      @map("cancelado_em") @db.Timestamptz(6)
+  cancelReason      String?        @map("motivo_cancelamento")
+  note              String?        @map("observacao")
+  createdById       String?        @map("criado_por") @db.Uuid
+  createdBy         User?          @relation(fields: [createdById], references: [id])
+  createdAt         DateTime       @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt         DateTime       @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  installments FinancialInstallment[]
+
+  @@unique([companyId, type, number], map: "uq_titulo_numero")
+  @@index([companyId, competenceDate], map: "ix_titulo_competencia")
   @@map("titulo")
 }
+
+/// gestao.titulo_parcela — vencimento e valor de cada parcela (RF-053/RF-055).
+///
+/// `balance` é o **principal em aberto** e `settledAmount`, o **caixa
+/// movimentado**: pagar juros não abate principal. Os dois, mais os encargos
+/// acumulados e a situação, são projeção das baixas (bd/09).
+model FinancialInstallment {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String            @map("empresa_id") @db.Uuid
+  entryId           String            @map("titulo_id") @db.Uuid
+  entry             FinancialEntry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  number            Int               @map("numero_parcela") @db.SmallInt
+  totalInstallments Int               @default(1) @map("total_parcelas") @db.SmallInt
+  dueDate           DateTime          @map("data_vencimento") @db.Date
+  /// Vencimento combinado na emissão — imutável, mesmo se a parcela for prorrogada.
+  originalDueDate   DateTime?         @map("data_vencimento_original") @db.Date
+  amount            Decimal           @map("valor") @db.Decimal(18, 2)
+  interestAmount    Decimal           @default(0) @map("valor_juros") @db.Decimal(18, 2)
+  penaltyAmount     Decimal           @default(0) @map("valor_multa") @db.Decimal(18, 2)
+  discountAmount    Decimal           @default(0) @map("valor_desconto") @db.Decimal(18, 2)
+  settledAmount     Decimal           @default(0) @map("valor_liquidado") @db.Decimal(18, 2)
+  balance           Decimal           @default(0) @map("saldo") @db.Decimal(18, 2)
+  dailyInterestRate Decimal           @default(0) @map("percentual_juros_dia") @db.Decimal(9, 6)
+  penaltyRate       Decimal           @default(0) @map("percentual_multa") @db.Decimal(9, 6)
+  settledAt         DateTime?         @map("data_liquidacao") @db.Date
+  status            InstallmentStatus @default(ABERTA) @map("status")
+  barcode           String?           @map("codigo_barras") @db.VarChar(60)
+  digitableLine     String?           @map("linha_digitavel") @db.VarChar(60)
+  bankIdentifier    String?           @map("nosso_numero") @db.VarChar(30)
+  note              String?           @map("observacao")
+  createdAt         DateTime          @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt         DateTime          @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  settlements Settlement[]
+
+  @@unique([entryId, number], map: "uq_titulo_parcela")
+  @@map("titulo_parcela")
+}
+
+/// gestao.titulo_baixa — pagamento ou recebimento, total ou parcial (RF-057).
+///
+/// Append-only: a role da aplicação não tem UPDATE nem DELETE (bd/09). Estornar
+/// é inserir o lançamento espelho com `reversalOfId`; o banco marca a original.
+model Settlement {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId       String               @map("empresa_id") @db.Uuid
+  installmentId   String               @map("titulo_parcela_id") @db.Uuid
+  installment     FinancialInstallment @relation(fields: [installmentId], references: [id])
+  settlementDate  DateTime             @default(now()) @map("data_baixa") @db.Date
+  /// Principal quitado — é ele, e só ele, que abate o saldo da parcela.
+  principalAmount Decimal              @map("valor_principal") @db.Decimal(18, 2)
+  interestAmount  Decimal              @default(0) @map("valor_juros") @db.Decimal(18, 2)
+  penaltyAmount   Decimal              @default(0) @map("valor_multa") @db.Decimal(18, 2)
+  discountAmount  Decimal              @default(0) @map("valor_desconto") @db.Decimal(18, 2)
+  /// Caixa movimentado — calculado pelo banco a partir das quatro parcelas acima.
+  totalAmount     Decimal              @default(0) @map("valor_total") @db.Decimal(18, 2)
+  paymentMethodId String?              @map("forma_pagamento_id") @db.Uuid
+  paymentMethod   PaymentMethod?       @relation(fields: [paymentMethodId], references: [id])
+  method          PaymentMethodType?   @map("metodo")
+  isReversed      Boolean              @default(false) @map("estornada")
+  /// Única por definição: uma baixa é estornada uma vez só, garantido pelo
+  /// índice parcial `ux_baixa_estorno_unico` (bd/09).
+  reversalOfId    String?              @unique(map: "ux_baixa_estorno_unico") @map("estorno_de_id") @db.Uuid
+  reversalOf      Settlement?          @relation("SettlementReversal", fields: [reversalOfId], references: [id])
+  reversal        Settlement?          @relation("SettlementReversal")
+  reversedAt      DateTime?            @map("estornada_em") @db.Timestamptz(6)
+  reversalReason  String?              @map("motivo_estorno")
+  note            String?              @map("observacao")
+  createdById     String?              @map("criado_por") @db.Uuid
+  createdBy       User?                @relation(fields: [createdById], references: [id])
+  createdAt       DateTime             @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  @@map("titulo_baixa")
+}
+
+// ---------------------------------------------------------------------------
+// Projeção somente leitura para o histórico do parceiro (RF-025)
+//
+// A tabela pertence a um módulo de sprint futura (M06 Compras). O mapeamento
+// cobre apenas as colunas que o resumo consulta.
+// ---------------------------------------------------------------------------
 
 /// gestao.pedido_compra — pedido de compra. Leitura no histórico do parceiro.
 model PurchaseOrder {

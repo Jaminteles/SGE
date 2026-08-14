@@ -36,10 +36,34 @@ function buildService(row: Record<string, unknown> = reimbursement(), requiresAp
   };
   const membership = { findMany: jest.fn().mockResolvedValue([{ roleId: 'perfil-financeiro' }]) };
 
+  // A alçada que cobre o valor, quando o cenário pede uma: só DIRETOR aprova.
+  const approvalThreshold = {
+    findMany: jest.fn().mockResolvedValue(
+      requiresApproval
+        ? [
+            {
+              id: 'alcada-1',
+              name: 'Reembolso acima da faixa',
+              operation: 'REEMBOLSO',
+              minAmount: new Prisma.Decimal('0'),
+              maxAmount: null,
+              level: 1,
+              minApprovers: 1,
+              isActive: true,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              approvers: [{ role: { id: 'perfil-diretor', name: 'DIRETOR' } }],
+            },
+          ]
+        : [],
+    ),
+  };
+
   const prisma = {
     db: {
       reimbursement: delegate,
       membership,
+      approvalThreshold,
       $queryRaw: jest.fn().mockResolvedValue([{ numero: 'REEMB-2026-000001' }]),
     },
     transaction: <T>(fn: () => Promise<T>) => fn(),
@@ -48,12 +72,10 @@ function buildService(row: Record<string, unknown> = reimbursement(), requiresAp
   const references = {
     assert: jest.fn().mockResolvedValue(undefined),
   } as unknown as ReferencesService;
-  const thresholds = {
-    evaluate: jest.fn().mockResolvedValue({
-      requiresApproval,
-      authorizedRoles: requiresApproval ? [{ id: 'perfil-diretor', name: 'DIRETOR' }] : [],
-    }),
-  } as unknown as ApprovalThresholdsService;
+  // Serviço real, e não um dublê: a verificação de alçada (RN-003) é
+  // compartilhada com o M08, e um dublê aqui testaria a cópia do teste em vez
+  // da regra que roda em produção.
+  const thresholds = new ApprovalThresholdsService(prisma);
   const audit = { record: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService;
 
   return {

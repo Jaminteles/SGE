@@ -1,6 +1,12 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuthenticatedUser } from '../../common/authorization/authenticated-user';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import { PaginatedResult } from '../../common/dto/paginated-result';
 import { CreateApprovalThresholdDto } from './dto/create-approval-threshold.dto';
@@ -142,6 +148,41 @@ export class ApprovalThresholdsService {
       authorizedRoles: [...roles.values()],
       matchedThresholds: matched,
     };
+  }
+
+  /**
+   * Recusa a decisão de quem não alcança a faixa configurada (RN-003).
+   *
+   * Sem alçada cadastrada para a operação, a permissão de aprovação basta — a
+   * alçada é um controle adicional sobre valor, não um substituto do RBAC.
+   * Super admin passa: ele administra a plataforma e é quem configura as faixas.
+   *
+   * Vive aqui, e não em cada módulo que aprova, porque reembolso (M03), título
+   * (M08) e pedido de compra (M06) fazem a mesma pergunta — e uma cópia que
+   * envelhece é uma alçada que deixou de valer sem ninguém perceber.
+   */
+  async assertAuthority(
+    companyId: string,
+    approver: AuthenticatedUser,
+    operation: string,
+    amount: Prisma.Decimal,
+  ): Promise<void> {
+    const evaluation = await this.evaluate(companyId, operation, amount.toFixed(2));
+    if (!evaluation.requiresApproval || approver.isSuperAdmin) {
+      return;
+    }
+
+    const authorized = new Set(evaluation.authorizedRoles.map((role) => role.id));
+    const memberships = await this.prisma.db.membership.findMany({
+      where: { userId: approver.id, companyId, isActive: true },
+      select: { roleId: true },
+    });
+
+    if (!memberships.some((m) => authorized.has(m.roleId))) {
+      throw new ForbiddenException(
+        `Valor acima da sua alçada de aprovação para ${operation} (RN-003).`,
+      );
+    }
   }
 
   private async load(companyId: string, id: string): Promise<ThresholdRow> {

@@ -1,4 +1,4 @@
-# SGE — Backend (Fases 1 e 2 completas)
+# SGE — Backend (Fases 1 e 2 completas; Fase 3 em andamento)
 
 Backend do **Sistema de Gestão Empresarial e Financeira**, implementado conforme a
 stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
@@ -22,6 +22,11 @@ stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
   ponderado por local, entradas, saídas, transferências e ajustes num razão
   append-only, inventário com contagem e ajuste, valorização e alerta de estoque
   mínimo (RF-031 a RF-035).
+- **Sprint 6 — M08 (Contas a Pagar e Receber)**: títulos das duas carteiras,
+  parcelamento e recorrências, classificação por categoria, conta contábil e
+  centro de custo, vencimento com juros, multa e desconto, aprovação por alçada,
+  pagamento e recebimento total ou parcial com estorno, posição da carteira e
+  inadimplência (RF-051 a RF-058).
 
 ## Banco de dados
 
@@ -49,11 +54,12 @@ psql -U gestao_owner -h localhost -d gestao_empresarial -f 05_auditoria_sprint2.
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 06_rh_sprint3.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 07_parceiros_produtos_sprint4.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 08_estoque_sprint5.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 09_financeiro_sprint6.sql
 ```
 
 Se o banco já existe e você só quer trazê-lo para a sprint atual **sem perder os
 dados**, rode `pwsh ../bd/instalar-bd.ps1 -Atualizar`: reaplica apenas `04` a
-`08`, que são idempotentes.
+`09`, que são idempotentes.
 
 ```bash
 # 2. Backend
@@ -117,7 +123,7 @@ associações, mas não são editáveis pela API.
 
 `gestao.permissao` não tem coluna de código: a chave é a tripla
 (`modulo`, `recurso`, `acao`). A API deriva o código `recurso:AÇÃO` e grava seu
-catálogo com `modulo` = `M01`/`M02`/`M03`/`M04`/`M05`/`M16`. As permissões em
+catálogo com `modulo` = `M01`/`M02`/`M03`/`M04`/`M05`/`M08`/`M16`. As permissões em
 português da carga inicial de `bd/03` continuam lá, reservadas para os módulos
 das próximas sprints.
 
@@ -127,7 +133,7 @@ Vínculos feitos pelo seed nos perfis de sistema:
 | --- | --- | --- |
 | RH | Todo o M03 | `reimbursements:APPROVE` — quem lança a despesa não decide sobre ela (RN-003) |
 | COMPRAS | M04 e o catálogo do M05 | `partner-bank-accounts:*` — quem negocia o preço não redireciona o crédito; `stock-movements:*` e `inventories:*` — quem compra não dá baixa no que chegou |
-| FINANCEIRO | `partner-bank-accounts:*`, leitura de parceiros, histórico, condições, `stock:READ` e `stock-valuation:READ` | Escrita do cadastro comercial e do estoque |
+| FINANCEIRO | Todo o M08, `partner-bank-accounts:*`, leitura de parceiros, histórico, condições, `stock:READ` e `stock-valuation:READ` | `financial-entries:APPROVE` — quem lança o título não decide sobre ele (RN-003); escrita do cadastro comercial e do estoque |
 | OPERACIONAL | Catálogo, locais, movimentação e contagem do M05 | M04 — catálogo não implica acesso a parceiros; `inventories:APPROVE` — quem conta não homologa a própria diferença (RN-003); `stock-valuation:READ` — valor do ativo é leitura financeira |
 
 ## Mapa de requisitos → endpoints
@@ -174,6 +180,14 @@ Vínculos feitos pelo seed nos perfis de sistema:
 | RF-033 | Inventário e histórico | `/inventories` + `/start`, `/counts`, `/close`, `/cancel` |
 | RF-034 | Registrar custos | `unitCost` no movimento, `averageCost` no saldo e no item, `GET /stock/valuation` |
 | RF-035 | Alertar estoque mínimo | `GET /stock/alerts` (view `vw_estoque_alerta_minimo`) |
+| RF-051 | Contas a pagar manuais ou vindas de processos | `POST /financial-entries` com `type=PAGAR` (`origin` = MANUAL/RECORRENCIA/...) |
+| RF-052 | Contas a receber manuais ou vindas de processos | `POST /financial-entries` com `type=RECEBER` |
+| RF-053 | Parcelas e recorrências | `installments`/`installmentCount`/`paymentTermId` em `/financial-entries`; `/recurrences` + `POST /recurrences/:id/generate` |
+| RF-054 | Categoria, conta contábil e centro de custo | `categoryId`, `costCenterId` e `ledgerAccountId` em `/financial-entries` |
+| RF-055 | Vencimento, juros, multas e descontos | `PATCH /financial-entries/:id/installments/:installmentId`, `GET /installments` (view `vw_parcela_posicao`) |
+| RF-056 | Controlar aprovação | `POST /financial-entries/:id/submit`, `/approve`, `/reject` + `/approval-thresholds` (operação `TITULO_PAGAR`/`TITULO_RECEBER`) |
+| RF-057 | Pagamento/recebimento total ou parcial | `POST /financial-entries/:id/installments/:installmentId/settlements` e `.../:settlementId/reverse` |
+| RF-058 | Inadimplência e histórico | `GET /delinquency` (view `vw_inadimplencia`), `GET /installments?overdueOnly=true`, `GET /partners/:id/history` |
 
 ## Contrato da API — pontos de atenção
 
@@ -193,17 +207,18 @@ status. A API acompanha:
 - **Associação** aceita `branchId` (vazio = todas as filiais) e `isDefault`.
 - **Alçada** aceita `name`, `level` e `minApprovers`; o `requiredRoleId` vira uma
   linha em `gestao.alcada_aprovador` e a resposta traz `requiredRoles`.
-- **Regras do banco viram 400**, não 500: o que um trigger de `bd/06`/`bd/07`/`bd/08`
+- **Regras do banco viram 400**, não 500: o que um trigger de `bd/06` a `bd/09`
   recusa (`RAISE EXCEPTION`) chega ao cliente com a mensagem da regra — ciclo de
-  hierarquia, papel incompatível, evento imutável. Violação de RLS (`42501`)
+  hierarquia, papel incompatível, evento imutável, baixa acima do saldo. Violação de RLS (`42501`)
   segue como 500 de propósito: é defeito do servidor, não do chamador.
 - **Auditoria** é somente leitura e o `id` vem como **string**: a coluna é
   `bigint` e `JSON.stringify` não serializa `BigInt`. O filtro de período usa
   intervalo semiaberto — `from` inclusivo, `to` exclusivo.
 - **Valores monetários** trafegam como **string decimal** (`"1234.56"`), nunca
   como número: `number` em JSON é ponto flutuante binário (RN-012).
-- **Datas de RH** (admissão, vigência, despesa, competência) são dias civis:
-  `YYYY-MM-DD` (ou `YYYY-MM` na competência), sem hora e sem fuso.
+- **Datas de RH e do financeiro** (admissão, vigência, despesa, competência,
+  emissão, vencimento, baixa) são dias civis: `YYYY-MM-DD` (ou `YYYY-MM` na
+  competência), sem hora e sem fuso.
 - **Parceiro** é um cadastro só com dois papéis (`isCustomer`/`isSupplier`) —
   pelo menos um é obrigatório. O documento acompanha o `personType`: CNPJ para
   `PJ`, CPF para `PF`, `foreignDocument` para `ESTRANGEIRO`; `personType` não é
@@ -279,9 +294,86 @@ saída é o local que recebe; na de entrada, o que enviou.
 - a conclusão gera os ajustes no razão e vai à trilha como `FECHAMENTO`; o
   cancelamento exige motivo, que também vai à trilha (não há coluna para ele).
 
-`GET /partners/:id/history` (RF-025) consolida `titulo` e `pedido_compra` —
-tabelas dos módulos M08 e M06. Até essas sprints entrarem, o resumo responde
-zerado, que é o retrato correto de um parceiro sem movimento.
+`GET /partners/:id/history` (RF-025) consolida `titulo` e `pedido_compra`. Com o
+M08 na Sprint 6, o lado financeiro passou a responder com dados reais; o lado de
+compras continua zerado até o M06 (Sprint 8).
+
+### M08 — Contas a Pagar e Receber: o que a API não deixa você escrever
+
+Uma entidade só (`/financial-entries`) para as duas carteiras, discriminada por
+`type`. Não existe `DELETE`: título emitido é documento, e o que há é
+cancelamento com motivo.
+
+| Campo | Quem escreve | Por quê |
+| --- | --- | --- |
+| `netAmount` | Trigger `trg_prepara_titulo` (`bd/09`) | É `grossAmount - discountAmount`. Dois números para o mesmo fato divergem no primeiro acerto |
+| `number` | `fn_proximo_numero_titulo` (`bd/09`) | Sequencial por empresa, **tipo** e ano (`CP-2026-000001`, `CR-2026-000001`), serializado na transação |
+| `status`, `balance`, `settledAmount` do título | Projeção das parcelas (`bd/09`) | O título é o retrato das suas parcelas — não um número editável |
+| `status`, `balance`, `settledAmount`, juros/multa/desconto da parcela | Projeção das baixas (`bd/09`) | A baixa é a única porta de entrada da liquidação |
+| `totalAmount` da baixa | Trigger `trg_prepara_baixa` (`bd/09`) | É `principal + juros + multa - desconto`; calcular no cliente criaria uma segunda fórmula |
+
+### M08 — os dois números que não se confundem
+
+| Coluna | Significado |
+| --- | --- |
+| `balance` da parcela | **Principal em aberto** — só `principalAmount` da baixa o reduz |
+| `settledAmount` da parcela | **Caixa movimentado** — inclui juros e multa cobrados, menos o desconto |
+
+Pagar juros não abate principal, e desconto reduz o caixa sem deixar dívida:
+quem quita uma parcela de 400 concedendo 20 informa `principalAmount: "400.00"`
+e `discountAmount: "20.00"` — a parcela fecha e saem 380.
+
+### M08 — regras e barreiras
+
+| Regra | Onde vale |
+| --- | --- |
+| As parcelas somam exatamente o valor líquido | Service + constraint trigger **adiada para o commit** `trg_titulo_parcelas_somam`/`trg_parcela_soma_titulo` (`bd/09`) |
+| Todo título tem ao menos uma parcela | Mesma constraint trigger |
+| A baixa não passa do principal em aberto | Service + trigger `trg_prepara_baixa`, com advisory lock por parcela |
+| Baixa é **append-only** — estorno é lançamento contrário | Sem rota de escrita + `trg_baixa_imutavel` + `REVOKE UPDATE/DELETE` (`bd/09`) |
+| Uma baixa é estornada uma vez só | Trigger + índice parcial `ux_baixa_estorno_unico` |
+| Título pendente de aprovação não é baixado | Service + trigger `trg_prepara_baixa` (RF-056) |
+| Aprovação não volta atrás | Trigger `trg_titulo_aprovacao` |
+| Título com baixa viva não é cancelado | Trigger `trg_prepara_titulo` |
+| Parcela liquidada não muda de valor nem de vencimento | Trigger `trg_prepara_parcela` |
+| O vencimento originalmente combinado nunca é reescrito | Trigger `trg_prepara_parcela` — é o que revela a parcela já prorrogada três vezes |
+| Categoria precisa ser da mesma natureza do título | Service (RF-054) |
+| Título a pagar exige fornecedor; a receber, cliente | Service, via `ReferencesService` (RF-022/RF-023) |
+
+O parcelamento pode vir de três lugares, nesta ordem: a lista explícita
+(`installments`), a condição de pagamento (`paymentTermId`) ou o parcelamento
+simples (`installmentCount` + `intervalDays`). Sem nada disso, o título nasce com
+uma parcela única. **A condição de pagamento define só o parcelamento** — o
+desconto cadastrado nela não é aplicado sozinho: valor que muda sem ninguém
+pedir é defeito, não conveniência.
+
+O resto da divisão vai para a **última parcela**: 1.000,00 em três dá 333,33 +
+333,33 + 333,34. Sem isso, um centavo evapora e o banco recusa o título no
+commit.
+
+### Encargos, carteira e inadimplência (RF-055/RF-058)
+
+Juros ao dia e multa única incidem sobre o saldo **depois** do vencimento, e são
+calculados no modelo (`fn_encargos_atraso`, `bd/09`) — não no service. Com
+`applyLateCharges: true` na baixa, o valor cobrado é exatamente o que a carteira
+mostra; informar `interestAmount`/`penaltyAmount` explicitamente sobrepõe o
+cálculo, porque negociar encargo é decisão de quem cobra.
+
+- `GET /installments` — posição da carteira (`vw_parcela_posicao`): dias de
+  atraso, encargos, valor atualizado e faixa de aging;
+- `GET /delinquency` — inadimplência agregada por faixa e por parceiro. Faixas
+  sem parcela aparecem **zeradas**: faixa ausente lê-se como "não consultei".
+
+### Recorrências (RF-053)
+
+`POST /recurrences/:id/generate` gera as ocorrências devidas até uma data — três
+meses esquecidos viram três títulos, não um com o valor somado. Não há job
+silencioso: cada rodada tem um usuário responsável, que é o que a trilha
+registra (RF-115). O limite de 60 títulos por chamada transforma uma recorrência
+diária esquecida por anos em várias chamadas conscientes, em vez de um timeout
+no meio da criação. A data da próxima ocorrência é calculada pelo banco
+(`fn_proxima_ocorrencia`), que é onde "todo dia 31" sabe o que fazer em
+fevereiro.
 
 ### M03 — o que o cadastro não deixa você escrever
 
@@ -350,13 +442,22 @@ estrita, para não vazar atividade entre empresas.
 - **RNF-012**: testes automatizados das regras críticas (autenticação, RBAC,
   isolamento, CPF/CNPJ, máquina de estados e alçada do reembolso, armazenamento
   de comprovantes, papéis do parceiro, consistência do catálogo, movimentação e
-  transferência de estoque e máquina de estados do inventário).
+  transferência de estoque, máquina de estados do inventário, parcelamento,
+  liquidação com trava de saldo, estorno e geração de recorrências).
+- **Financeiro (Sprint 6)**: `titulo_baixa` é append-only nas mesmas três camadas
+  da trilha de auditoria — ausência de rota de escrita, trigger que rejeita
+  `UPDATE`/`DELETE` e retirada do privilégio da role da aplicação. A marcação de
+  estorno é feita por trigger `SECURITY DEFINER`, o único caminho que restou.
+  Lançar, aprovar e liquidar são recursos de permissão separados: quem lança a
+  despesa não decide sobre ela (RN-003), e quem movimenta caixa não define o que
+  é devido. Pagamento, recebimento e estorno vão à trilha como eventos de
+  negócio (`PAGAMENTO`/`RECEBIMENTO`/`ESTORNO`).
 - **Estoque (Sprint 5)**: `estoque_saldo` é projeção e a role da aplicação não
   tem privilégio de escrita sobre ela; `movimento_estoque` é append-only nas
   mesmas três camadas da trilha de auditoria. Movimentar, valorizar e concluir
   inventário são recursos de permissão separados — quem opera o depósito não
   homologa a diferença nem lê o valor do ativo.
-- **RN-001 estrutural (Sprints 3 a 5)**: as referências do M03, M04 e M05 usam **FK composta**
+- **RN-001 estrutural (Sprints 3 a 6)**: as referências do M03, M04, M05 e M08 usam **FK composta**
   `(empresa_id, <coluna>)`. A verificação de chave estrangeira roda no sistema,
   sem RLS: sem isso, um defeito na API poderia vincular funcionário da empresa A
   ao centro de custo da empresa B. Como FK composta não aceita `ON DELETE SET

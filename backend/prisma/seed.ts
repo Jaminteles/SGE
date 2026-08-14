@@ -77,10 +77,18 @@ async function seedSystemRoles(): Promise<void> {
           p.resource !== RESOURCES.INVENTORIES,
       ).map((p) => p.code),
     },
-    // Financeiro é quem paga: precisa da conta do parceiro e do histórico.
+    // Financeiro é quem paga e cobra: o M08 inteiro, mais a conta do parceiro e
+    // o histórico. A aprovação do título fica de fora pela mesma razão do
+    // reembolso (RN-003) — quem lança a despesa não decide sobre ela, e o
+    // título a pagar é justamente onde uma despesa inventada vira dinheiro
+    // saindo. Atribua `financial-entries:APPROVE` ao perfil que responde pela
+    // alçada (RF-012).
     {
       role: 'FINANCEIRO',
       codes: [
+        ...PERMISSION_CATALOG.filter(
+          (p) => p.module === 'M08' && p.code !== PERMISSIONS.FINANCIAL_ENTRIES_APPROVE,
+        ).map((p) => p.code),
         ...PERMISSION_CATALOG.filter((p) => p.resource === RESOURCES.PARTNER_BANK_ACCOUNTS).map(
           (p) => p.code,
         ),

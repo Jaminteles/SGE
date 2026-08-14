@@ -33,7 +33,12 @@ SELECT quantidade, custo_medio FROM estoque_saldo;
 \echo '--- alerta de estoque minimo (nao deve retornar linhas) ---'
 SELECT count(*) AS alertas FROM vw_estoque_alerta_minimo;
 
--- Titulo a pagar com 2 parcelas
+-- Titulo a pagar com 2 parcelas.
+--
+-- Numa transacao so: desde bd/09, a igualdade "parcelas somam o titulo" e uma
+-- constraint trigger adiada para o commit (RF-053). Um titulo comitado sozinho,
+-- sem parcela nenhuma, e justamente o que ela recusa.
+BEGIN;
 INSERT INTO titulo (id, empresa_id, tipo, numero, parceiro_id, descricao, valor_bruto, valor_liquido, saldo)
 VALUES ('77777777-7777-7777-7777-777777777777','11111111-1111-1111-1111-111111111111','PAGAR','CP-0001',
         '44444444-4444-4444-4444-444444444444','Compra de material',1000.00,1000.00,1000.00);
@@ -41,6 +46,7 @@ VALUES ('77777777-7777-7777-7777-777777777777','11111111-1111-1111-1111-11111111
 INSERT INTO titulo_parcela (id, empresa_id, titulo_id, numero_parcela, total_parcelas, data_vencimento, valor, saldo)
 VALUES ('88888888-8888-8888-8888-888888888888','11111111-1111-1111-1111-111111111111','77777777-7777-7777-7777-777777777777',1,2,current_date+30,500.00,500.00),
        ('99999999-9999-9999-9999-999999999999','11111111-1111-1111-1111-111111111111','77777777-7777-7777-7777-777777777777',2,2,current_date+60,500.00,500.00);
+COMMIT;
 
 -- Baixa parcial da parcela 1
 INSERT INTO titulo_baixa (empresa_id, titulo_parcela_id, valor_principal, valor_total)

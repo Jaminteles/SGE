@@ -218,7 +218,12 @@ export class ReimbursementsService {
       throw new BadRequestException('O valor aprovado deve estar entre zero e o total solicitado.');
     }
 
-    await this.assertApprovalAuthority(companyId, approver, approvedAmount);
+    await this.thresholds.assertAuthority(
+      companyId,
+      approver,
+      REIMBURSEMENT_OPERATION,
+      approvedAmount,
+    );
 
     await this.prisma.db.reimbursement.update({
       where: { id },
@@ -313,37 +318,6 @@ export class ReimbursementsService {
   private assertNotSelfApproval(reimbursement: ReimbursementRow, approverUserId: string) {
     if (reimbursement.employee.userId && reimbursement.employee.userId === approverUserId) {
       throw new ForbiddenException('O solicitante não pode decidir o próprio reembolso.');
-    }
-  }
-
-  /**
-   * RN-003: acima da faixa configurada, aprovar exige um dos perfis da alçada.
-   * Sem alçada cadastrada para a operação, a permissão de aprovação basta.
-   */
-  private async assertApprovalAuthority(
-    companyId: string,
-    approver: AuthenticatedUser,
-    amount: Prisma.Decimal,
-  ) {
-    const evaluation = await this.thresholds.evaluate(
-      companyId,
-      REIMBURSEMENT_OPERATION,
-      amount.toFixed(2),
-    );
-    if (!evaluation.requiresApproval || approver.isSuperAdmin) {
-      return;
-    }
-
-    const authorized = new Set(evaluation.authorizedRoles.map((role) => role.id));
-    const memberships = await this.prisma.db.membership.findMany({
-      where: { userId: approver.id, companyId, isActive: true },
-      select: { roleId: true },
-    });
-
-    if (!memberships.some((m) => authorized.has(m.roleId))) {
-      throw new ForbiddenException(
-        'Valor acima da sua alçada de aprovação para reembolsos (RN-003).',
-      );
     }
   }
 

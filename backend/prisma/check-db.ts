@@ -112,9 +112,9 @@ async function main(): Promise<void> {
     `,
   );
   checks.push({
-    label: 'referências de cadastro presas à empresa (bd/06 a bd/08)',
-    ok: Number(tenantFks?.n ?? 0) >= 49,
-    detail: `${Number(tenantFks?.n ?? 0)} FKs compostas (esperado ≥ 49) — rode bd/06, bd/07 e bd/08`,
+    label: 'referências de cadastro presas à empresa (bd/06 a bd/09)',
+    ok: Number(tenantFks?.n ?? 0) >= 63,
+    detail: `${Number(tenantFks?.n ?? 0)} FKs compostas (esperado ≥ 63) — rode bd/06 a bd/09`,
   });
 
   const hrTriggers = await scalar(
@@ -197,13 +197,60 @@ async function main(): Promise<void> {
     detail: `${Number(stockWritable?.n ?? 0)} privilégio(s) de UPDATE/DELETE concedidos — rode bd/08`,
   });
 
+  // Sprint 6 (M08): sem os triggers, o saldo do título deixa de acompanhar as
+  // baixas e uma parcela pode ser paga duas vezes.
+  const financeRules = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_trigger
+       WHERE NOT tgisinternal
+         AND tgname IN ('trg_prepara_titulo', 'trg_titulo_parcelas_somam',
+                        'trg_parcela_soma_titulo', 'trg_prepara_parcela',
+                        'trg_titulo_aprovacao', 'trg_prepara_baixa',
+                        'trg_baixa_imutavel', 'trg_aplica_estorno_baixa')
+    `,
+  );
+  checks.push({
+    label: 'regras do contas a pagar/receber aplicadas (bd/09)',
+    ok: Number(financeRules?.n ?? 0) >= 8,
+    detail: `${Number(financeRules?.n ?? 0)} triggers de 8 — rode bd/09_financeiro_sprint6.sql`,
+  });
+
+  // A baixa é a única porta de entrada da liquidação (RF-057): com UPDATE em
+  // `titulo_baixa`, um pagamento pode ser reescrito sem deixar o estorno.
+  const settlementWritable = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM information_schema.table_privileges
+       WHERE table_schema = 'gestao' AND table_name = 'titulo_baixa'
+         AND grantee IN ('app_gestao', 'sge_api')
+         AND privilege_type IN ('UPDATE', 'DELETE')
+    `,
+  );
+  checks.push({
+    label: 'baixas append-only (RF-057)',
+    ok: Number(settlementWritable?.n ?? 0) === 0,
+    detail: `${Number(settlementWritable?.n ?? 0)} privilégio(s) de UPDATE/DELETE concedidos — rode bd/09`,
+  });
+
+  const portfolioViews = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_views
+       WHERE schemaname = 'gestao'
+         AND viewname IN ('vw_parcela_posicao', 'vw_inadimplencia')
+    `,
+  );
+  checks.push({
+    label: 'posição da carteira e inadimplência disponíveis (RF-055/RF-058)',
+    ok: Number(portfolioViews?.n ?? 0) >= 2,
+    detail: `${Number(portfolioViews?.n ?? 0)} visões de 2 — rode bd/09_financeiro_sprint6.sql`,
+  });
+
   const permissions = await prisma.permission.count({
-    where: { module: { in: ['M01', 'M02', 'M03', 'M04', 'M05', 'M16'] } },
+    where: { module: { in: ['M01', 'M02', 'M03', 'M04', 'M05', 'M08', 'M16'] } },
   });
   checks.push({
     label: 'catálogo de permissões da API carregado',
     ok: permissions > 0,
-    detail: `${permissions} permissões M01/M02/M03/M04/M05/M16 — rode npm run db:seed`,
+    detail: `${permissions} permissões M01/M02/M03/M04/M05/M08/M16 — rode npm run db:seed`,
   });
 
   const admins = await prisma.user.count({ where: { isSuperAdmin: true, isActive: true } });

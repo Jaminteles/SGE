@@ -52,6 +52,10 @@ export const RESOURCES = {
   STOCK_MOVEMENTS: 'stock-movements',
   STOCK_VALUATION: 'stock-valuation',
   INVENTORIES: 'inventories',
+  FINANCIAL_ENTRIES: 'financial-entries',
+  SETTLEMENTS: 'settlements',
+  RECURRENCES: 'recurrences',
+  DELINQUENCY: 'delinquency',
 } as const;
 
 export interface PermissionDefinition {
@@ -284,6 +288,35 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     { action: A.DELETE, description: 'Cancelar inventários' },
     { action: A.APPROVE, description: 'Concluir o inventário e ajustar o estoque' },
   ]),
+  // M08 — Contas a Pagar e Receber (RF-051 a RF-058).
+  //
+  // Três separações intencionais: lançar um título não é aprová-lo (RN-003 — é
+  // o ponto onde uma despesa inventada vira dinheiro saindo); aprovar não é
+  // liquidar (`settlements` é recurso próprio, e quem movimenta caixa não
+  // decide o que é devido); e o aging da inadimplência é leitura de cobrança,
+  // separada da consulta ao título. Não existe `settlements:UPDATE`: a baixa é
+  // append-only, e `DELETE` significa aqui *estornar*, não apagar.
+  ...build('M08', RESOURCES.FINANCIAL_ENTRIES, [
+    { action: A.CREATE, description: 'Lançar contas a pagar e a receber' },
+    { action: A.READ, description: 'Consultar títulos, parcelas e a carteira' },
+    { action: A.UPDATE, description: 'Editar títulos e prorrogar parcelas' },
+    { action: A.DELETE, description: 'Cancelar títulos' },
+    { action: A.APPROVE, description: 'Aprovar ou reprovar títulos' },
+  ]),
+  ...build('M08', RESOURCES.SETTLEMENTS, [
+    { action: A.CREATE, description: 'Registrar pagamentos e recebimentos' },
+    { action: A.READ, description: 'Consultar baixas e estornos' },
+    { action: A.DELETE, description: 'Estornar baixas' },
+  ]),
+  ...build('M08', RESOURCES.RECURRENCES, [
+    { action: A.CREATE, description: 'Cadastrar títulos recorrentes' },
+    { action: A.READ, description: 'Consultar títulos recorrentes' },
+    { action: A.UPDATE, description: 'Editar recorrências e gerar as ocorrências devidas' },
+    { action: A.DELETE, description: 'Encerrar recorrências' },
+  ]),
+  ...build('M08', RESOURCES.DELINQUENCY, [
+    { action: A.READ, description: 'Consultar inadimplência e aging da carteira' },
+  ]),
 ];
 
 /** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
@@ -435,4 +468,21 @@ export const PERMISSIONS = {
   INVENTORIES_UPDATE: permissionCode(RESOURCES.INVENTORIES, A.UPDATE),
   INVENTORIES_DELETE: permissionCode(RESOURCES.INVENTORIES, A.DELETE),
   INVENTORIES_APPROVE: permissionCode(RESOURCES.INVENTORIES, A.APPROVE),
+
+  FINANCIAL_ENTRIES_CREATE: permissionCode(RESOURCES.FINANCIAL_ENTRIES, A.CREATE),
+  FINANCIAL_ENTRIES_READ: permissionCode(RESOURCES.FINANCIAL_ENTRIES, A.READ),
+  FINANCIAL_ENTRIES_UPDATE: permissionCode(RESOURCES.FINANCIAL_ENTRIES, A.UPDATE),
+  FINANCIAL_ENTRIES_DELETE: permissionCode(RESOURCES.FINANCIAL_ENTRIES, A.DELETE),
+  FINANCIAL_ENTRIES_APPROVE: permissionCode(RESOURCES.FINANCIAL_ENTRIES, A.APPROVE),
+
+  SETTLEMENTS_CREATE: permissionCode(RESOURCES.SETTLEMENTS, A.CREATE),
+  SETTLEMENTS_READ: permissionCode(RESOURCES.SETTLEMENTS, A.READ),
+  SETTLEMENTS_DELETE: permissionCode(RESOURCES.SETTLEMENTS, A.DELETE),
+
+  RECURRENCES_CREATE: permissionCode(RESOURCES.RECURRENCES, A.CREATE),
+  RECURRENCES_READ: permissionCode(RESOURCES.RECURRENCES, A.READ),
+  RECURRENCES_UPDATE: permissionCode(RESOURCES.RECURRENCES, A.UPDATE),
+  RECURRENCES_DELETE: permissionCode(RESOURCES.RECURRENCES, A.DELETE),
+
+  DELINQUENCY_READ: permissionCode(RESOURCES.DELINQUENCY, A.READ),
 } as const;
