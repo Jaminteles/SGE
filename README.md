@@ -2,7 +2,12 @@
 Sistema de Gestão Empresarial e Financeira
 
 Monorepo baseado na ERS v1.0 (`docs/`). Stack de referência: NestJS + TypeScript +
-PostgreSQL + Prisma (backend) e React + TypeScript (frontend, sprints futuras).
+PostgreSQL + Prisma (backend) e React + TypeScript (frontend).
+
+O planejamento tem **24 sprints**: as 17 primeiras entregam o backend módulo a
+módulo (RF-001 a RF-131) e as **Sprints 18 a 24 entregam a interface web** das
+telas correspondentes (Fase 9, itens `UI-xxx` na planilha). Até lá o sistema é
+consumido pela API — Swagger em `/api/docs`.
 
 ## Estrutura
 
@@ -104,6 +109,26 @@ classificação por categoria, conta contábil e centro de custo, controle de
 vencimento, juros, multa e descontos, aprovação por alçada, pagamento e
 recebimento total ou parcial com estorno, e acompanhamento de inadimplência
 (RF-051 a RF-058).
+
+## Fase 9 — Interface Web (Sprints 18 a 24)
+
+O frontend (React + TypeScript) não tem requisito próprio na ERS: são as telas
+dos RF já entregues pelo backend, planejadas como itens `UI-001` a `UI-039`.
+
+| Sprint | Entrega |
+| --- | --- |
+| 18 | Fundação: projeto, autenticação, empresa ativa, RBAC na interface e componentes base |
+| 19 | Administração: empresas, filiais, usuários, perfis, alçadas e auditoria (M01/M02/M16) |
+| 20 | RH: funcionários, histórico, verbas e reembolsos (M03) |
+| 21 | Parceiros, catálogo e estoque (M04/M05) |
+| 22 | Financeiro: contas a pagar/receber, baixas, inadimplência e fluxo de caixa (M08/M14) |
+| 23 | Compras, documentos fiscais e bancário (M06/M07/M09/M10) |
+| 24 | Contábil, fiscal, automação, dashboards e integrações (M11/M12/M13/M15/M17/M18) |
+
+As datas na planilha seguem a Sprint 17 em sequência, o que **pressupõe uma
+equipe só**. Com uma segunda equipe, cada sprint de interface pode correr em
+paralelo assim que o módulo correspondente estiver pronto no backend — nesse
+caso, as datas das Sprints 18 a 24 precisam ser refeitas.
 
 Ver [backend/README.md](backend/README.md) para instruções de execução, o mapa
 requisito → endpoint e o contrato da API.
