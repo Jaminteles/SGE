@@ -100,6 +100,26 @@ async function seedSystemRoles(): Promise<void> {
         // Financeiro, não de quem opera o depósito.
         PERMISSIONS.STOCK_VALUATION_READ,
         PERMISSIONS.STOCK_READ,
+        // M14: quem opera o caixa precisa enxergar o fluxo e o aviso de
+        // insuficiência. Criar cenário e mexer no saldo mínimo do alerta, não:
+        // planejar é do Diretor, e afrouxar o próprio alerta seria apagar o
+        // aviso de que o dinheiro vai faltar.
+        PERMISSIONS.CASH_FLOW_READ,
+        PERMISSIONS.CASH_FLOW_SCENARIOS_READ,
+        PERMISSIONS.CASH_ALERTS_READ,
+      ],
+    },
+    // M14: o planejamento é do Diretor (é ele o responsável pelos RF-101 a
+    // RF-105). Junto vem a leitura da carteira, sem a qual a projeção é um
+    // gráfico sem origem — e nada de escrita no M08: quem planeja o caixa não
+    // lança nem baixa título.
+    {
+      role: 'DIRETOR',
+      codes: [
+        ...PERMISSION_CATALOG.filter((p) => p.module === 'M14').map((p) => p.code),
+        PERMISSIONS.FINANCIAL_ENTRIES_READ,
+        PERMISSIONS.SETTLEMENTS_READ,
+        PERMISSIONS.DELINQUENCY_READ,
       ],
     },
     // Operacional cadastra e consulta o catálogo, movimenta e conta o estoque,

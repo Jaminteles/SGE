@@ -62,6 +62,39 @@ VALUES ('11111111-1111-1111-1111-111111111111','88888888-8888-8888-8888-88888888
 \echo '--- titulo apos quitacao da parcela 1 (esperado: liquidado 500, PARCIALMENTE_LIQUIDADO) ---'
 SELECT valor_liquidado, saldo, status FROM titulo WHERE id='77777777-7777-7777-7777-777777777777';
 
+-- Fluxo de caixa (M14): o realizado sai das baixas, na data em que o dinheiro
+-- andou; o previsto, das parcelas em aberto, na data em que ainda vai andar.
+\echo '--- fluxo de caixa (esperado: REALIZADO 500 hoje e PREVISTO 500 em +60) ---'
+SELECT situacao, data_referencia, sum(valor) AS valor
+  FROM vw_fluxo_caixa
+ WHERE cenario_id IS NULL
+ GROUP BY situacao, data_referencia
+ ORDER BY data_referencia;
+
+-- Cenario com projecao manual (RF-104)
+INSERT INTO cenario_fluxo_caixa (id, empresa_id, nome, data_inicio, data_fim, saldo_inicial, premissas, base)
+VALUES ('cccccccc-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111',
+        'Base', current_date, current_date + 90, 1000.00, '{"entradas_percentual": -10}'::jsonb, true);
+
+INSERT INTO projecao_fluxo_caixa (empresa_id, cenario_id, data_referencia, tipo, situacao, valor, descricao)
+VALUES ('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-000000000001',
+        current_date + 45,'RECEBER','PREVISTO',2500.00,'Venda prevista');
+
+\echo '--- projecao manual do cenario (esperado: 1 linha, manual = t) ---'
+SELECT count(*) AS projecoes, bool_and(manual) AS todas_manuais
+  FROM vw_fluxo_caixa WHERE cenario_id = 'cccccccc-0000-0000-0000-000000000001';
+
+\echo '--- teste: projecao fora da janela do cenario deve falhar ---'
+DO $$
+BEGIN
+    INSERT INTO projecao_fluxo_caixa (empresa_id, cenario_id, data_referencia, tipo, situacao, valor)
+    VALUES ('11111111-1111-1111-1111-111111111111','cccccccc-0000-0000-0000-000000000001',
+            current_date + 400,'PAGAR','PREVISTO',100.00);
+    RAISE WARNING 'FALHA: a projecao fora da janela do cenario foi aceita (RF-104).';
+EXCEPTION WHEN others THEN
+    RAISE NOTICE 'OK: %', SQLERRM;
+END $$;
+
 -- Contabilidade
 INSERT INTO conta_contabil (id, empresa_id, codigo, nome, tipo, natureza, nivel, aceita_lancamento) VALUES
  ('aaaaaaaa-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','1.1.01.001','Caixa','ATIVO','DEVEDORA',4,true),

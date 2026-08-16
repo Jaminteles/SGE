@@ -56,6 +56,9 @@ export const RESOURCES = {
   SETTLEMENTS: 'settlements',
   RECURRENCES: 'recurrences',
   DELINQUENCY: 'delinquency',
+  CASH_FLOW: 'cash-flow',
+  CASH_FLOW_SCENARIOS: 'cash-flow-scenarios',
+  CASH_ALERTS: 'cash-alerts',
 } as const;
 
 export interface PermissionDefinition {
@@ -317,6 +320,28 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...build('M08', RESOURCES.DELINQUENCY, [
     { action: A.READ, description: 'Consultar inadimplência e aging da carteira' },
   ]),
+  // M14 — Fluxo de Caixa e Planejamento (RF-101 a RF-105).
+  //
+  // Ler o fluxo é ler a posição de caixa da empresa inteira — mais do que
+  // consultar títulos, e por isso recurso próprio. Planejar (cenários) e ser
+  // avisado (alertas) também se separam: um simula o futuro sem tocar em nada,
+  // o outro define quando a empresa é interrompida por falta de caixa, e afrouxar
+  // o segundo é a maneira silenciosa de fazer o aviso parar de sair.
+  ...build('M14', RESOURCES.CASH_FLOW, [
+    { action: A.READ, description: 'Consultar o fluxo de caixa consolidado e projetado' },
+  ]),
+  ...build('M14', RESOURCES.CASH_FLOW_SCENARIOS, [
+    { action: A.CREATE, description: 'Criar cenários e projeções de fluxo de caixa' },
+    { action: A.READ, description: 'Consultar cenários e projeções' },
+    { action: A.UPDATE, description: 'Editar cenários e suas premissas' },
+    { action: A.DELETE, description: 'Remover cenários e projeções' },
+  ]),
+  ...build('M14', RESOURCES.CASH_ALERTS, [
+    { action: A.CREATE, description: 'Configurar alertas de insuficiência de caixa' },
+    { action: A.READ, description: 'Consultar alertas de caixa e suas ocorrências' },
+    { action: A.UPDATE, description: 'Editar alertas de insuficiência de caixa' },
+    { action: A.DELETE, description: 'Desativar alertas de insuficiência de caixa' },
+  ]),
 ];
 
 /** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
@@ -485,4 +510,16 @@ export const PERMISSIONS = {
   RECURRENCES_DELETE: permissionCode(RESOURCES.RECURRENCES, A.DELETE),
 
   DELINQUENCY_READ: permissionCode(RESOURCES.DELINQUENCY, A.READ),
+
+  CASH_FLOW_READ: permissionCode(RESOURCES.CASH_FLOW, A.READ),
+
+  CASH_FLOW_SCENARIOS_CREATE: permissionCode(RESOURCES.CASH_FLOW_SCENARIOS, A.CREATE),
+  CASH_FLOW_SCENARIOS_READ: permissionCode(RESOURCES.CASH_FLOW_SCENARIOS, A.READ),
+  CASH_FLOW_SCENARIOS_UPDATE: permissionCode(RESOURCES.CASH_FLOW_SCENARIOS, A.UPDATE),
+  CASH_FLOW_SCENARIOS_DELETE: permissionCode(RESOURCES.CASH_FLOW_SCENARIOS, A.DELETE),
+
+  CASH_ALERTS_CREATE: permissionCode(RESOURCES.CASH_ALERTS, A.CREATE),
+  CASH_ALERTS_READ: permissionCode(RESOURCES.CASH_ALERTS, A.READ),
+  CASH_ALERTS_UPDATE: permissionCode(RESOURCES.CASH_ALERTS, A.UPDATE),
+  CASH_ALERTS_DELETE: permissionCode(RESOURCES.CASH_ALERTS, A.DELETE),
 } as const;

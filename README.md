@@ -13,7 +13,7 @@ consumido pela API — Swagger em `/api/docs`.
 
 - [`bd/`](bd) — **modelo físico PostgreSQL** (schema `gestao`), fonte da verdade
   do banco: M01 a M18, RLS multiempresa, triggers de auditoria e regras de negócio.
-- [`backend/`](backend/README.md) — API REST (NestJS). Sprints 1 a 6 implementadas.
+- [`backend/`](backend/README.md) — API REST (NestJS). Sprints 1 a 7 implementadas.
 - `docs/` — ERS e planejamento de sprints.
 
 ## Banco de dados
@@ -32,6 +32,7 @@ Ordem de execução dos scripts (a partir de `bd/`):
 | `07_parceiros_produtos_sprint4.sql` | M04/M05: papéis de cliente/fornecedor, FKs multiempresa e regras do catálogo | `gestao_owner` |
 | `08_estoque_sprint5.sql` | M05: razão append-only, custo médio ponderado, saldo não negativo e inventário | `gestao_owner` |
 | `09_financeiro_sprint6.sql` | M08: numeração de títulos, parcelas que somam o título, encargos, aprovação e baixa append-only | `gestao_owner` |
+| `10_fluxo_caixa_sprint7.sql` | M14: fluxo consolidado (realizado, previsto e vencido), cenários com premissas, projeção manual e alerta de caixa | `gestao_owner` |
 | `99_smoke_test.sql` | Exercita estoque, títulos e partidas dobradas | `gestao_owner` |
 
 ```bash
@@ -45,6 +46,7 @@ psql -U gestao_owner -h localhost -d gestao_empresarial -f 06_rh_sprint3.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 07_parceiros_produtos_sprint4.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 08_estoque_sprint5.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 09_financeiro_sprint6.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 10_fluxo_caixa_sprint7.sql
 ```
 
 No Windows, `bd/instalar-bd.ps1` executa toda a sequência acima — inclusive o
@@ -53,7 +55,7 @@ drop. Ele pede confirmação (digitar o nome do banco) quando o banco já existe
 
 Para levar um banco **já existente** até a sprint atual **sem perder os dados**,
 use o modo de atualização: ele não apaga nada, não pede a senha do superusuário
-e reaplica só os scripts de ajuste (`04` a `09`), que são idempotentes.
+e reaplica só os scripts de ajuste (`04` a `10`), que são idempotentes.
 
 ```bash
 pwsh bd/instalar-bd.ps1 -Atualizar
@@ -64,7 +66,7 @@ Depois, em `backend/`: `npm run db:seed` (permissões novas) e `npm run db:check
 > ⚠️ `00_setup_banco.sql` **apaga** o banco `gestao_empresarial` e as roles
 > `app_gestao`/`sge_api` antes de recriar. Os scripts `01` a `03` montam o schema
 > do zero — não são migrações e não se aplicam sobre um banco já existente. Os
-> scripts `04` a `09` são ajustes idempotentes: esses, sim, podem ser reaplicados
+> scripts `04` a `10` são ajustes idempotentes: esses, sim, podem ser reaplicados
 > sobre um banco com dados (é o que faz `instalar-bd.ps1 -Atualizar`).
 
 Não rode os scripts como superusuário: superusuário ignora RLS e o isolamento
@@ -109,6 +111,12 @@ classificação por categoria, conta contábil e centro de custo, controle de
 vencimento, juros, multa e descontos, aprovação por alçada, pagamento e
 recebimento total ou parcial com estorno, e acompanhamento de inadimplência
 (RF-051 a RF-058).
+
+**Sprint 7** — Fluxo de Caixa e Planejamento (M14): consolidação das entradas e
+saídas previstas e realizadas, projeção por dia, semana ou mês com saldo
+acumulado, separação entre realizado, previsto e vencido, cenários com premissas
+e movimentos projetados à mão, e alerta de insuficiência de caixa
+(RF-101 a RF-105).
 
 ## Fase 9 — Interface Web (Sprints 18 a 24)
 

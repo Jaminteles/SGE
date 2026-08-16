@@ -1,4 +1,4 @@
-# SGE — Backend (Fases 1 e 2 completas; Fase 3 em andamento)
+# SGE — Backend (Fases 1 a 3 completas)
 
 Backend do **Sistema de Gestão Empresarial e Financeira**, implementado conforme a
 stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
@@ -27,6 +27,11 @@ stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
   centro de custo, vencimento com juros, multa e desconto, aprovação por alçada,
   pagamento e recebimento total ou parcial com estorno, posição da carteira e
   inadimplência (RF-051 a RF-058).
+- **Sprint 7 — M14 (Fluxo de Caixa e Planejamento)**: consolidação de entradas e
+  saídas previstas e realizadas, projeção por dia, semana ou mês com saldo
+  acumulado, separação entre realizado, previsto e vencido, cenários com
+  premissas e movimentos digitados, e alerta de insuficiência de caixa
+  (RF-101 a RF-105).
 
 ## Banco de dados
 
@@ -123,7 +128,7 @@ associações, mas não são editáveis pela API.
 
 `gestao.permissao` não tem coluna de código: a chave é a tripla
 (`modulo`, `recurso`, `acao`). A API deriva o código `recurso:AÇÃO` e grava seu
-catálogo com `modulo` = `M01`/`M02`/`M03`/`M04`/`M05`/`M08`/`M16`. As permissões em
+catálogo com `modulo` = `M01`/`M02`/`M03`/`M04`/`M05`/`M08`/`M14`/`M16`. As permissões em
 português da carga inicial de `bd/03` continuam lá, reservadas para os módulos
 das próximas sprints.
 
@@ -133,7 +138,8 @@ Vínculos feitos pelo seed nos perfis de sistema:
 | --- | --- | --- |
 | RH | Todo o M03 | `reimbursements:APPROVE` — quem lança a despesa não decide sobre ela (RN-003) |
 | COMPRAS | M04 e o catálogo do M05 | `partner-bank-accounts:*` — quem negocia o preço não redireciona o crédito; `stock-movements:*` e `inventories:*` — quem compra não dá baixa no que chegou |
-| FINANCEIRO | Todo o M08, `partner-bank-accounts:*`, leitura de parceiros, histórico, condições, `stock:READ` e `stock-valuation:READ` | `financial-entries:APPROVE` — quem lança o título não decide sobre ele (RN-003); escrita do cadastro comercial e do estoque |
+| FINANCEIRO | Todo o M08, `partner-bank-accounts:*`, leitura de parceiros, histórico, condições, `stock:READ`, `stock-valuation:READ`, `cash-flow:READ` e leitura de cenários e alertas | `financial-entries:APPROVE` — quem lança o título não decide sobre ele (RN-003); escrita do cadastro comercial e do estoque; escrita de cenário e alerta — afrouxar o próprio saldo mínimo é apagar o aviso |
+| DIRETOR | Todo o M14 (fluxo, cenários e alertas) + leitura de títulos, baixas e inadimplência | Escrita no M08 — quem planeja o caixa não lança nem baixa título |
 | OPERACIONAL | Catálogo, locais, movimentação e contagem do M05 | M04 — catálogo não implica acesso a parceiros; `inventories:APPROVE` — quem conta não homologa a própria diferença (RN-003); `stock-valuation:READ` — valor do ativo é leitura financeira |
 
 ## Mapa de requisitos → endpoints
@@ -188,6 +194,11 @@ Vínculos feitos pelo seed nos perfis de sistema:
 | RF-056 | Controlar aprovação | `POST /financial-entries/:id/submit`, `/approve`, `/reject` + `/approval-thresholds` (operação `TITULO_PAGAR`/`TITULO_RECEBER`) |
 | RF-057 | Pagamento/recebimento total ou parcial | `POST /financial-entries/:id/installments/:installmentId/settlements` e `.../:settlementId/reverse` |
 | RF-058 | Inadimplência e histórico | `GET /delinquency` (view `vw_inadimplencia`), `GET /installments?overdueOnly=true`, `GET /partners/:id/history` |
+| RF-101 | Consolidar entradas e saídas previstas e realizadas | `GET /cash-flow/summary` (view `vw_fluxo_caixa_diario`) |
+| RF-102 | Projetar fluxo por período | `GET /cash-flow/projection?granularity=DIA\|SEMANA\|MES` |
+| RF-103 | Separar realizado, previsto e vencido | `bySituation` no summary e `inflow`/`outflow` por situação na projeção |
+| RF-104 | Criar cenários e projeções | `/cash-flow/scenarios` (CRUD) + `/cash-flow/scenarios/:id/projections`; `?scenarioId=` na projeção |
+| RF-105 | Alertar insuficiência de caixa | `/cash-flow/alerts` (CRUD), `GET /cash-flow/alerts/evaluation`, `GET /cash-flow/balance` |
 
 ## Contrato da API — pontos de atenção
 
@@ -375,6 +386,51 @@ no meio da criação. A data da próxima ocorrência é calculada pelo banco
 (`fn_proxima_ocorrencia`), que é onde "todo dia 31" sabe o que fazer em
 fevereiro.
 
+### M14 — Fluxo de Caixa: o que existe e o que é calculado
+
+O fluxo de caixa **não é uma tabela**. `GET /cash-flow/summary` e
+`GET /cash-flow/projection` são agregações de `vw_fluxo_caixa` (`bd/10`), que
+projeta títulos e baixas do M08. "Quanto entra em novembro" muda a cada baixa
+registrada — um número gravado ontem estaria errado hoje sem que ninguém tivesse
+errado nada. Só o planejamento tem tabela própria: cenário, projeção digitada e
+configuração de alerta.
+
+| Situação | De onde vem | Datado em |
+| --- | --- | --- |
+| `REALIZADO` | Baixa viva (nem estornada, nem lançamento de estorno) | `data_baixa` — o dia em que o dinheiro andou |
+| `VENCIDO` | Parcela em aberto com vencimento no passado | `data_vencimento` |
+| `PREVISTO` | Parcela em aberto com vencimento hoje ou à frente | `data_vencimento` |
+
+Título pendente de aprovação (RF-056) fica **fora** da projeção: não pode ser
+pago, e planejar caixa com ele é planejar com dinheiro que talvez nunca saia.
+
+| Regra | Onde vale |
+| --- | --- |
+| Um cenário base por empresa | Índice parcial `ux_cenario_base` + despromoção do anterior na mesma transação |
+| Premissa só pode ser `entradas_percentual`/`saidas_percentual`, numérica, entre -100 e 100 | DTO + trigger `trg_valida_premissas_cenario` (`bd/10`) |
+| Projeção manual exige cenário, cai dentro da janela dele e é sempre `PREVISTO` | Service + trigger `trg_valida_projecao_manual` |
+| Valor da projeção é positivo — a direção vem do tipo | Service + trigger |
+| Encurtar a janela do cenário com projeção fora dela é recusado | Service (409) |
+| Um alerta ativo por caixa (conta ou empresa) | Índices parciais `ux_alerta_caixa_conta`/`ux_alerta_caixa_empresa` |
+| Horizonte do alerta entre 1 e 180 dias | DTO + `ck_alerta_caixa_antecedencia` |
+
+**Projeção e saldo acumulado.** Sem cenário, o saldo parte do caixa de hoje
+(`fn_saldo_caixa_atual`) e a janela precisa começar hoje ou depois — somar de
+novo o realizado de agosto sobre um saldo que já o contém daria um saldo
+projetado errado, e errado para mais. O passado se consulta em
+`/cash-flow/summary`. Com cenário, a origem é o saldo inicial **declarado nele**,
+e por isso a janela pode começar no passado.
+
+As premissas ajustam apenas o que ainda não aconteceu (previsto e vencido): o
+realizado é extrato, não expectativa.
+
+**Alerta (RF-105).** A configuração é gravada; o disparo, não — avaliar é
+caminhar o saldo dia a dia dentro do horizonte. A resposta destaca o **primeiro**
+dia de ruptura: saber que faltará dinheiro em algum momento dos próximos 60 dias
+não muda decisão nenhuma; saber que falta na terça, sim. Enquanto o M09 (Sprint
+10) não liga baixa a conta bancária, a conta informada no alerta define só o
+saldo de partida — a projeção dos movimentos é da empresa inteira.
+
 ### M03 — o que o cadastro não deixa você escrever
 
 | Campo | Quem escreve | Por quê |
@@ -443,7 +499,8 @@ estrita, para não vazar atividade entre empresas.
   isolamento, CPF/CNPJ, máquina de estados e alçada do reembolso, armazenamento
   de comprovantes, papéis do parceiro, consistência do catálogo, movimentação e
   transferência de estoque, máquina de estados do inventário, parcelamento,
-  liquidação com trava de saldo, estorno e geração de recorrências).
+  liquidação com trava de saldo, estorno, geração de recorrências, saldo
+  acumulado da projeção, premissas de cenário e ruptura do alerta de caixa).
 - **Financeiro (Sprint 6)**: `titulo_baixa` é append-only nas mesmas três camadas
   da trilha de auditoria — ausência de rota de escrita, trigger que rejeita
   `UPDATE`/`DELETE` e retirada do privilégio da role da aplicação. A marcação de
@@ -457,7 +514,13 @@ estrita, para não vazar atividade entre empresas.
   mesmas três camadas da trilha de auditoria. Movimentar, valorizar e concluir
   inventário são recursos de permissão separados — quem opera o depósito não
   homologa a diferença nem lê o valor do ativo.
-- **RN-001 estrutural (Sprints 3 a 6)**: as referências do M03, M04, M05 e M08 usam **FK composta**
+- **Fluxo de caixa (Sprint 7)**: o consolidado é leitura derivada — não há rota
+  que escreva movimento de caixa, e o que se grava (cenário, projeção digitada,
+  alerta) é auditado por trigger. Ler o fluxo, planejar e configurar alerta são
+  recursos separados: quem opera o caixa enxerga o aviso mas não muda o saldo
+  mínimo que o dispara, porque afrouxar o próprio alerta é a maneira silenciosa
+  de fazer o aviso parar de sair.
+- **RN-001 estrutural (Sprints 3 a 7)**: as referências do M03, M04, M05, M08 e M14 usam **FK composta**
   `(empresa_id, <coluna>)`. A verificação de chave estrangeira roda no sistema,
   sem RLS: sem isso, um defeito na API poderia vincular funcionário da empresa A
   ao centro de custo da empresa B. Como FK composta não aceita `ON DELETE SET

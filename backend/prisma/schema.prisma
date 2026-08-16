@@ -1,7 +1,9 @@
 // SGE - Sistema de Gestão Empresarial e Financeira
 // Sprint 1 (M01/M02), Sprint 2 (M16 Auditoria), Sprint 3 (M03 Funcionários e RH),
-// Sprint 4 (M04 Clientes/Fornecedores + M05 Produtos e Serviços) e
-// Sprint 5 (M05 Estoque: locais, saldos, movimentação e inventário)
+// Sprint 4 (M04 Clientes/Fornecedores + M05 Produtos e Serviços),
+// Sprint 5 (M05 Estoque: locais, saldos, movimentação e inventário),
+// Sprint 6 (M08 Contas a Pagar e Receber) e
+// Sprint 7 (M14 Fluxo de Caixa e Planejamento)
 //
 // IMPORTANTE: este schema NÃO é dono do banco. O modelo físico vive em `bd/*.sql`
 // (schema `gestao`, PostgreSQL 14+) e é a fonte da verdade. Aqui há apenas o
@@ -262,6 +264,8 @@ model User {
   stockMovements   StockMovement[]
   financialEntries FinancialEntry[]
   settlements      Settlement[]
+  cashScenarios    CashFlowScenario[]
+  cashAlerts       CashAlert[]
 
   @@map("usuario")
 }
@@ -397,6 +401,8 @@ model Company {
   costCenters        CostCenter[]
   settings           CompanySetting[]
   approvalThresholds ApprovalThreshold[]
+  cashScenarios      CashFlowScenario[]
+  cashAlerts         CashAlert[]
   tenantAddresses    Address[]           @relation("EnderecoTenant")
   addresses          Address[]           @relation("EnderecoDaEmpresa")
 
@@ -474,6 +480,7 @@ model Category {
 
   financialEntries FinancialEntry[]
   recurrences      Recurrence[]
+  cashProjections  CashFlowProjection[]
 
   @@unique([companyId, code], map: "uq_categoria_financeira_codigo")
   @@map("categoria_financeira")
@@ -498,6 +505,7 @@ model CostCenter {
 
   financialEntries FinancialEntry[]
   recurrences      Recurrence[]
+  cashProjections  CashFlowProjection[]
 
   @@unique([companyId, code], map: "uq_centro_custo_codigo")
   @@map("centro_custo")
@@ -1360,6 +1368,103 @@ model Settlement {
   createdAt       DateTime             @default(now()) @map("criado_em") @db.Timestamptz(6)
 
   @@map("titulo_baixa")
+}
+
+// ---------------------------------------------------------------------------
+// M14 — Fluxo de Caixa e Planejamento (RF-101 a RF-105)
+//
+// O fluxo consolidado **não** tem modelo aqui: ele é a visão `vw_fluxo_caixa`
+// (bd/10), lida por query bruta. Só o que um humano decide é gravado — o
+// cenário, as projeções que ele digita e a configuração do alerta.
+// ---------------------------------------------------------------------------
+
+/// Situação de um movimento no fluxo de caixa (RF-103) — `enum_realizacao`.
+///
+/// REALIZADO é baixa viva; VENCIDO e PREVISTO são parcela em aberto antes e
+/// depois de hoje. Só PREVISTO pode ser digitado (bd/10).
+enum Realization {
+  PREVISTO
+  REALIZADO
+  VENCIDO
+
+  @@map("enum_realizacao")
+}
+
+/// gestao.cenario_fluxo_caixa — janela de planejamento com premissas (RF-104).
+///
+/// `assumptions` aceita apenas `entradas_percentual` e `saidas_percentual`,
+/// numéricos entre -100 e 100, validados por trigger (bd/10). Só um cenário
+/// por empresa pode ser `isBaseline`.
+model CashFlowScenario {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String   @map("empresa_id") @db.Uuid
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name           String   @map("nome") @db.VarChar(120)
+  description    String?  @map("descricao")
+  startDate      DateTime @map("data_inicio") @db.Date
+  endDate        DateTime @map("data_fim") @db.Date
+  /// Caixa no primeiro dia da janela: o ponto de partida do saldo acumulado.
+  openingBalance Decimal  @default(0) @map("saldo_inicial") @db.Decimal(18, 2)
+  assumptions    Json     @default("{}") @map("premissas")
+  isBaseline     Boolean  @default(false) @map("base")
+  createdById    String?  @map("criado_por") @db.Uuid
+  createdBy      User?    @relation(fields: [createdById], references: [id])
+  createdAt      DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  projections CashFlowProjection[]
+
+  @@map("cenario_fluxo_caixa")
+}
+
+/// gestao.projecao_fluxo_caixa — movimento digitado dentro de um cenário (RF-104).
+///
+/// Sempre manual, sempre PREVISTO e sempre dentro da janela do cenário: o que o
+/// sistema calcula não passa por aqui (bd/10).
+model CashFlowProjection {
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId     String           @map("empresa_id") @db.Uuid
+  scenarioId    String           @map("cenario_id") @db.Uuid
+  scenario      CashFlowScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  referenceDate DateTime         @map("data_referencia") @db.Date
+  type          EntryType        @map("tipo")
+  situation     Realization      @default(PREVISTO) @map("situacao")
+  categoryId    String?          @map("categoria_financeira_id") @db.Uuid
+  category      Category?        @relation(fields: [categoryId], references: [id])
+  costCenterId  String?          @map("centro_custo_id") @db.Uuid
+  costCenter    CostCenter?      @relation(fields: [costCenterId], references: [id])
+  /// Sempre positivo — a direção vem de `type` (PAGAR sai, RECEBER entra).
+  amount        Decimal          @map("valor") @db.Decimal(18, 2)
+  description   String?          @map("descricao") @db.VarChar(255)
+  isManual      Boolean          @default(true) @map("manual")
+  createdAt     DateTime         @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  @@index([scenarioId, referenceDate], map: "ix_projecao_cenario")
+  @@map("projecao_fluxo_caixa")
+}
+
+/// gestao.alerta_caixa — configuração do aviso de insuficiência (RF-105).
+///
+/// `bankAccountId` aponta para `gestao.conta_bancaria` (M09, Sprint 10) sem
+/// relação declarada: até lá a conta só define de onde vem o saldo inicial, e
+/// mapear o modelo inteiro traria um módulo que a API ainda não expõe.
+model CashAlert {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String   @map("empresa_id") @db.Uuid
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name           String   @map("nome") @db.VarChar(120)
+  /// Nulo = caixa da empresa (soma das contas ativas).
+  bankAccountId  String?  @map("conta_bancaria_id") @db.Uuid
+  minimumBalance Decimal  @default(0) @map("saldo_minimo") @db.Decimal(18, 2)
+  /// Horizonte da projeção, em dias (1 a 180 — bd/10).
+  daysAhead      Int      @default(7) @map("dias_antecedencia") @db.SmallInt
+  isActive       Boolean  @default(true) @map("ativo")
+  createdById    String?  @map("criado_por") @db.Uuid
+  createdBy      User?    @relation(fields: [createdById], references: [id])
+  createdAt      DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  @@map("alerta_caixa")
 }
 
 // ---------------------------------------------------------------------------

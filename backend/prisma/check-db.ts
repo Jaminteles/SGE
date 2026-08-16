@@ -112,9 +112,9 @@ async function main(): Promise<void> {
     `,
   );
   checks.push({
-    label: 'referências de cadastro presas à empresa (bd/06 a bd/09)',
-    ok: Number(tenantFks?.n ?? 0) >= 63,
-    detail: `${Number(tenantFks?.n ?? 0)} FKs compostas (esperado ≥ 63) — rode bd/06 a bd/09`,
+    label: 'referências de cadastro presas à empresa (bd/06 a bd/10)',
+    ok: Number(tenantFks?.n ?? 0) >= 67,
+    detail: `${Number(tenantFks?.n ?? 0)} FKs compostas (esperado ≥ 67) — rode bd/06 a bd/10`,
   });
 
   const hrTriggers = await scalar(
@@ -244,13 +244,44 @@ async function main(): Promise<void> {
     detail: `${Number(portfolioViews?.n ?? 0)} visões de 2 — rode bd/09_financeiro_sprint6.sql`,
   });
 
+  // Sprint 7 (M14): sem os triggers, o cenário aceita premissa desconhecida e a
+  // projeção manual escapa da janela que a define; sem as visões, o fluxo
+  // consolidado não existe para a API.
+  const cashFlowRules = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_trigger
+       WHERE NOT tgisinternal
+         AND tgname IN ('trg_valida_premissas_cenario', 'trg_valida_projecao_manual',
+                        'trg_cenario_fluxo_caixa_auditoria', 'trg_projecao_fluxo_caixa_auditoria',
+                        'trg_alerta_caixa_auditoria')
+    `,
+  );
+  checks.push({
+    label: 'regras do planejamento aplicadas (bd/10)',
+    ok: Number(cashFlowRules?.n ?? 0) >= 5,
+    detail: `${Number(cashFlowRules?.n ?? 0)} triggers de 5 — rode bd/10_fluxo_caixa_sprint7.sql`,
+  });
+
+  const cashFlowViews = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_views
+       WHERE schemaname = 'gestao'
+         AND viewname IN ('vw_fluxo_caixa', 'vw_fluxo_caixa_diario')
+    `,
+  );
+  checks.push({
+    label: 'fluxo de caixa consolidado disponível (RF-101 a RF-103)',
+    ok: Number(cashFlowViews?.n ?? 0) >= 2,
+    detail: `${Number(cashFlowViews?.n ?? 0)} visões de 2 — rode bd/10_fluxo_caixa_sprint7.sql`,
+  });
+
   const permissions = await prisma.permission.count({
-    where: { module: { in: ['M01', 'M02', 'M03', 'M04', 'M05', 'M08', 'M16'] } },
+    where: { module: { in: ['M01', 'M02', 'M03', 'M04', 'M05', 'M08', 'M14', 'M16'] } },
   });
   checks.push({
     label: 'catálogo de permissões da API carregado',
     ok: permissions > 0,
-    detail: `${permissions} permissões M01/M02/M03/M04/M05/M08/M16 — rode npm run db:seed`,
+    detail: `${permissions} permissões M01/M02/M03/M04/M05/M08/M14/M16 — rode npm run db:seed`,
   });
 
   const admins = await prisma.user.count({ where: { isSuperAdmin: true, isActive: true } });
