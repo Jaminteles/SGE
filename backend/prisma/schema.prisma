@@ -2,8 +2,9 @@
 // Sprint 1 (M01/M02), Sprint 2 (M16 Auditoria), Sprint 3 (M03 Funcionários e RH),
 // Sprint 4 (M04 Clientes/Fornecedores + M05 Produtos e Serviços),
 // Sprint 5 (M05 Estoque: locais, saldos, movimentação e inventário),
-// Sprint 6 (M08 Contas a Pagar e Receber) e
-// Sprint 7 (M14 Fluxo de Caixa e Planejamento)
+// Sprint 6 (M08 Contas a Pagar e Receber),
+// Sprint 7 (M14 Fluxo de Caixa e Planejamento) e
+// Sprint 8 (M06 Compras: pedidos, aprovação, recebimento e conferência)
 //
 // IMPORTANTE: este schema NÃO é dono do banco. O modelo físico vive em `bd/*.sql`
 // (schema `gestao`, PostgreSQL 14+) e é a fonte da verdade. Aqui há apenas o
@@ -266,6 +267,10 @@ model User {
   settlements      Settlement[]
   cashScenarios    CashFlowScenario[]
   cashAlerts       CashAlert[]
+  purchaseOrders   PurchaseOrder[]      @relation("PedidoSolicitante")
+  purchasesCreated PurchaseOrder[]      @relation("PedidoCriador")
+  purchasesDecided PurchaseOrder[]      @relation("PedidoAprovador")
+  receiptsChecked  GoodsReceipt[]       @relation("RecebimentoConferente")
 
   @@map("usuario")
 }
@@ -428,6 +433,8 @@ model Branch {
   memberships      Membership[]
   stockLocations   StockLocation[]
   financialEntries FinancialEntry[]
+  purchaseOrders   PurchaseOrder[]
+  receipts         GoodsReceipt[]
 
   @@unique([companyId, code], map: "uq_filial_codigo")
   @@map("filial")
@@ -481,6 +488,7 @@ model Category {
   financialEntries FinancialEntry[]
   recurrences      Recurrence[]
   cashProjections  CashFlowProjection[]
+  purchaseOrders   PurchaseOrder[]
 
   @@unique([companyId, code], map: "uq_categoria_financeira_codigo")
   @@map("categoria_financeira")
@@ -506,6 +514,8 @@ model CostCenter {
   financialEntries FinancialEntry[]
   recurrences      Recurrence[]
   cashProjections  CashFlowProjection[]
+  purchaseOrders   PurchaseOrder[]
+  purchaseItems    PurchaseOrderItem[]
 
   @@unique([companyId, code], map: "uq_centro_custo_codigo")
   @@map("centro_custo")
@@ -639,6 +649,7 @@ model Employee {
   payrollItems     EmployeePayrollItem[]
   reimbursements   Reimbursement[]
   financialEntries FinancialEntry[]
+  purchaseOrders   PurchaseOrder[]
 
   @@unique([companyId, registration], map: "uq_funcionario_matricula")
   @@unique([companyId, taxId], map: "uq_funcionario_cpf")
@@ -858,6 +869,7 @@ model Partner {
   products         ProductSupplier[]
   financialEntries FinancialEntry[]
   recurrences      Recurrence[]
+  purchaseOrders   PurchaseOrder[]
 
   @@map("parceiro")
 }
@@ -937,6 +949,7 @@ model PaymentMethod {
   suppliers        Supplier[]
   financialEntries FinancialEntry[]
   settlements      Settlement[]
+  purchaseOrders   PurchaseOrder[]
 
   @@unique([companyId, code], map: "uq_forma_pagamento")
   @@map("forma_pagamento")
@@ -959,6 +972,7 @@ model PaymentTerm {
   customers        Customer[]
   suppliers        Supplier[]
   financialEntries FinancialEntry[]
+  purchaseOrders   PurchaseOrder[]
 
   @@unique([companyId, code], map: "uq_condicao_pagamento")
   @@map("condicao_pagamento")
@@ -1041,6 +1055,8 @@ model Product {
   balances       StockBalance[]
   movements      StockMovement[]
   inventoryItems InventoryItem[]
+  purchaseItems  PurchaseOrderItem[]
+  receiptItems   GoodsReceiptItem[]
 
   @@unique([companyId, code], map: "uq_produto_codigo")
   @@map("produto")
@@ -1086,9 +1102,11 @@ model StockLocation {
   createdAt DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
 
   balances      StockBalance[]
-  movements     StockMovement[] @relation("MovimentoLocal")
-  counterpartOf StockMovement[] @relation("MovimentoContraparte")
+  movements     StockMovement[]     @relation("MovimentoLocal")
+  counterpartOf StockMovement[]     @relation("MovimentoContraparte")
   inventories   Inventory[]
+  purchaseItems PurchaseOrderItem[]
+  receipts      GoodsReceipt[]
 
   @@unique([companyId, code], map: "uq_local_estoque")
   @@map("local_estoque")
@@ -1274,9 +1292,12 @@ model FinancialEntry {
   paymentMethod     PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
   paymentTermId     String?        @map("condicao_pagamento_id") @db.Uuid
   paymentTerm       PaymentTerm?   @relation(fields: [paymentTermId], references: [id])
-  /// MANUAL | RECORRENCIA | REEMBOLSO | DOCUMENTO_FISCAL | PEDIDO_COMPRA.
+  /// MANUAL | RECORRENCIA | REEMBOLSO | RECEBIMENTO | DOCUMENTO_FISCAL.
   origin            String?        @map("origem_tipo") @db.VarChar(40)
   originId          String?        @map("origem_id") @db.Uuid
+  /// Pedido que deu causa ao título (RF-041). O `originId` guarda o recebimento.
+  purchaseOrderId   String?        @map("pedido_compra_id") @db.Uuid
+  purchaseOrder     PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
   recurrenceId      String?        @map("recorrencia_id") @db.Uuid
   recurrence        Recurrence?    @relation(fields: [recurrenceId], references: [id])
   status            EntryStatus    @default(ABERTO) @map("status")
@@ -1468,23 +1489,162 @@ model CashAlert {
 }
 
 // ---------------------------------------------------------------------------
-// Projeção somente leitura para o histórico do parceiro (RF-025)
+// M06 — Compras (RF-036 a RF-042)
 //
-// A tabela pertence a um módulo de sprint futura (M06 Compras). O mapeamento
-// cobre apenas as colunas que o resumo consulta.
+// `pedido_compra` é o documento; `recebimento` é o fato. Como no razão de
+// estoque e nas baixas, a projeção não é gravável pela API: o total do pedido, a
+// quantidade recebida do item, o status do pedido e as marcas de "gerou
+// estoque"/"gerou financeiro" são mantidos por trigger (bd/11), e a role da
+// aplicação não tem UPDATE/DELETE sobre `recebimento`/`recebimento_item`.
 // ---------------------------------------------------------------------------
 
-/// gestao.pedido_compra — pedido de compra. Leitura no histórico do parceiro.
+/// gestao.pedido_compra — pedido de compra (RF-036 a RF-038, RF-041).
+///
+/// `number`, `productsAmount` e `totalAmount` são escritos pelo banco:
+/// numeração sequencial (`fn_proximo_numero_pedido_compra`) e projeção dos itens
+/// com o rateio das despesas (bd/11). A API não os envia.
 model PurchaseOrder {
-  id          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId   String              @map("empresa_id") @db.Uuid
-  number      String              @map("numero") @db.VarChar(30)
-  partnerId   String              @map("parceiro_id") @db.Uuid
-  orderDate   DateTime            @map("data_pedido") @db.Date
-  totalAmount Decimal             @map("valor_total") @db.Decimal(18, 2)
-  status      PurchaseOrderStatus @map("status")
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId          String              @map("empresa_id") @db.Uuid
+  branchId           String?             @map("filial_id") @db.Uuid
+  branch             Branch?             @relation(fields: [branchId], references: [id])
+  number             String              @map("numero") @db.VarChar(30)
+  partnerId          String              @map("parceiro_id") @db.Uuid
+  partner            Partner             @relation(fields: [partnerId], references: [id])
+  /// Usuário que abriu o pedido — é ele que não pode aprová-lo (RN-003).
+  requesterId        String?             @map("solicitante_id") @db.Uuid
+  requester          User?               @relation("PedidoSolicitante", fields: [requesterId], references: [id])
+  buyerId            String?             @map("comprador_id") @db.Uuid
+  buyer              Employee?           @relation(fields: [buyerId], references: [id])
+  orderDate          DateTime            @default(now()) @map("data_pedido") @db.Date
+  expectedDate       DateTime?           @map("data_previsao_entrega") @db.Date
+  paymentTermId      String?             @map("condicao_pagamento_id") @db.Uuid
+  paymentTerm        PaymentTerm?        @relation(fields: [paymentTermId], references: [id])
+  paymentMethodId    String?             @map("forma_pagamento_id") @db.Uuid
+  paymentMethod      PaymentMethod?      @relation(fields: [paymentMethodId], references: [id])
+  costCenterId       String?             @map("centro_custo_id") @db.Uuid
+  costCenter         CostCenter?         @relation(fields: [costCenterId], references: [id])
+  categoryId         String?             @map("categoria_financeira_id") @db.Uuid
+  category           Category?           @relation(fields: [categoryId], references: [id])
+  productsAmount     Decimal             @default(0) @map("valor_produtos") @db.Decimal(18, 2)
+  discountAmount     Decimal             @default(0) @map("valor_desconto") @db.Decimal(18, 2)
+  freightAmount      Decimal             @default(0) @map("valor_frete") @db.Decimal(18, 2)
+  insuranceAmount    Decimal             @default(0) @map("valor_seguro") @db.Decimal(18, 2)
+  otherExpenseAmount Decimal             @default(0) @map("valor_outras_despesas") @db.Decimal(18, 2)
+  totalAmount        Decimal             @default(0) @map("valor_total") @db.Decimal(18, 2)
+  status             PurchaseOrderStatus @default(RASCUNHO) @map("status")
+  approvalStatus     ApprovalStatus      @default(NAO_REQUERIDA) @map("status_aprovacao")
+  approvedById       String?             @map("aprovado_por") @db.Uuid
+  approvedBy         User?               @relation("PedidoAprovador", fields: [approvedById], references: [id])
+  approvedAt         DateTime?           @map("aprovado_em") @db.Timestamptz(6)
+  note               String?             @map("observacao")
+  canceledAt         DateTime?           @map("cancelado_em") @db.Timestamptz(6)
+  cancelReason       String?             @map("motivo_cancelamento")
+  createdById        String?             @map("criado_por") @db.Uuid
+  createdBy          User?               @relation("PedidoCriador", fields: [createdById], references: [id])
+  createdAt          DateTime            @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt          DateTime            @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
+  items            PurchaseOrderItem[]
+  receipts         GoodsReceipt[]
+  financialEntries FinancialEntry[]
+
+  @@unique([companyId, number], map: "uq_pedido_compra_numero")
   @@map("pedido_compra")
+}
+
+/// gestao.pedido_compra_item — item negociado do pedido (RF-037).
+///
+/// `lineAmount`, `apportionedFreight` e `receivedQuantity` são projeção (bd/11):
+/// o primeiro sai de quantidade × preço − desconto, o segundo do rateio das
+/// despesas do cabeçalho e o terceiro dos recebimentos aceitos.
+model PurchaseOrderItem {
+  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId          String         @map("empresa_id") @db.Uuid
+  orderId            String         @map("pedido_compra_id") @db.Uuid
+  order              PurchaseOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sequence           Int            @map("sequencia") @db.SmallInt
+  productId          String?        @map("produto_id") @db.Uuid
+  product            Product?       @relation(fields: [productId], references: [id])
+  description        String         @map("descricao") @db.VarChar(255)
+  quantity           Decimal        @map("quantidade") @db.Decimal(18, 6)
+  receivedQuantity   Decimal        @default(0) @map("quantidade_recebida") @db.Decimal(18, 6)
+  unitPrice          Decimal        @map("preco_unitario") @db.Decimal(18, 6)
+  discountAmount     Decimal        @default(0) @map("valor_desconto") @db.Decimal(18, 2)
+  apportionedFreight Decimal        @default(0) @map("valor_frete_rateado") @db.Decimal(18, 2)
+  lineAmount         Decimal        @map("valor_total") @db.Decimal(18, 2)
+  costCenterId       String?        @map("centro_custo_id") @db.Uuid
+  costCenter         CostCenter?    @relation(fields: [costCenterId], references: [id])
+  locationId         String?        @map("local_estoque_id") @db.Uuid
+  location           StockLocation? @relation(fields: [locationId], references: [id])
+  note               String?        @map("observacao")
+
+  receiptItems GoodsReceiptItem[]
+
+  @@unique([orderId, sequence], map: "uq_pedido_compra_item")
+  @@map("pedido_compra_item")
+}
+
+/// gestao.recebimento — conferência de uma entrega (RF-039/RF-040).
+///
+/// Append-only: a API tem apenas SELECT e INSERT (bd/11). `hasDivergence`,
+/// `generatedStock` e `generatedPayable` são marcas projetadas por trigger — a
+/// última, do próprio título gerado, para que não possam mentir.
+model GoodsReceipt {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId        String         @map("empresa_id") @db.Uuid
+  branchId         String?        @map("filial_id") @db.Uuid
+  branch           Branch?        @relation(fields: [branchId], references: [id])
+  orderId          String?        @map("pedido_compra_id") @db.Uuid
+  order            PurchaseOrder? @relation(fields: [orderId], references: [id])
+  /// Documento fiscal da entrega (M07, Sprint 9): ainda não preenchido.
+  fiscalDocumentId String?        @map("documento_fiscal_id") @db.Uuid
+  number           String         @map("numero") @db.VarChar(30)
+  receivedAt       DateTime       @default(now()) @map("data_recebimento") @db.Timestamptz(6)
+  locationId       String?        @map("local_estoque_id") @db.Uuid
+  location         StockLocation? @relation(fields: [locationId], references: [id])
+  inspectorId      String?        @map("conferente_id") @db.Uuid
+  inspector        User?          @relation("RecebimentoConferente", fields: [inspectorId], references: [id])
+  hasDivergence    Boolean        @default(false) @map("possui_divergencia")
+  generatedStock   Boolean        @default(false) @map("gerou_estoque")
+  generatedPayable Boolean        @default(false) @map("gerou_financeiro")
+  note             String?        @map("observacao")
+  createdAt        DateTime       @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt        DateTime       @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  items GoodsReceiptItem[]
+
+  @@unique([companyId, number], map: "uq_recebimento_numero")
+  @@map("recebimento")
+}
+
+/// gestao.recebimento_item — linha conferida (RF-040).
+///
+/// `orderedQuantity`, `orderedPrice` e `divergenceType` são preenchidos pelo
+/// banco a partir do item do pedido: a divergência é apurada contra o que foi
+/// pedido, não contra o que quem digita a conferência informa.
+model GoodsReceiptItem {
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId          String             @map("empresa_id") @db.Uuid
+  receiptId          String             @map("recebimento_id") @db.Uuid
+  receipt            GoodsReceipt       @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  orderItemId        String?            @map("pedido_compra_item_id") @db.Uuid
+  orderItem          PurchaseOrderItem? @relation(fields: [orderItemId], references: [id])
+  productId          String?            @map("produto_id") @db.Uuid
+  product            Product?           @relation(fields: [productId], references: [id])
+  orderedQuantity    Decimal?           @map("quantidade_pedida") @db.Decimal(18, 6)
+  receivedQuantity   Decimal            @map("quantidade_recebida") @db.Decimal(18, 6)
+  orderedPrice       Decimal?           @map("preco_pedido") @db.Decimal(18, 6)
+  documentPrice      Decimal?           @map("preco_documento") @db.Decimal(18, 6)
+  /// Coluna gerada pelo banco (recebida − pedida): somente leitura.
+  quantityDivergence Decimal?           @map("divergencia_quantidade") @db.Decimal(18, 6)
+  /// QUANTIDADE | PRECO | AMBOS | NENHUMA — apurado por trigger (bd/11).
+  divergenceType     String?            @map("tipo_divergencia") @db.VarChar(40)
+  /// Linha recusada na conferência não abate o pedido nem entra no estoque.
+  accepted           Boolean            @default(true) @map("aceito")
+  note               String?            @map("observacao")
+
+  @@map("recebimento_item")
 }
 
 // ---------------------------------------------------------------------------

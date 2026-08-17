@@ -33,6 +33,7 @@ Ordem de execução dos scripts (a partir de `bd/`):
 | `08_estoque_sprint5.sql` | M05: razão append-only, custo médio ponderado, saldo não negativo e inventário | `gestao_owner` |
 | `09_financeiro_sprint6.sql` | M08: numeração de títulos, parcelas que somam o título, encargos, aprovação e baixa append-only | `gestao_owner` |
 | `10_fluxo_caixa_sprint7.sql` | M14: fluxo consolidado (realizado, previsto e vencido), cenários com premissas, projeção manual e alerta de caixa | `gestao_owner` |
+| `11_compras_sprint8.sql` | M06: numeração do pedido e do recebimento, total projetado dos itens com rateio de despesas, aprovação, recebimento append-only, divergências e histórico de preços | `gestao_owner` |
 | `99_smoke_test.sql` | Exercita estoque, títulos e partidas dobradas | `gestao_owner` |
 
 ```bash
@@ -47,6 +48,7 @@ psql -U gestao_owner -h localhost -d gestao_empresarial -f 07_parceiros_produtos
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 08_estoque_sprint5.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 09_financeiro_sprint6.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 10_fluxo_caixa_sprint7.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 11_compras_sprint8.sql
 ```
 
 No Windows, `bd/instalar-bd.ps1` executa toda a sequência acima — inclusive o
@@ -55,7 +57,7 @@ drop. Ele pede confirmação (digitar o nome do banco) quando o banco já existe
 
 Para levar um banco **já existente** até a sprint atual **sem perder os dados**,
 use o modo de atualização: ele não apaga nada, não pede a senha do superusuário
-e reaplica só os scripts de ajuste (`04` a `10`), que são idempotentes.
+e reaplica só os scripts de ajuste (`04` a `11`), que são idempotentes.
 
 ```bash
 pwsh bd/instalar-bd.ps1 -Atualizar
@@ -66,7 +68,7 @@ Depois, em `backend/`: `npm run db:seed` (permissões novas) e `npm run db:check
 > ⚠️ `00_setup_banco.sql` **apaga** o banco `gestao_empresarial` e as roles
 > `app_gestao`/`sge_api` antes de recriar. Os scripts `01` a `03` montam o schema
 > do zero — não são migrações e não se aplicam sobre um banco já existente. Os
-> scripts `04` a `10` são ajustes idempotentes: esses, sim, podem ser reaplicados
+> scripts `04` a `11` são ajustes idempotentes: esses, sim, podem ser reaplicados
 > sobre um banco com dados (é o que faz `instalar-bd.ps1 -Atualizar`).
 
 Não rode os scripts como superusuário: superusuário ignora RLS e o isolamento
@@ -117,6 +119,14 @@ saídas previstas e realizadas, projeção por dia, semana ou mês com saldo
 acumulado, separação entre realizado, previsto e vencido, cenários com premissas
 e movimentos projetados à mão, e alerta de insuficiência de caixa
 (RF-101 a RF-105).
+
+## Fase 4 — Compras e Documentos
+
+**Sprint 8** — Compras (M06): pedidos de compra com itens, quantidades, preços,
+descontos e frete rateado, submissão a aprovação por alçada, recebimento total
+ou parcial com conferência de quantidade e preço, vínculo do pedido com
+fornecedor, estoque e financeiro, e histórico de compras e de preços
+(RF-036 a RF-042).
 
 ## Fase 9 — Interface Web (Sprints 18 a 24)
 

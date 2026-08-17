@@ -11,12 +11,12 @@
       1. valida que o psql esta acessivel
       2. derruba o banco e as roles da aplicacao (app_gestao, sge_api)
       3. cria/atualiza a role gestao_owner e cria o banco
-      4. roda 01 a 10 (schema, integracao, auditoria, RH, parceiros, catalogo,
-         estoque, financeiro e fluxo de caixa)
+      4. roda 01 a 11 (schema, integracao, auditoria, RH, parceiros, catalogo,
+         estoque, financeiro, fluxo de caixa e compras)
       5. opcionalmente roda 99_smoke_test.sql
 
     Atualizacao (-Atualizar) -- PRESERVA os dados. Nao apaga nada e nao pede a
-    senha do superusuario: roda apenas os scripts de ajuste (04 a 10), que sao
+    senha do superusuario: roda apenas os scripts de ajuste (04 a 11), que sao
     idempotentes e reaplicaveis. E o caminho para levar um banco de uma sprint
     anterior ate a atual sem perder o que ja foi cadastrado.
 
@@ -26,7 +26,7 @@
     Nome do banco a recriar (ou a atualizar). Padrao: gestao_empresarial
 
 .PARAMETER Atualizar
-    Aplica so os scripts de ajuste (04 a 10) sobre um banco existente, sem
+    Aplica so os scripts de ajuste (04 a 11) sobre um banco existente, sem
     apagar dados. Incompativel com -Forcar.
 
 .PARAMETER Forcar
@@ -49,7 +49,7 @@
 
 .EXAMPLE
     .\instalar-bd.ps1 -Atualizar
-    Aplica os ajustes das sprints (04 a 10) em gestao_empresarial, sem apagar
+    Aplica os ajustes das sprints (04 a 11) em gestao_empresarial, sem apagar
     dados. E o que rodar depois de atualizar o repositorio.
 #>
 
@@ -116,7 +116,8 @@ $scriptsAjuste = @(
     '07_parceiros_produtos_sprint4.sql',
     '08_estoque_sprint5.sql',
     '09_financeiro_sprint6.sql',
-    '10_fluxo_caixa_sprint7.sql'
+    '10_fluxo_caixa_sprint7.sql',
+    '11_compras_sprint8.sql'
 )
 
 $scripts = $scriptsBase + $scriptsAjuste

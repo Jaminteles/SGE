@@ -13,6 +13,8 @@ export const AUDIT_ENTITY = {
   STOCK_MOVEMENT: 'movimento_estoque',
   FINANCIAL_ENTRY: 'titulo',
   SETTLEMENT: 'titulo_baixa',
+  PURCHASE_ORDER: 'pedido_compra',
+  GOODS_RECEIPT: 'recebimento',
 } as const;
 
 export interface AuditEventInput {

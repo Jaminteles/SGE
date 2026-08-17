@@ -194,9 +194,11 @@ export class RecurrencesService {
             firstDueDate: dueDate,
           },
           userId,
-          ENTRY_ORIGIN.RECURRENCE,
-          recurrence.id,
-          recurrence.id,
+          {
+            origin: ENTRY_ORIGIN.RECURRENCE,
+            originId: recurrence.id,
+            recurrenceId: recurrence.id,
+          },
         );
 
         created.push({ id: entry.id, number: entry.number, dueDate });

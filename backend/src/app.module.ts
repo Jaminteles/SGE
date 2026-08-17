@@ -33,6 +33,7 @@ import { CatalogModule } from './modules/catalog/catalog.module';
 import { StockModule } from './modules/stock/stock.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { CashFlowModule } from './modules/cash-flow/cash-flow.module';
+import { PurchasingModule } from './modules/purchasing/purchasing.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -94,6 +95,7 @@ import { HealthModule } from './modules/health/health.module';
     StockModule,
     FinanceModule,
     CashFlowModule,
+    PurchasingModule,
     HealthModule,
   ],
   providers: [

@@ -1,4 +1,4 @@
-# SGE — Backend (Fases 1 a 3 completas)
+# SGE — Backend (Fases 1 a 3 completas; Fase 4 em andamento)
 
 Backend do **Sistema de Gestão Empresarial e Financeira**, implementado conforme a
 stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
@@ -32,6 +32,10 @@ stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
   acumulado, separação entre realizado, previsto e vencido, cenários com
   premissas e movimentos digitados, e alerta de insuficiência de caixa
   (RF-101 a RF-105).
+- **Sprint 8 — M06 (Compras)**: pedidos com itens, quantidades, preços,
+  descontos e frete rateado, submissão a aprovação por alçada, recebimento total
+  ou parcial com conferência de quantidade e preço, vínculo com fornecedor,
+  estoque e financeiro, e histórico de compras e de preços (RF-036 a RF-042).
 
 ## Banco de dados
 
@@ -60,11 +64,13 @@ psql -U gestao_owner -h localhost -d gestao_empresarial -f 06_rh_sprint3.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 07_parceiros_produtos_sprint4.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 08_estoque_sprint5.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 09_financeiro_sprint6.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 10_fluxo_caixa_sprint7.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 11_compras_sprint8.sql
 ```
 
 Se o banco já existe e você só quer trazê-lo para a sprint atual **sem perder os
 dados**, rode `pwsh ../bd/instalar-bd.ps1 -Atualizar`: reaplica apenas `04` a
-`09`, que são idempotentes.
+`11`, que são idempotentes.
 
 ```bash
 # 2. Backend
@@ -128,7 +134,7 @@ associações, mas não são editáveis pela API.
 
 `gestao.permissao` não tem coluna de código: a chave é a tripla
 (`modulo`, `recurso`, `acao`). A API deriva o código `recurso:AÇÃO` e grava seu
-catálogo com `modulo` = `M01`/`M02`/`M03`/`M04`/`M05`/`M08`/`M14`/`M16`. As permissões em
+catálogo com `modulo` = `M01`/`M02`/`M03`/`M04`/`M05`/`M06`/`M08`/`M14`/`M16`. As permissões em
 português da carga inicial de `bd/03` continuam lá, reservadas para os módulos
 das próximas sprints.
 
@@ -137,10 +143,10 @@ Vínculos feitos pelo seed nos perfis de sistema:
 | Perfil | Recebe | Não recebe, e por quê |
 | --- | --- | --- |
 | RH | Todo o M03 | `reimbursements:APPROVE` — quem lança a despesa não decide sobre ela (RN-003) |
-| COMPRAS | M04 e o catálogo do M05 | `partner-bank-accounts:*` — quem negocia o preço não redireciona o crédito; `stock-movements:*` e `inventories:*` — quem compra não dá baixa no que chegou |
-| FINANCEIRO | Todo o M08, `partner-bank-accounts:*`, leitura de parceiros, histórico, condições, `stock:READ`, `stock-valuation:READ`, `cash-flow:READ` e leitura de cenários e alertas | `financial-entries:APPROVE` — quem lança o título não decide sobre ele (RN-003); escrita do cadastro comercial e do estoque; escrita de cenário e alerta — afrouxar o próprio saldo mínimo é apagar o aviso |
+| COMPRAS | M04, o catálogo do M05 e o M06 (pedido e histórico) | `partner-bank-accounts:*` — quem negocia o preço não redireciona o crédito; `stock-movements:*`, `inventories:*` e `goods-receipts:CREATE` — quem compra não dá baixa nem confere o que chegou; `purchase-orders:APPROVE` — quem pede não aprova (RN-003) |
+| FINANCEIRO | Todo o M08, `partner-bank-accounts:*`, leitura de parceiros, histórico, condições, `stock:READ`, `stock-valuation:READ`, `cash-flow:READ`, leitura de cenários e alertas e leitura do M06 (pedido, recebimento e preços) | `financial-entries:APPROVE` — quem lança o título não decide sobre ele (RN-003); escrita do cadastro comercial e do estoque; escrita de cenário e alerta — afrouxar o próprio saldo mínimo é apagar o aviso |
 | DIRETOR | Todo o M14 (fluxo, cenários e alertas) + leitura de títulos, baixas e inadimplência | Escrita no M08 — quem planeja o caixa não lança nem baixa título |
-| OPERACIONAL | Catálogo, locais, movimentação e contagem do M05 | M04 — catálogo não implica acesso a parceiros; `inventories:APPROVE` — quem conta não homologa a própria diferença (RN-003); `stock-valuation:READ` — valor do ativo é leitura financeira |
+| OPERACIONAL | Catálogo, locais, movimentação e contagem do M05 + recebimento do M06 (`goods-receipts:*`, `purchase-orders:READ`) | M04 — catálogo não implica acesso a parceiros; `inventories:APPROVE` — quem conta não homologa a própria diferença (RN-003); `stock-valuation:READ` — valor do ativo é leitura financeira; escrita do pedido — quem recebe não negocia preço |
 
 ## Mapa de requisitos → endpoints
 
@@ -186,6 +192,13 @@ Vínculos feitos pelo seed nos perfis de sistema:
 | RF-033 | Inventário e histórico | `/inventories` + `/start`, `/counts`, `/close`, `/cancel` |
 | RF-034 | Registrar custos | `unitCost` no movimento, `averageCost` no saldo e no item, `GET /stock/valuation` |
 | RF-035 | Alertar estoque mínimo | `GET /stock/alerts` (view `vw_estoque_alerta_minimo`) |
+| RF-036 | Criar e acompanhar pedidos de compra | `POST/GET/PATCH /purchase-orders`, `GET /purchase-orders/:id`, `POST /purchase-orders/:id/cancel` |
+| RF-037 | Itens, quantidades, preços, descontos e frete | `items` em `/purchase-orders` + `discountAmount`/`freightAmount`/`insuranceAmount`/`otherExpenseAmount` (rateados no item) |
+| RF-038 | Submeter pedidos a aprovação | `POST /purchase-orders/:id/submit`, `/approve`, `/reject` + `/approval-thresholds` (operação `PEDIDO_COMPRA`) |
+| RF-039 | Recebimento total ou parcial | `POST /purchase-orders/:id/receipts`, `GET /purchase-orders/:id/receipts`, `GET /goods-receipts` |
+| RF-040 | Conferir quantidade, preço e divergências | `documentPrice`/`accepted` no item da entrega; `divergenceType` e `hasDivergence` na resposta; `GET /goods-receipts?divergentOnly=true` |
+| RF-041 | Vincular pedido a fornecedor, NF, estoque e financeiro | `partnerId` no pedido; entrada de estoque por linha recebida; `generatePayable` gera o título (`origin=RECEBIMENTO`, `purchaseOrderId`) |
+| RF-042 | Histórico de compras e preços | `GET /purchase-history` (view `vw_historico_compra`) + `GET /partners/:id/history` |
 | RF-051 | Contas a pagar manuais ou vindas de processos | `POST /financial-entries` com `type=PAGAR` (`origin` = MANUAL/RECORRENCIA/...) |
 | RF-052 | Contas a receber manuais ou vindas de processos | `POST /financial-entries` com `type=RECEBER` |
 | RF-053 | Parcelas e recorrências | `installments`/`installmentCount`/`paymentTermId` em `/financial-entries`; `/recurrences` + `POST /recurrences/:id/generate` |
@@ -218,7 +231,7 @@ status. A API acompanha:
 - **Associação** aceita `branchId` (vazio = todas as filiais) e `isDefault`.
 - **Alçada** aceita `name`, `level` e `minApprovers`; o `requiredRoleId` vira uma
   linha em `gestao.alcada_aprovador` e a resposta traz `requiredRoles`.
-- **Regras do banco viram 400**, não 500: o que um trigger de `bd/06` a `bd/09`
+- **Regras do banco viram 400**, não 500: o que um trigger de `bd/06` a `bd/11`
   recusa (`RAISE EXCEPTION`) chega ao cliente com a mensagem da regra — ciclo de
   hierarquia, papel incompatível, evento imutável, baixa acima do saldo. Violação de RLS (`42501`)
   segue como 500 de propósito: é defeito do servidor, não do chamador.
@@ -263,7 +276,8 @@ devolve o que já estava acordado.
 
 `averageCost`, `lastPurchaseCost` e `lastPurchaseDate` são **somente leitura**:
 quem escreve `averageCost` é a movimentação de estoque (Sprint 5, via trigger de
-`bd/08`); os dois últimos vêm da compra (Sprint 8).
+`bd/08`); os dois últimos vêm da conferência do recebimento (Sprint 8, `bd/11`) —
+do que efetivamente chegou, e não do pedido que ainda podia mudar.
 
 ### M05 — Estoque: o razão é a única porta de entrada (RF-031 a RF-035)
 
@@ -305,9 +319,50 @@ saída é o local que recebe; na de entrada, o que enviou.
 - a conclusão gera os ajustes no razão e vai à trilha como `FECHAMENTO`; o
   cancelamento exige motivo, que também vai à trilha (não há coluna para ele).
 
-`GET /partners/:id/history` (RF-025) consolida `titulo` e `pedido_compra`. Com o
-M08 na Sprint 6, o lado financeiro passou a responder com dados reais; o lado de
-compras continua zerado até o M06 (Sprint 8).
+`GET /partners/:id/history` (RF-025) consolida `titulo` e `pedido_compra` — os
+dois lados respondem com dados reais desde a Sprint 8.
+
+### M06 — Compras: o que a API não deixa você escrever
+
+| Campo | Quem escreve | Por quê |
+| --- | --- | --- |
+| `number` do pedido e do recebimento | `fn_proximo_numero_pedido_compra` / `fn_proximo_numero_recebimento` (`bd/11`) | Sequencial por empresa e ano (`PC-2026-000001`, `RC-2026-000001`), serializado na transação |
+| `lineAmount` do item | Trigger `trg_prepara_pedido_compra_item` | É quantidade × preço − desconto. Dois números para o mesmo fato divergem no primeiro acerto |
+| `productsAmount` e `totalAmount` do pedido | Projeção dos itens (`bd/11`) | O pedido é o retrato dos seus itens mais frete, seguro e despesas |
+| `apportionedFreight` do item | Mesma projeção | Rateio proporcional das despesas do cabeçalho; o resto da divisão vai para o último item |
+| `receivedQuantity` do item e `status` do pedido | Projeção dos recebimentos aceitos | "Quanto falta receber" não é campo editável |
+| `orderedQuantity`, `orderedPrice`, `divergenceType` da linha conferida | Trigger `trg_prepara_recebimento_item` | A divergência é apurada contra o pedido, não contra quem digita a conferência |
+| `hasDivergence`, `generatedStock`, `generatedPayable` | Triggers `SECURITY DEFINER` (`bd/11`) | As duas últimas são marcadas pelo próprio movimento e pelo próprio título — assim não podem mentir |
+
+### M06 — regras e barreiras
+
+| Regra | Onde vale |
+| --- | --- |
+| Item só muda em rascunho | Service + trigger `trg_prepara_pedido_compra_item` (RF-038) |
+| Pedido é emitido contra quem exerce o papel de fornecedor | Service (`ReferencesService`) + trigger `trg_valida_pedido_compra` (RF-023) |
+| Transições do pedido e da aprovação não voltam atrás | Trigger `trg_valida_pedido_compra` (RF-036/RF-038) |
+| Pedido pendente de aprovação não recebe mercadoria | Service + trigger `trg_prepara_recebimento_item` (RF-038) |
+| A entrega nunca passa do saldo pendente do item | Service + trigger com advisory lock por item (RF-039) |
+| Conferência é **append-only** — corrigir é registrar outra | Sem rota de escrita + `trg_recebimento_item_imutavel` + `REVOKE UPDATE/DELETE` (`bd/11`) |
+| Pedido com entrega registrada não é cancelado | Service + trigger (RN-009) |
+| Uma entrega gera uma entrada de estoque e um título — uma vez | Índices únicos `ux_movimento_origem_recebimento` / `ux_titulo_origem_recebimento` (RN-004) |
+| Categoria da compra precisa ser de natureza `PAGAR` | Service (RF-041/RF-054) |
+
+**Aprovação (RF-038).** `POST /:id/submit` fecha o rascunho e consulta a alçada
+da operação `PEDIDO_COMPRA`: abaixo dela o pedido é aprovado na hora — exigir a
+cerimônia para toda compra transformaria o controle em carimbo —, acima dela ele
+fica `AGUARDANDO_APROVACAO` e o banco recusa recebimento até a decisão. Aprovar
+exige alçada compatível e **não ser quem pediu** (RN-003).
+
+**Custo posto (RF-034/RF-037).** A entrada de estoque é valorizada pelo preço do
+documento **mais a parcela do item no frete, no seguro e nas demais despesas**.
+Frete que fica só no cabeçalho vira lucro aparente na primeira saída. O mesmo
+número alimenta o título a pagar: o que entrou no estoque e o que se deve ao
+fornecedor são o mesmo fato.
+
+**Linha recusada.** `accepted: false` registra a conferência sem abater o pedido
+e sem entrar no estoque — é o que distingue "não chegou" de "chegou e foi
+devolvido". Uma entrega inteiramente recusada não gera título.
 
 ### M08 — Contas a Pagar e Receber: o que a API não deixa você escrever
 
@@ -500,7 +555,9 @@ estrita, para não vazar atividade entre empresas.
   de comprovantes, papéis do parceiro, consistência do catálogo, movimentação e
   transferência de estoque, máquina de estados do inventário, parcelamento,
   liquidação com trava de saldo, estorno, geração de recorrências, saldo
-  acumulado da projeção, premissas de cenário e ruptura do alerta de caixa).
+  acumulado da projeção, premissas de cenário, ruptura do alerta de caixa,
+  totais e alçada do pedido de compra, recebimento acima do saldo, custo posto da
+  entrada e título gerado pela entrega).
 - **Financeiro (Sprint 6)**: `titulo_baixa` é append-only nas mesmas três camadas
   da trilha de auditoria — ausência de rota de escrita, trigger que rejeita
   `UPDATE`/`DELETE` e retirada do privilégio da role da aplicação. A marcação de
@@ -520,7 +577,16 @@ estrita, para não vazar atividade entre empresas.
   recursos separados: quem opera o caixa enxerga o aviso mas não muda o saldo
   mínimo que o dispara, porque afrouxar o próprio alerta é a maneira silenciosa
   de fazer o aviso parar de sair.
-- **RN-001 estrutural (Sprints 3 a 7)**: as referências do M03, M04, M05, M08 e M14 usam **FK composta**
+- **Compras (Sprint 8)**: `recebimento` e `recebimento_item` são append-only nas
+  mesmas três camadas da trilha — ausência de rota de escrita, trigger que
+  rejeita `UPDATE`/`DELETE` e retirada do privilégio da role da aplicação. As
+  marcas de estoque e de financeiro são escritas por trigger `SECURITY DEFINER`
+  a partir do movimento e do título que realmente existem. Pedir, aprovar e
+  receber são recursos de permissão separados: quem pede não aprova (RN-003) e
+  quem compra não confere o que chegou — senão a divergência é apurada por quem
+  tem interesse nela. A duplicidade é barrada por índice único, e não por
+  disciplina do chamador (RN-004).
+- **RN-001 estrutural (Sprints 3 a 8)**: as referências do M03, M04, M05, M06, M08 e M14 usam **FK composta**
   `(empresa_id, <coluna>)`. A verificação de chave estrangeira roda no sistema,
   sem RLS: sem isso, um defeito na API poderia vincular funcionário da empresa A
   ao centro de custo da empresa B. Como FK composta não aceita `ON DELETE SET

@@ -59,6 +59,9 @@ export const RESOURCES = {
   CASH_FLOW: 'cash-flow',
   CASH_FLOW_SCENARIOS: 'cash-flow-scenarios',
   CASH_ALERTS: 'cash-alerts',
+  PURCHASE_ORDERS: 'purchase-orders',
+  GOODS_RECEIPTS: 'goods-receipts',
+  PURCHASE_HISTORY: 'purchase-history',
 } as const;
 
 export interface PermissionDefinition {
@@ -342,6 +345,28 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     { action: A.UPDATE, description: 'Editar alertas de insuficiência de caixa' },
     { action: A.DELETE, description: 'Desativar alertas de insuficiência de caixa' },
   ]),
+  // M06 — Compras (RF-036 a RF-042).
+  //
+  // Três separações intencionais: pedir não é aprovar (RN-003 — é onde uma
+  // compra desnecessária vira dinheiro comprometido); aprovar não é receber
+  // (quem negocia o preço não confere o que chegou, senão a divergência é
+  // apurada por quem tem interesse nela); e o histórico de preços é recurso
+  // próprio, porque expõe a margem negociada com cada fornecedor. Não existe
+  // `goods-receipts:UPDATE` nem `:DELETE`: a conferência é append-only.
+  ...build('M06', RESOURCES.PURCHASE_ORDERS, [
+    { action: A.CREATE, description: 'Criar pedidos de compra' },
+    { action: A.READ, description: 'Consultar pedidos de compra e seus itens' },
+    { action: A.UPDATE, description: 'Editar pedidos em rascunho e submetê-los a aprovação' },
+    { action: A.DELETE, description: 'Cancelar pedidos de compra' },
+    { action: A.APPROVE, description: 'Aprovar ou reprovar pedidos de compra' },
+  ]),
+  ...build('M06', RESOURCES.GOODS_RECEIPTS, [
+    { action: A.CREATE, description: 'Registrar recebimento e conferência de mercadoria' },
+    { action: A.READ, description: 'Consultar recebimentos e divergências' },
+  ]),
+  ...build('M06', RESOURCES.PURCHASE_HISTORY, [
+    { action: A.READ, description: 'Consultar o histórico de compras e de preços' },
+  ]),
 ];
 
 /** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
@@ -522,4 +547,15 @@ export const PERMISSIONS = {
   CASH_ALERTS_READ: permissionCode(RESOURCES.CASH_ALERTS, A.READ),
   CASH_ALERTS_UPDATE: permissionCode(RESOURCES.CASH_ALERTS, A.UPDATE),
   CASH_ALERTS_DELETE: permissionCode(RESOURCES.CASH_ALERTS, A.DELETE),
+
+  PURCHASE_ORDERS_CREATE: permissionCode(RESOURCES.PURCHASE_ORDERS, A.CREATE),
+  PURCHASE_ORDERS_READ: permissionCode(RESOURCES.PURCHASE_ORDERS, A.READ),
+  PURCHASE_ORDERS_UPDATE: permissionCode(RESOURCES.PURCHASE_ORDERS, A.UPDATE),
+  PURCHASE_ORDERS_DELETE: permissionCode(RESOURCES.PURCHASE_ORDERS, A.DELETE),
+  PURCHASE_ORDERS_APPROVE: permissionCode(RESOURCES.PURCHASE_ORDERS, A.APPROVE),
+
+  GOODS_RECEIPTS_CREATE: permissionCode(RESOURCES.GOODS_RECEIPTS, A.CREATE),
+  GOODS_RECEIPTS_READ: permissionCode(RESOURCES.GOODS_RECEIPTS, A.READ),
+
+  PURCHASE_HISTORY_READ: permissionCode(RESOURCES.PURCHASE_HISTORY, A.READ),
 } as const;

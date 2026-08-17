@@ -12,6 +12,8 @@ export const MOVEMENT_ORIGIN = {
   MANUAL: 'MANUAL',
   TRANSFER: 'TRANSFERENCIA',
   INVENTORY: 'INVENTARIO',
+  /** Entrada vinda da conferência de uma entrega (M06) — `originId` é a linha. */
+  GOODS_RECEIPT: 'RECEBIMENTO',
 } as const;
 
 const movementInclude = {

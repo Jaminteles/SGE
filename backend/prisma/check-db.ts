@@ -112,9 +112,9 @@ async function main(): Promise<void> {
     `,
   );
   checks.push({
-    label: 'referências de cadastro presas à empresa (bd/06 a bd/10)',
-    ok: Number(tenantFks?.n ?? 0) >= 67,
-    detail: `${Number(tenantFks?.n ?? 0)} FKs compostas (esperado ≥ 67) — rode bd/06 a bd/10`,
+    label: 'referências de cadastro presas à empresa (bd/06 a bd/11)',
+    ok: Number(tenantFks?.n ?? 0) >= 85,
+    detail: `${Number(tenantFks?.n ?? 0)} FKs compostas (esperado ≥ 85) — rode bd/06 a bd/11`,
   });
 
   const hrTriggers = await scalar(
@@ -275,13 +275,74 @@ async function main(): Promise<void> {
     detail: `${Number(cashFlowViews?.n ?? 0)} visões de 2 — rode bd/10_fluxo_caixa_sprint7.sql`,
   });
 
+  // Sprint 8 (M06 Compras): sem os triggers, o total do pedido deixa de ser a
+  // soma dos itens e uma entrega pode trazer mais do que foi pedido.
+  const purchaseRules = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_trigger
+       WHERE NOT tgisinternal
+         AND tgname IN ('trg_prepara_pedido_compra_item', 'trg_pedido_compra_item_projeta',
+                        'trg_valida_pedido_compra', 'trg_prepara_recebimento_item',
+                        'trg_aplica_recebimento_item', 'trg_recebimento_item_imutavel')
+    `,
+  );
+  checks.push({
+    label: 'regras de compras aplicadas (bd/11)',
+    ok: Number(purchaseRules?.n ?? 0) >= 6,
+    detail: `${Number(purchaseRules?.n ?? 0)} triggers de 6 — rode bd/11_compras_sprint8.sql`,
+  });
+
+  // A conferência é a única porta de entrada do "chegou" (RF-039): com UPDATE em
+  // `recebimento_item`, uma quantidade recebida pode ser reescrita sem rastro.
+  const receiptWritable = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM information_schema.table_privileges
+       WHERE table_schema = 'gestao'
+         AND table_name IN ('recebimento', 'recebimento_item')
+         AND grantee IN ('app_gestao', 'sge_api')
+         AND privilege_type IN ('UPDATE', 'DELETE')
+    `,
+  );
+  checks.push({
+    label: 'recebimentos append-only (RF-039)',
+    ok: Number(receiptWritable?.n ?? 0) === 0,
+    detail: `${Number(receiptWritable?.n ?? 0)} privilégio(s) de UPDATE/DELETE concedidos — rode bd/11`,
+  });
+
+  // RN-004: sem os índices, reenviar a mesma entrega geraria mercadoria a mais
+  // no depósito e um segundo título a pagar pela mesma compra.
+  const receiptUnique = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_indexes
+       WHERE schemaname = 'gestao'
+         AND indexname IN ('ux_movimento_origem_recebimento', 'ux_titulo_origem_recebimento')
+    `,
+  );
+  checks.push({
+    label: 'entrega não gera estoque nem título em duplicidade (RN-004)',
+    ok: Number(receiptUnique?.n ?? 0) >= 2,
+    detail: `${Number(receiptUnique?.n ?? 0)} índices de 2 — rode bd/11_compras_sprint8.sql`,
+  });
+
+  const purchaseHistoryView = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_views
+       WHERE schemaname = 'gestao' AND viewname = 'vw_historico_compra'
+    `,
+  );
+  checks.push({
+    label: 'histórico de compras e preços disponível (RF-042)',
+    ok: Number(purchaseHistoryView?.n ?? 0) === 1,
+    detail: 'visão vw_historico_compra — rode bd/11_compras_sprint8.sql',
+  });
+
   const permissions = await prisma.permission.count({
-    where: { module: { in: ['M01', 'M02', 'M03', 'M04', 'M05', 'M08', 'M14', 'M16'] } },
+    where: { module: { in: ['M01', 'M02', 'M03', 'M04', 'M05', 'M06', 'M08', 'M14', 'M16'] } },
   });
   checks.push({
     label: 'catálogo de permissões da API carregado',
     ok: permissions > 0,
-    detail: `${permissions} permissões M01/M02/M03/M04/M05/M08/M14/M16 — rode npm run db:seed`,
+    detail: `${permissions} permissões M01/M02/M03/M04/M05/M06/M08/M14/M16 — rode npm run db:seed`,
   });
 
   const admins = await prisma.user.count({ where: { isSuperAdmin: true, isActive: true } });

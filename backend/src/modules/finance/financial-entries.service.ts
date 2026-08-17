@@ -36,7 +36,23 @@ export const ENTRY_ORIGIN = {
   MANUAL: 'MANUAL',
   RECURRENCE: 'RECORRENCIA',
   REIMBURSEMENT: 'REEMBOLSO',
+  GOODS_RECEIPT: 'RECEBIMENTO',
 } as const;
+
+/**
+ * O fato que deu causa ao título (RF-051/RF-052).
+ *
+ * `originId` é o fato em si — a ocorrência da recorrência, o recebimento da
+ * mercadoria. As colunas nomeadas (`recurrenceId`, `purchaseOrderId`) são o
+ * vínculo estrutural com o processo, que é o que permite ir do título ao pedido
+ * sem passar por um id polimórfico (RF-041).
+ */
+export interface EntrySource {
+  origin: string;
+  originId?: string;
+  recurrenceId?: string;
+  purchaseOrderId?: string;
+}
 
 /** Situações em que o título ainda pode ser editado ou liquidado. */
 const OPEN_STATUSES: EntryStatus[] = [EntryStatus.ABERTO, EntryStatus.PARCIALMENTE_LIQUIDADO];
@@ -102,22 +118,20 @@ export class FinancialEntriesService {
   ) {}
 
   async create(companyId: string, dto: CreateFinancialEntryDto, userId: string) {
-    return this.createEntry(companyId, dto, userId, ENTRY_ORIGIN.MANUAL);
+    return this.createEntry(companyId, dto, userId, { origin: ENTRY_ORIGIN.MANUAL });
   }
 
   /**
-   * Criação a partir de outro processo (recorrência, hoje; compras e notas nas
-   * Sprints 8 e 9). `origin`/`originId` deixam registrado o que deu causa ao
-   * título — sem isso, um título gerado automaticamente é indistinguível de um
-   * lançamento manual na conferência.
+   * Criação a partir de outro processo (recorrência e recebimento de compra
+   * hoje; documento fiscal na Sprint 9). `source` deixa registrado o que deu
+   * causa ao título — sem isso, um título gerado automaticamente é
+   * indistinguível de um lançamento manual na conferência.
    */
   async createEntry(
     companyId: string,
     dto: CreateFinancialEntryDto,
     userId: string,
-    origin: string,
-    originId?: string,
-    recurrenceId?: string,
+    source: EntrySource,
   ) {
     await this.assertCounterpart(companyId, dto);
     await this.references.assert(companyId, {
@@ -166,9 +180,10 @@ export class FinancialEntriesService {
           paymentMethodId: dto.paymentMethodId,
           paymentTermId: dto.paymentTermId,
           approvalStatus,
-          origin,
-          originId,
-          recurrenceId,
+          origin: source.origin,
+          originId: source.originId,
+          recurrenceId: source.recurrenceId,
+          purchaseOrderId: source.purchaseOrderId,
           note: dto.note,
           createdById: userId,
           installments: {

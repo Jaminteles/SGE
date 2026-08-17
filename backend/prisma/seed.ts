@@ -62,19 +62,24 @@ async function seedSystemRoles(): Promise<void> {
         (p) => p.module === 'M03' && p.code !== PERMISSIONS.REIMBURSEMENTS_APPROVE,
       ).map((p) => p.code),
     },
-    // M04/M05: Compras mantém parceiros e catálogo. O dado bancário do parceiro
-    // fica de fora — é a conta para onde o pagamento vai, e quem negocia o
-    // preço não deve poder redirecionar o crédito (mesma razão do M03).
-    // Movimentar e ajustar estoque também não é de Compras: quem compra não
-    // deve poder dar baixa no que chegou.
+    // M04/M05/M06: Compras mantém parceiros e catálogo e conduz o pedido. O
+    // dado bancário do parceiro fica de fora — é a conta para onde o pagamento
+    // vai, e quem negocia o preço não deve poder redirecionar o crédito (mesma
+    // razão do M03). Movimentar e ajustar estoque também não é de Compras: quem
+    // compra não deve poder dar baixa no que chegou — e, pela mesma razão,
+    // `goods-receipts:CREATE` fica com quem recebe a mercadoria (Operacional).
+    // Aprovar o próprio pedido também não (RN-003): atribua
+    // `purchase-orders:APPROVE` ao perfil que responde pela alçada (RF-012).
     {
       role: 'COMPRAS',
       codes: PERMISSION_CATALOG.filter(
         (p) =>
-          (p.module === 'M04' || p.module === 'M05') &&
+          (p.module === 'M04' || p.module === 'M05' || p.module === 'M06') &&
           p.resource !== RESOURCES.PARTNER_BANK_ACCOUNTS &&
           p.resource !== RESOURCES.STOCK_MOVEMENTS &&
-          p.resource !== RESOURCES.INVENTORIES,
+          p.resource !== RESOURCES.INVENTORIES &&
+          p.code !== PERMISSIONS.PURCHASE_ORDERS_APPROVE &&
+          p.code !== PERMISSIONS.GOODS_RECEIPTS_CREATE,
       ).map((p) => p.code),
     },
     // Financeiro é quem paga e cobra: o M08 inteiro, mais a conta do parceiro e
@@ -107,6 +112,12 @@ async function seedSystemRoles(): Promise<void> {
         PERMISSIONS.CASH_FLOW_READ,
         PERMISSIONS.CASH_FLOW_SCENARIOS_READ,
         PERMISSIONS.CASH_ALERTS_READ,
+        // M06: o título a pagar da compra nasce do recebimento — sem enxergar o
+        // pedido e o preço praticado, o Financeiro paga sem conferir contra o
+        // que foi combinado. Só leitura: quem paga não pede nem confere.
+        PERMISSIONS.PURCHASE_ORDERS_READ,
+        PERMISSIONS.GOODS_RECEIPTS_READ,
+        PERMISSIONS.PURCHASE_HISTORY_READ,
       ],
     },
     // M14: o planejamento é do Diretor (é ele o responsável pelos RF-101 a
@@ -129,12 +140,20 @@ async function seedSystemRoles(): Promise<void> {
     // valorização, que é a leitura financeira do mesmo saldo.
     {
       role: 'OPERACIONAL',
-      codes: PERMISSION_CATALOG.filter(
-        (p) =>
-          p.module === 'M05' &&
-          p.code !== PERMISSIONS.INVENTORIES_APPROVE &&
-          p.resource !== RESOURCES.STOCK_VALUATION,
-      ).map((p) => p.code),
+      codes: [
+        ...PERMISSION_CATALOG.filter(
+          (p) =>
+            p.module === 'M05' &&
+            p.code !== PERMISSIONS.INVENTORIES_APPROVE &&
+            p.resource !== RESOURCES.STOCK_VALUATION,
+        ).map((p) => p.code),
+        // M06: quem recebe a mercadoria é quem confere — e não é quem a pediu
+        // (RN-003). Sem o pedido à vista não há contra o que conferir, mas o
+        // pedido em si é leitura: Operacional não negocia preço.
+        PERMISSIONS.GOODS_RECEIPTS_CREATE,
+        PERMISSIONS.GOODS_RECEIPTS_READ,
+        PERMISSIONS.PURCHASE_ORDERS_READ,
+      ],
     },
   ];
 
