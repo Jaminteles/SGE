@@ -15,6 +15,7 @@ export const AUDIT_ENTITY = {
   SETTLEMENT: 'titulo_baixa',
   PURCHASE_ORDER: 'pedido_compra',
   GOODS_RECEIPT: 'recebimento',
+  FISCAL_DOCUMENT: 'documento_fiscal',
 } as const;
 
 export interface AuditEventInput {

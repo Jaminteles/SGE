@@ -336,13 +336,81 @@ async function main(): Promise<void> {
     detail: 'visão vw_historico_compra — rode bd/11_compras_sprint8.sql',
   });
 
+  // Sprint 9 (M07 Documentos Fiscais): sem os triggers, a nota processada não
+  // precisa fechar com seus itens, o XML recebido pode ser substituído e o
+  // processamento anda para qualquer situação.
+  const fiscalRules = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_trigger
+       WHERE NOT tgisinternal
+         AND tgname IN ('trg_prepara_documento_fiscal_item', 'trg_documento_fiscal_itens_somam',
+                        'trg_documento_fiscal_item_soma', 'trg_valida_documento_fiscal',
+                        'trg_valida_duplicidade_documento_fiscal', 'trg_valida_vinculo_documento_fiscal',
+                        'trg_valida_movimento_documento_fiscal', 'trg_valida_titulo_documento_fiscal')
+    `,
+  );
+  checks.push({
+    label: 'regras de documentos fiscais aplicadas (bd/12)',
+    ok: Number(fiscalRules?.n ?? 0) >= 8,
+    detail: `${Number(fiscalRules?.n ?? 0)} triggers de 8 — rode bd/12_documentos_fiscais_sprint9.sql`,
+  });
+
+  // RF-046/RN-004: sem os índices, a mesma nota entraria duas vezes e a
+  // mercadoria da nota vinculada a um recebimento entraria em dobro.
+  const fiscalUnique = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_indexes
+       WHERE schemaname = 'gestao'
+         AND indexname IN ('ux_documento_fiscal_xml_hash', 'ux_documento_fiscal_identidade',
+                           'ux_documento_fiscal_origem_referencia',
+                           'ux_movimento_origem_documento_fiscal',
+                           'ux_titulo_origem_documento_fiscal')
+    `,
+  );
+  checks.push({
+    label: 'documento fiscal não duplica nem gera efeito em dobro (RF-046/RN-004)',
+    ok: Number(fiscalUnique?.n ?? 0) >= 5,
+    detail: `${Number(fiscalUnique?.n ?? 0)} índices de 5 — rode bd/12_documentos_fiscais_sprint9.sql`,
+  });
+
+  // Nota é documento de terceiro: o que existe é cancelamento com status, e a
+  // aplicação não deve poder apagar o registro de que ela chegou.
+  const fiscalRemovable = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM information_schema.table_privileges
+       WHERE table_schema = 'gestao'
+         AND table_name = 'documento_fiscal'
+         AND grantee IN ('app_gestao', 'sge_api')
+         AND privilege_type = 'DELETE'
+    `,
+  );
+  checks.push({
+    label: 'documento fiscal não é removível pela aplicação (RF-049)',
+    ok: Number(fiscalRemovable?.n ?? 0) === 0,
+    detail: `${Number(fiscalRemovable?.n ?? 0)} privilégio(s) de DELETE concedidos — rode bd/12`,
+  });
+
+  const fiscalPendingView = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_views
+       WHERE schemaname = 'gestao' AND viewname = 'vw_documento_fiscal_pendencia'
+    `,
+  );
+  checks.push({
+    label: 'pendências dos documentos fiscais disponíveis (RF-049)',
+    ok: Number(fiscalPendingView?.n ?? 0) === 1,
+    detail: 'visão vw_documento_fiscal_pendencia — rode bd/12_documentos_fiscais_sprint9.sql',
+  });
+
   const permissions = await prisma.permission.count({
-    where: { module: { in: ['M01', 'M02', 'M03', 'M04', 'M05', 'M06', 'M08', 'M14', 'M16'] } },
+    where: {
+      module: { in: ['M01', 'M02', 'M03', 'M04', 'M05', 'M06', 'M07', 'M08', 'M14', 'M16'] },
+    },
   });
   checks.push({
     label: 'catálogo de permissões da API carregado',
     ok: permissions > 0,
-    detail: `${permissions} permissões M01/M02/M03/M04/M05/M06/M08/M14/M16 — rode npm run db:seed`,
+    detail: `${permissions} permissões M01/M02/M03/M04/M05/M06/M07/M08/M14/M16 — rode npm run db:seed`,
   });
 
   const admins = await prisma.user.count({ where: { isSuperAdmin: true, isActive: true } });

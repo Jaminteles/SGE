@@ -147,6 +147,15 @@ export class CreateGoodsReceiptDto {
   @IsUUID()
   branchId?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Nota fiscal que acompanha a entrega (M07/RF-047). Informada aqui porque o ' +
+      'cabeçalho do recebimento é imutável: não há como vinculá-la depois.',
+  })
+  @IsOptional()
+  @IsUUID()
+  fiscalDocumentId?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

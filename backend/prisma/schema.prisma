@@ -3,8 +3,9 @@
 // Sprint 4 (M04 Clientes/Fornecedores + M05 Produtos e Serviços),
 // Sprint 5 (M05 Estoque: locais, saldos, movimentação e inventário),
 // Sprint 6 (M08 Contas a Pagar e Receber),
-// Sprint 7 (M14 Fluxo de Caixa e Planejamento) e
-// Sprint 8 (M06 Compras: pedidos, aprovação, recebimento e conferência)
+// Sprint 7 (M14 Fluxo de Caixa e Planejamento),
+// Sprint 8 (M06 Compras: pedidos, aprovação, recebimento e conferência) e
+// Sprint 9 (M07 Documentos Fiscais: importação de XML, processamento e vínculos)
 //
 // IMPORTANTE: este schema NÃO é dono do banco. O modelo físico vive em `bd/*.sql`
 // (schema `gestao`, PostgreSQL 14+) e é a fonte da verdade. Aqui há apenas o
@@ -223,6 +224,49 @@ enum ApprovalStatus {
   @@map("enum_status_aprovacao")
 }
 
+/// Modelo do documento fiscal (RF-043) — `enum_modelo_doc_fiscal`.
+enum FiscalDocumentModel {
+  NFE
+  NFCE
+  NFSE
+  CTE
+  CTE_OS
+  MDFE
+  NFAVULSA
+  RECIBO
+  OUTRO
+
+  @@map("enum_modelo_doc_fiscal")
+}
+
+/// Por onde o documento entrou (RF-043/RF-050) — `enum_origem_doc_fiscal`.
+enum FiscalDocumentOrigin {
+  UPLOAD_MANUAL
+  COLETA_AUTOMATICA
+  API
+  EMAIL
+  WEBHOOK
+
+  @@map("enum_origem_doc_fiscal")
+}
+
+/// Situação do processamento (RF-049) — `enum_status_doc_fiscal`.
+///
+/// As transições válidas são aplicadas por trigger (bd/12): RECEBIDO abre,
+/// PROCESSANDO/ERRO são o caminho do reprocessamento e CANCELADO/DENEGADO são
+/// terminais. `DUPLICADO` é a segunda chegada do mesmo documento (RF-046).
+enum FiscalDocumentStatus {
+  RECEBIDO
+  PROCESSANDO
+  PROCESSADO
+  ERRO
+  DUPLICADO
+  CANCELADO
+  DENEGADO
+
+  @@map("enum_status_doc_fiscal")
+}
+
 /// Periodicidade da recorrência (RF-053) — `enum_periodicidade`.
 enum Periodicity {
   UNICA
@@ -271,6 +315,7 @@ model User {
   purchasesCreated PurchaseOrder[]      @relation("PedidoCriador")
   purchasesDecided PurchaseOrder[]      @relation("PedidoAprovador")
   receiptsChecked  GoodsReceipt[]       @relation("RecebimentoConferente")
+  fiscalDocuments  FiscalDocument[]
 
   @@map("usuario")
 }
@@ -435,6 +480,7 @@ model Branch {
   financialEntries FinancialEntry[]
   purchaseOrders   PurchaseOrder[]
   receipts         GoodsReceipt[]
+  fiscalDocuments  FiscalDocument[]
 
   @@unique([companyId, code], map: "uq_filial_codigo")
   @@map("filial")
@@ -870,6 +916,8 @@ model Partner {
   financialEntries FinancialEntry[]
   recurrences      Recurrence[]
   purchaseOrders   PurchaseOrder[]
+  documentsIssued  FiscalDocument[]  @relation("NotaEmitente")
+  documentsAddress FiscalDocument[]  @relation("NotaDestinatario")
 
   @@map("parceiro")
 }
@@ -1057,6 +1105,7 @@ model Product {
   inventoryItems InventoryItem[]
   purchaseItems  PurchaseOrderItem[]
   receiptItems   GoodsReceiptItem[]
+  fiscalItems    FiscalDocumentItem[]
 
   @@unique([companyId, code], map: "uq_produto_codigo")
   @@map("produto")
@@ -1138,29 +1187,34 @@ model StockBalance {
 /// `previousBalance`, `newBalance` e `totalValue` são calculados pelo trigger
 /// `trg_prepara_movimento_estoque` (bd/08): a API não os envia.
 model StockMovement {
-  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId       String            @map("empresa_id") @db.Uuid
-  productId       String            @map("produto_id") @db.Uuid
-  product         Product           @relation(fields: [productId], references: [id])
-  locationId      String            @map("local_estoque_id") @db.Uuid
-  location        StockLocation     @relation("MovimentoLocal", fields: [locationId], references: [id])
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId        String            @map("empresa_id") @db.Uuid
+  productId        String            @map("produto_id") @db.Uuid
+  product          Product           @relation(fields: [productId], references: [id])
+  locationId       String            @map("local_estoque_id") @db.Uuid
+  location         StockLocation     @relation("MovimentoLocal", fields: [locationId], references: [id])
   /// Contraparte da transferência: o outro local envolvido na operação.
-  counterpartId   String?           @map("local_destino_id") @db.Uuid
-  counterpart     StockLocation?    @relation("MovimentoContraparte", fields: [counterpartId], references: [id])
-  type            StockMovementType @map("tipo")
-  movementDate    DateTime          @default(now()) @map("data_movimento") @db.Timestamptz(6)
-  quantity        Decimal           @map("quantidade") @db.Decimal(18, 6)
-  unitCost        Decimal           @default(0) @map("custo_unitario") @db.Decimal(18, 6)
-  totalValue      Decimal           @default(0) @map("valor_total") @db.Decimal(18, 2)
-  previousBalance Decimal?          @map("saldo_anterior") @db.Decimal(18, 6)
-  newBalance      Decimal?          @map("saldo_posterior") @db.Decimal(18, 6)
-  origin          String?           @map("origem_tipo") @db.VarChar(40)
-  originId        String?           @map("origem_id") @db.Uuid
-  batch           String?           @map("lote") @db.VarChar(60)
-  note            String?           @map("observacao")
-  userId          String?           @map("usuario_id") @db.Uuid
-  user            User?             @relation(fields: [userId], references: [id])
-  createdAt       DateTime          @default(now()) @map("criado_em") @db.Timestamptz(6)
+  counterpartId    String?           @map("local_destino_id") @db.Uuid
+  counterpart      StockLocation?    @relation("MovimentoContraparte", fields: [counterpartId], references: [id])
+  type             StockMovementType @map("tipo")
+  movementDate     DateTime          @default(now()) @map("data_movimento") @db.Timestamptz(6)
+  quantity         Decimal           @map("quantidade") @db.Decimal(18, 6)
+  unitCost         Decimal           @default(0) @map("custo_unitario") @db.Decimal(18, 6)
+  totalValue       Decimal           @default(0) @map("valor_total") @db.Decimal(18, 2)
+  previousBalance  Decimal?          @map("saldo_anterior") @db.Decimal(18, 6)
+  newBalance       Decimal?          @map("saldo_posterior") @db.Decimal(18, 6)
+  origin           String?           @map("origem_tipo") @db.VarChar(40)
+  originId         String?           @map("origem_id") @db.Uuid
+  /// Nota que amparou a entrada (RF-047). Com `origin` = DOCUMENTO_FISCAL,
+  /// `originId` é o **item** da nota — a granularidade que o índice único de
+  /// bd/12 usa para permitir uma entrada por linha e recusar a repetição.
+  fiscalDocumentId String?           @map("documento_fiscal_id") @db.Uuid
+  fiscalDocument   FiscalDocument?   @relation(fields: [fiscalDocumentId], references: [id])
+  batch            String?           @map("lote") @db.VarChar(60)
+  note             String?           @map("observacao")
+  userId           String?           @map("usuario_id") @db.Uuid
+  user             User?             @relation(fields: [userId], references: [id])
+  createdAt        DateTime          @default(now()) @map("criado_em") @db.Timestamptz(6)
 
   @@index([productId, movementDate(sort: Desc)], map: "ix_movimento_estoque_produto")
   @@map("movimento_estoque")
@@ -1260,55 +1314,59 @@ model Recurrence {
 /// `balance` e `status` são projeção das parcelas: todos escritos por trigger
 /// (bd/09). A API os envia apenas na leitura.
 model FinancialEntry {
-  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId         String         @map("empresa_id") @db.Uuid
-  branchId          String?        @map("filial_id") @db.Uuid
-  branch            Branch?        @relation(fields: [branchId], references: [id])
-  type              EntryType      @map("tipo")
-  number            String         @map("numero") @db.VarChar(30)
-  documentReference String?        @map("documento_referencia") @db.VarChar(60)
-  partnerId         String?        @map("parceiro_id") @db.Uuid
-  partner           Partner?       @relation(fields: [partnerId], references: [id])
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String          @map("empresa_id") @db.Uuid
+  branchId          String?         @map("filial_id") @db.Uuid
+  branch            Branch?         @relation(fields: [branchId], references: [id])
+  type              EntryType       @map("tipo")
+  number            String          @map("numero") @db.VarChar(30)
+  documentReference String?         @map("documento_referencia") @db.VarChar(60)
+  partnerId         String?         @map("parceiro_id") @db.Uuid
+  partner           Partner?        @relation(fields: [partnerId], references: [id])
   /// Contraparte funcionário: reembolso aprovado vira título a pagar (RF-018).
-  employeeId        String?        @map("funcionario_id") @db.Uuid
-  employee          Employee?      @relation(fields: [employeeId], references: [id])
-  description       String         @map("descricao") @db.VarChar(255)
-  issueDate         DateTime       @default(now()) @map("data_emissao") @db.Date
-  competenceDate    DateTime       @default(now()) @map("data_competencia") @db.Date
-  grossAmount       Decimal        @map("valor_bruto") @db.Decimal(18, 2)
-  discountAmount    Decimal        @default(0) @map("valor_desconto") @db.Decimal(18, 2)
-  netAmount         Decimal        @map("valor_liquido") @db.Decimal(18, 2)
+  employeeId        String?         @map("funcionario_id") @db.Uuid
+  employee          Employee?       @relation(fields: [employeeId], references: [id])
+  description       String          @map("descricao") @db.VarChar(255)
+  issueDate         DateTime        @default(now()) @map("data_emissao") @db.Date
+  competenceDate    DateTime        @default(now()) @map("data_competencia") @db.Date
+  grossAmount       Decimal         @map("valor_bruto") @db.Decimal(18, 2)
+  discountAmount    Decimal         @default(0) @map("valor_desconto") @db.Decimal(18, 2)
+  netAmount         Decimal         @map("valor_liquido") @db.Decimal(18, 2)
   /// Caixa movimentado nas baixas vivas — inclui juros e multa recebidos/pagos.
-  settledAmount     Decimal        @default(0) @map("valor_liquidado") @db.Decimal(18, 2)
+  settledAmount     Decimal         @default(0) @map("valor_liquidado") @db.Decimal(18, 2)
   /// Principal ainda em aberto: a soma do saldo das parcelas não canceladas.
-  balance           Decimal        @default(0) @map("saldo") @db.Decimal(18, 2)
-  categoryId        String?        @map("categoria_financeira_id") @db.Uuid
-  category          Category?      @relation(fields: [categoryId], references: [id])
-  costCenterId      String?        @map("centro_custo_id") @db.Uuid
-  costCenter        CostCenter?    @relation(fields: [costCenterId], references: [id])
+  balance           Decimal         @default(0) @map("saldo") @db.Decimal(18, 2)
+  categoryId        String?         @map("categoria_financeira_id") @db.Uuid
+  category          Category?       @relation(fields: [categoryId], references: [id])
+  costCenterId      String?         @map("centro_custo_id") @db.Uuid
+  costCenter        CostCenter?     @relation(fields: [costCenterId], references: [id])
   /// Conta contábil (M11): classificada aqui, usada na partida dobrada.
-  ledgerAccountId   String?        @map("conta_contabil_id") @db.Uuid
-  paymentMethodId   String?        @map("forma_pagamento_id") @db.Uuid
-  paymentMethod     PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
-  paymentTermId     String?        @map("condicao_pagamento_id") @db.Uuid
-  paymentTerm       PaymentTerm?   @relation(fields: [paymentTermId], references: [id])
+  ledgerAccountId   String?         @map("conta_contabil_id") @db.Uuid
+  paymentMethodId   String?         @map("forma_pagamento_id") @db.Uuid
+  paymentMethod     PaymentMethod?  @relation(fields: [paymentMethodId], references: [id])
+  paymentTermId     String?         @map("condicao_pagamento_id") @db.Uuid
+  paymentTerm       PaymentTerm?    @relation(fields: [paymentTermId], references: [id])
   /// MANUAL | RECORRENCIA | REEMBOLSO | RECEBIMENTO | DOCUMENTO_FISCAL.
-  origin            String?        @map("origem_tipo") @db.VarChar(40)
-  originId          String?        @map("origem_id") @db.Uuid
+  origin            String?         @map("origem_tipo") @db.VarChar(40)
+  originId          String?         @map("origem_id") @db.Uuid
   /// Pedido que deu causa ao título (RF-041). O `originId` guarda o recebimento.
-  purchaseOrderId   String?        @map("pedido_compra_id") @db.Uuid
-  purchaseOrder     PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
-  recurrenceId      String?        @map("recorrencia_id") @db.Uuid
-  recurrence        Recurrence?    @relation(fields: [recurrenceId], references: [id])
-  status            EntryStatus    @default(ABERTO) @map("status")
-  approvalStatus    ApprovalStatus @default(NAO_REQUERIDA) @map("status_aprovacao")
-  canceledAt        DateTime?      @map("cancelado_em") @db.Timestamptz(6)
-  cancelReason      String?        @map("motivo_cancelamento")
-  note              String?        @map("observacao")
-  createdById       String?        @map("criado_por") @db.Uuid
-  createdBy         User?          @relation(fields: [createdById], references: [id])
-  createdAt         DateTime       @default(now()) @map("criado_em") @db.Timestamptz(6)
-  updatedAt         DateTime       @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+  purchaseOrderId   String?         @map("pedido_compra_id") @db.Uuid
+  purchaseOrder     PurchaseOrder?  @relation(fields: [purchaseOrderId], references: [id])
+  recurrenceId      String?         @map("recorrencia_id") @db.Uuid
+  recurrence        Recurrence?     @relation(fields: [recurrenceId], references: [id])
+  /// Nota que deu causa ao título (RF-047). Quando o título nasce do
+  /// recebimento, é o `fiscalDocumentId` dele — não este.
+  fiscalDocumentId  String?         @map("documento_fiscal_id") @db.Uuid
+  fiscalDocument    FiscalDocument? @relation(fields: [fiscalDocumentId], references: [id])
+  status            EntryStatus     @default(ABERTO) @map("status")
+  approvalStatus    ApprovalStatus  @default(NAO_REQUERIDA) @map("status_aprovacao")
+  canceledAt        DateTime?       @map("cancelado_em") @db.Timestamptz(6)
+  cancelReason      String?         @map("motivo_cancelamento")
+  note              String?         @map("observacao")
+  createdById       String?         @map("criado_por") @db.Uuid
+  createdBy         User?           @relation(fields: [createdById], references: [id])
+  createdAt         DateTime        @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt         DateTime        @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
   installments FinancialInstallment[]
 
@@ -1548,6 +1606,7 @@ model PurchaseOrder {
   items            PurchaseOrderItem[]
   receipts         GoodsReceipt[]
   financialEntries FinancialEntry[]
+  fiscalDocuments  FiscalDocument[]
 
   @@unique([companyId, number], map: "uq_pedido_compra_numero")
   @@map("pedido_compra")
@@ -1591,26 +1650,28 @@ model PurchaseOrderItem {
 /// `generatedStock` e `generatedPayable` são marcas projetadas por trigger — a
 /// última, do próprio título gerado, para que não possam mentir.
 model GoodsReceipt {
-  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId        String         @map("empresa_id") @db.Uuid
-  branchId         String?        @map("filial_id") @db.Uuid
-  branch           Branch?        @relation(fields: [branchId], references: [id])
-  orderId          String?        @map("pedido_compra_id") @db.Uuid
-  order            PurchaseOrder? @relation(fields: [orderId], references: [id])
-  /// Documento fiscal da entrega (M07, Sprint 9): ainda não preenchido.
-  fiscalDocumentId String?        @map("documento_fiscal_id") @db.Uuid
-  number           String         @map("numero") @db.VarChar(30)
-  receivedAt       DateTime       @default(now()) @map("data_recebimento") @db.Timestamptz(6)
-  locationId       String?        @map("local_estoque_id") @db.Uuid
-  location         StockLocation? @relation(fields: [locationId], references: [id])
-  inspectorId      String?        @map("conferente_id") @db.Uuid
-  inspector        User?          @relation("RecebimentoConferente", fields: [inspectorId], references: [id])
-  hasDivergence    Boolean        @default(false) @map("possui_divergencia")
-  generatedStock   Boolean        @default(false) @map("gerou_estoque")
-  generatedPayable Boolean        @default(false) @map("gerou_financeiro")
-  note             String?        @map("observacao")
-  createdAt        DateTime       @default(now()) @map("criado_em") @db.Timestamptz(6)
-  updatedAt        DateTime       @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId        String          @map("empresa_id") @db.Uuid
+  branchId         String?         @map("filial_id") @db.Uuid
+  branch           Branch?         @relation(fields: [branchId], references: [id])
+  orderId          String?         @map("pedido_compra_id") @db.Uuid
+  order            PurchaseOrder?  @relation(fields: [orderId], references: [id])
+  /// Nota que acompanhou a entrega (RF-047). Informada na criação: o cabeçalho
+  /// do recebimento é imutável (bd/11), então não há como vinculá-la depois.
+  fiscalDocumentId String?         @map("documento_fiscal_id") @db.Uuid
+  fiscalDocument   FiscalDocument? @relation(fields: [fiscalDocumentId], references: [id])
+  number           String          @map("numero") @db.VarChar(30)
+  receivedAt       DateTime        @default(now()) @map("data_recebimento") @db.Timestamptz(6)
+  locationId       String?         @map("local_estoque_id") @db.Uuid
+  location         StockLocation?  @relation(fields: [locationId], references: [id])
+  inspectorId      String?         @map("conferente_id") @db.Uuid
+  inspector        User?           @relation("RecebimentoConferente", fields: [inspectorId], references: [id])
+  hasDivergence    Boolean         @default(false) @map("possui_divergencia")
+  generatedStock   Boolean         @default(false) @map("gerou_estoque")
+  generatedPayable Boolean         @default(false) @map("gerou_financeiro")
+  note             String?         @map("observacao")
+  createdAt        DateTime        @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt        DateTime        @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
   items GoodsReceiptItem[]
 
@@ -1645,6 +1706,135 @@ model GoodsReceiptItem {
   note               String?            @map("observacao")
 
   @@map("recebimento_item")
+}
+
+// ---------------------------------------------------------------------------
+// M07 — Documentos Fiscais (RF-043 a RF-050)
+//
+// A diferença em relação a todos os módulos anteriores: o documento fiscal não é
+// um fato nosso. Pedido, recebimento e título nascem aqui e por isso o banco os
+// calcula; a nota nasce no emitente. Os valores dela são **informados** e o banco
+// não os recalcula — ele exige que a soma dos itens feche com o total declarado
+// (bd/12, conferência no commit). Recalcular seria reescrever documento de
+// terceiro para que ele parecesse correto.
+//
+// O que continua sendo projeção do modelo: `status` (máquina de estados do
+// processamento), `processadoEm`, e as marcas `generatedStock`/`generatedPayable`
+// — estas últimas cobrem tanto o efeito gerado pela própria nota quanto o gerado
+// pelo recebimento que a referencia.
+// ---------------------------------------------------------------------------
+
+/// gestao.documento_fiscal — nota recebida e o controle do seu processamento
+/// (RF-043 a RF-050).
+model FiscalDocument {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId          String               @map("empresa_id") @db.Uuid
+  branchId           String?              @map("filial_id") @db.Uuid
+  branch             Branch?              @relation(fields: [branchId], references: [id])
+  model              FiscalDocumentModel  @default(NFE) @map("modelo")
+  /// 44 dígitos da NF-e/NFC-e. Nula no que não tem chave (NFS-e, recibo) — a
+  /// identidade, aí, é modelo + número + série + emitente (bd/12).
+  accessKey          String?              @map("chave_acesso") @db.VarChar(44)
+  number             String               @map("numero") @db.VarChar(20)
+  series             String?              @map("serie") @db.VarChar(5)
+  /// 0 = entrada, 1 = saída (tpNF do XML).
+  operationType      String?              @map("tipo_operacao") @db.Char(1)
+  operationNature    String?              @map("natureza_operacao") @db.VarChar(120)
+  issuedAt           DateTime             @map("data_emissao") @db.Timestamptz(6)
+  movedAt            DateTime?            @map("data_entrada_saida") @db.Timestamptz(6)
+  issuerPartnerId    String?              @map("emitente_parceiro_id") @db.Uuid
+  issuerPartner      Partner?             @relation("NotaEmitente", fields: [issuerPartnerId], references: [id])
+  issuerTaxId        String?              @map("emitente_cnpj_cpf") @db.VarChar(14)
+  issuerName         String?              @map("emitente_nome") @db.VarChar(255)
+  recipientPartnerId String?              @map("destinatario_parceiro_id") @db.Uuid
+  recipientPartner   Partner?             @relation("NotaDestinatario", fields: [recipientPartnerId], references: [id])
+  recipientTaxId     String?              @map("destinatario_cnpj_cpf") @db.VarChar(14)
+  recipientName      String?              @map("destinatario_nome") @db.VarChar(255)
+  productsAmount     Decimal              @default(0) @map("valor_produtos") @db.Decimal(18, 2)
+  discountAmount     Decimal              @default(0) @map("valor_desconto") @db.Decimal(18, 2)
+  freightAmount      Decimal              @default(0) @map("valor_frete") @db.Decimal(18, 2)
+  insuranceAmount    Decimal              @default(0) @map("valor_seguro") @db.Decimal(18, 2)
+  otherExpenseAmount Decimal              @default(0) @map("valor_outras_despesas") @db.Decimal(18, 2)
+  totalAmount        Decimal              @default(0) @map("valor_total") @db.Decimal(18, 2)
+  icmsAmount         Decimal              @default(0) @map("valor_icms") @db.Decimal(18, 2)
+  icmsStAmount       Decimal              @default(0) @map("valor_icms_st") @db.Decimal(18, 2)
+  ipiAmount          Decimal              @default(0) @map("valor_ipi") @db.Decimal(18, 2)
+  pisAmount          Decimal              @default(0) @map("valor_pis") @db.Decimal(18, 2)
+  cofinsAmount       Decimal              @default(0) @map("valor_cofins") @db.Decimal(18, 2)
+  issAmount          Decimal              @default(0) @map("valor_iss") @db.Decimal(18, 2)
+  origin             FiscalDocumentOrigin @default(UPLOAD_MANUAL) @map("origem")
+  /// Identificador do documento na origem — chave de idempotência da coleta
+  /// automática (RF-050): o coletor que repete o lote não cria segundo registro.
+  originReference    String?              @map("origem_referencia") @db.VarChar(120)
+  collectedAt        DateTime?            @map("coletado_em") @db.Timestamptz(6)
+  status             FiscalDocumentStatus @default(RECEBIDO) @map("status")
+  /// XML recebido, na íntegra. Imutável depois de gravado (bd/12): reprocessar é
+  /// ler outra vez o mesmo conteúdo, não substituí-lo.
+  xmlContent         String?              @map("xml_conteudo")
+  xmlHash            String?              @map("xml_hash") @db.VarChar(64)
+  xmlStorageUrl      String?              @map("xml_storage_url")
+  danfeStorageUrl    String?              @map("danfe_storage_url")
+  attempts           Int                  @default(0) @map("tentativas_processamento") @db.SmallInt
+  processingError    String?              @map("erro_processamento")
+  processedAt        DateTime?            @map("processado_em") @db.Timestamptz(6)
+  duplicateOfId      String?              @map("duplicado_de_id") @db.Uuid
+  duplicateOf        FiscalDocument?      @relation("NotaDuplicata", fields: [duplicateOfId], references: [id])
+  purchaseOrderId    String?              @map("pedido_compra_id") @db.Uuid
+  purchaseOrder      PurchaseOrder?       @relation(fields: [purchaseOrderId], references: [id])
+  generatedStock     Boolean              @default(false) @map("gerou_estoque")
+  generatedPayable   Boolean              @default(false) @map("gerou_financeiro")
+  metadata           Json                 @default("{}") @map("metadados")
+  createdById        String?              @map("criado_por") @db.Uuid
+  createdBy          User?                @relation(fields: [createdById], references: [id])
+  createdAt          DateTime             @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt          DateTime             @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  items            FiscalDocumentItem[]
+  duplicates       FiscalDocument[]     @relation("NotaDuplicata")
+  receipts         GoodsReceipt[]
+  financialEntries FinancialEntry[]
+  stockMovements   StockMovement[]
+
+  @@map("documento_fiscal")
+}
+
+/// gestao.documento_fiscal_item — linha da nota, com tributos (RF-045).
+///
+/// `productId` é o vínculo com o catálogo (RF-047) e a única coluna que ainda
+/// muda depois do processamento — até a nota dar entrada no estoque, quando ela
+/// também congela (bd/12).
+model FiscalDocumentItem {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String         @map("empresa_id") @db.Uuid
+  documentId     String         @map("documento_fiscal_id") @db.Uuid
+  document       FiscalDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  sequence       Int            @map("sequencia") @db.SmallInt
+  productId      String?        @map("produto_id") @db.Uuid
+  product        Product?       @relation(fields: [productId], references: [id])
+  /// Código do item no catálogo do emitente (cProd) — é por ele que o vínculo
+  /// com o nosso produto é sugerido na próxima nota do mesmo fornecedor.
+  supplierCode   String?        @map("codigo_produto_origem") @db.VarChar(60)
+  description    String         @map("descricao") @db.VarChar(255)
+  ncm            String?        @db.VarChar(8)
+  cest           String?        @db.VarChar(7)
+  cfop           String?        @db.VarChar(4)
+  unit           String?        @map("unidade") @db.VarChar(6)
+  quantity       Decimal        @map("quantidade") @db.Decimal(18, 6)
+  unitPrice      Decimal        @map("valor_unitario") @db.Decimal(18, 6)
+  discountAmount Decimal        @default(0) @map("valor_desconto") @db.Decimal(18, 2)
+  freightAmount  Decimal        @default(0) @map("valor_frete") @db.Decimal(18, 2)
+  lineAmount     Decimal        @map("valor_total") @db.Decimal(18, 2)
+  icmsCst        String?        @map("cst_icms") @db.VarChar(4)
+  icmsBase       Decimal        @default(0) @map("base_calculo_icms") @db.Decimal(18, 2)
+  icmsRate       Decimal        @default(0) @map("aliquota_icms") @db.Decimal(9, 6)
+  icmsAmount     Decimal        @default(0) @map("valor_icms") @db.Decimal(18, 2)
+  icmsStAmount   Decimal        @default(0) @map("valor_icms_st") @db.Decimal(18, 2)
+  ipiAmount      Decimal        @default(0) @map("valor_ipi") @db.Decimal(18, 2)
+  pisAmount      Decimal        @default(0) @map("valor_pis") @db.Decimal(18, 2)
+  cofinsAmount   Decimal        @default(0) @map("valor_cofins") @db.Decimal(18, 2)
+
+  @@unique([documentId, sequence], map: "uq_documento_fiscal_item")
+  @@map("documento_fiscal_item")
 }
 
 // ---------------------------------------------------------------------------

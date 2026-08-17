@@ -62,6 +62,8 @@ export const RESOURCES = {
   PURCHASE_ORDERS: 'purchase-orders',
   GOODS_RECEIPTS: 'goods-receipts',
   PURCHASE_HISTORY: 'purchase-history',
+  FISCAL_DOCUMENTS: 'fiscal-documents',
+  FISCAL_POSTINGS: 'fiscal-postings',
 } as const;
 
 export interface PermissionDefinition {
@@ -367,6 +369,26 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...build('M06', RESOURCES.PURCHASE_HISTORY, [
     { action: A.READ, description: 'Consultar o histórico de compras e de preços' },
   ]),
+  // M07 — Documentos Fiscais (RF-043 a RF-050).
+  //
+  // Duas separações intencionais. Importar não é dar entrada: `fiscal-postings`
+  // é o recurso que transforma a nota em mercadoria no depósito e em título a
+  // pagar, e é aí que ela vira dinheiro saindo — quem recebe o XML do
+  // contador não precisa desse direito. E `:DELETE` cancela o documento
+  // (o registro nunca é apagado — bd/12), enquanto `:UPDATE` cobre o vínculo com
+  // fornecedor, pedido e produtos e o reprocessamento.
+  ...build('M07', RESOURCES.FISCAL_DOCUMENTS, [
+    { action: A.CREATE, description: 'Importar XML de documentos fiscais e receber a coleta' },
+    { action: A.READ, description: 'Consultar documentos fiscais, itens, anexos e pendências' },
+    { action: A.UPDATE, description: 'Vincular documento, anexar DANFE e reprocessar' },
+    { action: A.DELETE, description: 'Cancelar documento fiscal' },
+  ]),
+  ...build('M07', RESOURCES.FISCAL_POSTINGS, [
+    {
+      action: A.CREATE,
+      description: 'Gerar entrada de estoque e título a pagar a partir do documento fiscal',
+    },
+  ]),
 ];
 
 /** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
@@ -558,4 +580,11 @@ export const PERMISSIONS = {
   GOODS_RECEIPTS_READ: permissionCode(RESOURCES.GOODS_RECEIPTS, A.READ),
 
   PURCHASE_HISTORY_READ: permissionCode(RESOURCES.PURCHASE_HISTORY, A.READ),
+
+  FISCAL_DOCUMENTS_CREATE: permissionCode(RESOURCES.FISCAL_DOCUMENTS, A.CREATE),
+  FISCAL_DOCUMENTS_READ: permissionCode(RESOURCES.FISCAL_DOCUMENTS, A.READ),
+  FISCAL_DOCUMENTS_UPDATE: permissionCode(RESOURCES.FISCAL_DOCUMENTS, A.UPDATE),
+  FISCAL_DOCUMENTS_DELETE: permissionCode(RESOURCES.FISCAL_DOCUMENTS, A.DELETE),
+
+  FISCAL_POSTINGS_CREATE: permissionCode(RESOURCES.FISCAL_POSTINGS, A.CREATE),
 } as const;

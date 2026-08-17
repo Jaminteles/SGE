@@ -34,6 +34,7 @@ import { StockModule } from './modules/stock/stock.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { CashFlowModule } from './modules/cash-flow/cash-flow.module';
 import { PurchasingModule } from './modules/purchasing/purchasing.module';
+import { FiscalDocumentsModule } from './modules/fiscal-documents/fiscal-documents.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -75,7 +76,7 @@ import { HealthModule } from './modules/health/health.module';
     PrismaModule,
     // Global: os módulos de negócio emitem eventos sem importá-lo (M16).
     AuditModule,
-    // Global: armazenamento de arquivos (comprovantes — RF-019).
+    // Global: armazenamento de arquivos (comprovantes — RF-019; anexos — RF-048).
     StorageModule,
     // Global: valida referências entre cadastros dentro da empresa (RF-005).
     ReferencesModule,
@@ -96,6 +97,7 @@ import { HealthModule } from './modules/health/health.module';
     FinanceModule,
     CashFlowModule,
     PurchasingModule,
+    FiscalDocumentsModule,
     HealthModule,
   ],
   providers: [

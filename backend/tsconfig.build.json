@@ -2,5 +2,7 @@
   "extends": "./tsconfig.json",
   // `prisma/` fica fora do build: seed e check-db rodam via ts-node e, ao
   // serem compilados, deslocavam a raiz do dist para dist/src.
-  "exclude": ["node_modules", "test", "dist", "prisma", "**/*spec.ts"]
+  // `__fixtures__/` é material de teste (XML de nota, por exemplo): fica fora do
+  // build junto com os specs que o usam.
+  "exclude": ["node_modules", "test", "dist", "prisma", "**/*spec.ts", "**/__fixtures__/**"]
 }

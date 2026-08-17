@@ -1,5 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
-import { Prisma, PurchaseOrderStatus, StockMovementType } from '@prisma/client';
+import {
+  FiscalDocumentStatus,
+  Prisma,
+  PurchaseOrderStatus,
+  StockMovementType,
+} from '@prisma/client';
 import { GoodsReceiptsService } from './goods-receipts.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ReferencesService } from '../../common/references/references.service';
@@ -41,7 +46,21 @@ function order(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function buildService(current: Record<string, unknown> = order()) {
+/** Nota já processada do mesmo fornecedor do pedido (M07 — RF-047). */
+function fiscalDocument(overrides: Record<string, unknown> = {}) {
+  return {
+    number: '4567',
+    status: FiscalDocumentStatus.PROCESSADO,
+    issuerPartnerId: 'forn-1',
+    purchaseOrderId: null,
+    ...overrides,
+  };
+}
+
+function buildService(
+  current: Record<string, unknown> = order(),
+  document: Record<string, unknown> | null = fiscalDocument(),
+) {
   const receiptDelegate = {
     create: jest
       .fn()
@@ -62,6 +81,7 @@ function buildService(current: Record<string, unknown> = order()) {
     db: {
       goodsReceipt: receiptDelegate,
       goodsReceiptItem: receiptItemDelegate,
+      fiscalDocument: { findFirst: jest.fn().mockResolvedValue(document) },
       $queryRaw: jest.fn().mockResolvedValue([{ numero: 'RC-2026-000001' }]),
     },
     transaction: jest.fn().mockImplementation((fn: () => unknown) => fn()),
@@ -82,6 +102,7 @@ function buildService(current: Record<string, unknown> = order()) {
 
   return {
     service: new GoodsReceiptsService(prisma, references, orders, movements, entries),
+    receiptDelegate,
     receiptItemDelegate,
     movements,
     entries,
@@ -134,6 +155,50 @@ describe('GoodsReceiptsService', () => {
             { orderItemId: 'item-1', receivedQuantity: '3' },
           ],
         },
+        'user-1',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  // RF-047: a nota entra na criação porque o cabeçalho do recebimento é
+  // imutável (bd/11) — e ela tem de ser do fornecedor que vendeu.
+  it('registra a nota fiscal informada na entrega', async () => {
+    const { service, receiptDelegate, movements } = buildService();
+
+    await service.create(
+      'empresa-1',
+      'ped-1',
+      {
+        fiscalDocumentId: 'doc-1',
+        items: [{ orderItemId: 'item-1', receivedQuantity: '4' }],
+      },
+      'user-1',
+    );
+
+    expect(receiptDelegate.create.mock.calls[0][0].data).toMatchObject({
+      fiscalDocumentId: 'doc-1',
+    });
+    const [, [movement]] = (movements.record as jest.Mock).mock.calls[0];
+    expect(movement.fiscalDocumentId).toBe('doc-1');
+  });
+
+  it('recusa nota de outro fornecedor ou ainda não processada', async () => {
+    const other = buildService(order(), fiscalDocument({ issuerPartnerId: 'forn-2' }));
+    await expect(
+      other.service.create(
+        'empresa-1',
+        'ped-1',
+        { fiscalDocumentId: 'doc-1', items: [{ orderItemId: 'item-1', receivedQuantity: '4' }] },
+        'user-1',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    const pending = buildService(order(), fiscalDocument({ status: FiscalDocumentStatus.ERRO }));
+    await expect(
+      pending.service.create(
+        'empresa-1',
+        'ped-1',
+        { fiscalDocumentId: 'doc-1', items: [{ orderItemId: 'item-1', receivedQuantity: '4' }] },
         'user-1',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);

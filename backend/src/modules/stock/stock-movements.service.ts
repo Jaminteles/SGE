@@ -14,6 +14,12 @@ export const MOVEMENT_ORIGIN = {
   INVENTORY: 'INVENTARIO',
   /** Entrada vinda da conferência de uma entrega (M06) — `originId` é a linha. */
   GOODS_RECEIPT: 'RECEBIMENTO',
+  /**
+   * Entrada amparada só pela nota, sem pedido nem conferência (M07) —
+   * `originId` é o **item** do documento. Quando existe recebimento, é ele quem
+   * dá a entrada e a nota apenas se vincula (bd/12 recusa a segunda porta).
+   */
+  FISCAL_DOCUMENT: 'DOCUMENTO_FISCAL',
 } as const;
 
 const movementInclude = {
@@ -45,6 +51,8 @@ export interface StockMovementInput {
   movementDate?: Date;
   origin: string;
   originId?: string;
+  /** Vínculo estrutural com a nota (RF-047), além do par origem/origem_id. */
+  fiscalDocumentId?: string;
   batch?: string;
   note?: string;
   userId?: string;
@@ -219,6 +227,7 @@ export class StockMovementsService {
               ...(input.movementDate ? { movementDate: input.movementDate } : {}),
               origin: input.origin,
               originId: input.originId,
+              fiscalDocumentId: input.fiscalDocumentId,
               batch: input.batch,
               note: input.note,
               userId: input.userId,

@@ -118,6 +118,28 @@ async function seedSystemRoles(): Promise<void> {
         PERMISSIONS.PURCHASE_ORDERS_READ,
         PERMISSIONS.GOODS_RECEIPTS_READ,
         PERMISSIONS.PURCHASE_HISTORY_READ,
+        // M07: pagar sem enxergar a nota é pagar contra o que alguém digitou.
+        // Só leitura — importar e vincular é do Fiscal.
+        PERMISSIONS.FISCAL_DOCUMENTS_READ,
+      ],
+    },
+    // M07: Fiscal é quem responde pelos RF-043 a RF-050 — importa, confere,
+    // vincula e reprocessa a nota. `fiscal-postings:CREATE` fica de fora: dar
+    // entrada no estoque e assumir a conta a pagar move ativo e dinheiro, e é
+    // decisão de quem confere a mercadoria e de quem paga, não de quem arquiva o
+    // documento (RN-003). Junto vem a leitura do que a nota precisa referenciar:
+    // fornecedor, catálogo e pedido.
+    {
+      role: 'FISCAL',
+      codes: [
+        ...PERMISSION_CATALOG.filter(
+          (p) => p.module === 'M07' && p.code !== PERMISSIONS.FISCAL_POSTINGS_CREATE,
+        ).map((p) => p.code),
+        PERMISSIONS.PARTNERS_READ,
+        PERMISSIONS.PRODUCTS_READ,
+        PERMISSIONS.PRODUCT_SUPPLIERS_READ,
+        PERMISSIONS.PURCHASE_ORDERS_READ,
+        PERMISSIONS.GOODS_RECEIPTS_READ,
       ],
     },
     // M14: o planejamento é do Diretor (é ele o responsável pelos RF-101 a
@@ -153,6 +175,8 @@ async function seedSystemRoles(): Promise<void> {
         PERMISSIONS.GOODS_RECEIPTS_CREATE,
         PERMISSIONS.GOODS_RECEIPTS_READ,
         PERMISSIONS.PURCHASE_ORDERS_READ,
+        // M07: a conferência é contra a nota que veio com a carga (RF-047).
+        PERMISSIONS.FISCAL_DOCUMENTS_READ,
       ],
     },
   ];

@@ -37,6 +37,8 @@ export const ENTRY_ORIGIN = {
   RECURRENCE: 'RECORRENCIA',
   REIMBURSEMENT: 'REEMBOLSO',
   GOODS_RECEIPT: 'RECEBIMENTO',
+  /** Título gerado pela própria nota, sem pedido nem conferência (M07). */
+  FISCAL_DOCUMENT: 'DOCUMENTO_FISCAL',
 } as const;
 
 /**
@@ -52,6 +54,7 @@ export interface EntrySource {
   originId?: string;
   recurrenceId?: string;
   purchaseOrderId?: string;
+  fiscalDocumentId?: string;
 }
 
 /** Situações em que o título ainda pode ser editado ou liquidado. */
@@ -184,6 +187,7 @@ export class FinancialEntriesService {
           originId: source.originId,
           recurrenceId: source.recurrenceId,
           purchaseOrderId: source.purchaseOrderId,
+          fiscalDocumentId: source.fiscalDocumentId,
           note: dto.note,
           createdById: userId,
           installments: {

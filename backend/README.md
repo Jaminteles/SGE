@@ -1,4 +1,4 @@
-# SGE — Backend (Fases 1 a 3 completas; Fase 4 em andamento)
+# SGE — Backend (Fases 1 a 4 completas)
 
 Backend do **Sistema de Gestão Empresarial e Financeira**, implementado conforme a
 stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
@@ -36,6 +36,12 @@ stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
   descontos e frete rateado, submissão a aprovação por alçada, recebimento total
   ou parcial com conferência de quantidade e preço, vínculo com fornecedor,
   estoque e financeiro, e histórico de compras e de preços (RF-036 a RF-042).
+- **Sprint 9 — M07 (Documentos Fiscais)**: importação de XML de NF-e/NFC-e com
+  conferência da chave de acesso, armazenamento do original e dos metadados,
+  processamento de emitente, destinatário, itens, valores e tributos, detecção de
+  duplicidade, vínculo com fornecedor, pedido, produtos, estoque e contas, anexo
+  de DANFE/PDF, controle de erros e reprocessamento, e coleta automática por
+  integração externa (RF-043 a RF-050).
 
 ## Banco de dados
 
@@ -66,11 +72,12 @@ psql -U gestao_owner -h localhost -d gestao_empresarial -f 08_estoque_sprint5.sq
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 09_financeiro_sprint6.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 10_fluxo_caixa_sprint7.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 11_compras_sprint8.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 12_documentos_fiscais_sprint9.sql
 ```
 
 Se o banco já existe e você só quer trazê-lo para a sprint atual **sem perder os
 dados**, rode `pwsh ../bd/instalar-bd.ps1 -Atualizar`: reaplica apenas `04` a
-`11`, que são idempotentes.
+`12`, que são idempotentes.
 
 ```bash
 # 2. Backend
@@ -134,7 +141,7 @@ associações, mas não são editáveis pela API.
 
 `gestao.permissao` não tem coluna de código: a chave é a tripla
 (`modulo`, `recurso`, `acao`). A API deriva o código `recurso:AÇÃO` e grava seu
-catálogo com `modulo` = `M01`/`M02`/`M03`/`M04`/`M05`/`M06`/`M08`/`M14`/`M16`. As permissões em
+catálogo com `modulo` = `M01`/`M02`/`M03`/`M04`/`M05`/`M06`/`M07`/`M08`/`M14`/`M16`. As permissões em
 português da carga inicial de `bd/03` continuam lá, reservadas para os módulos
 das próximas sprints.
 
@@ -144,9 +151,10 @@ Vínculos feitos pelo seed nos perfis de sistema:
 | --- | --- | --- |
 | RH | Todo o M03 | `reimbursements:APPROVE` — quem lança a despesa não decide sobre ela (RN-003) |
 | COMPRAS | M04, o catálogo do M05 e o M06 (pedido e histórico) | `partner-bank-accounts:*` — quem negocia o preço não redireciona o crédito; `stock-movements:*`, `inventories:*` e `goods-receipts:CREATE` — quem compra não dá baixa nem confere o que chegou; `purchase-orders:APPROVE` — quem pede não aprova (RN-003) |
-| FINANCEIRO | Todo o M08, `partner-bank-accounts:*`, leitura de parceiros, histórico, condições, `stock:READ`, `stock-valuation:READ`, `cash-flow:READ`, leitura de cenários e alertas e leitura do M06 (pedido, recebimento e preços) | `financial-entries:APPROVE` — quem lança o título não decide sobre ele (RN-003); escrita do cadastro comercial e do estoque; escrita de cenário e alerta — afrouxar o próprio saldo mínimo é apagar o aviso |
+| FINANCEIRO | Todo o M08, `partner-bank-accounts:*`, leitura de parceiros, histórico, condições, `stock:READ`, `stock-valuation:READ`, `cash-flow:READ`, leitura de cenários e alertas, leitura do M06 (pedido, recebimento e preços) e `fiscal-documents:READ` | `financial-entries:APPROVE` — quem lança o título não decide sobre ele (RN-003); escrita do cadastro comercial e do estoque; escrita de cenário e alerta — afrouxar o próprio saldo mínimo é apagar o aviso |
 | DIRETOR | Todo o M14 (fluxo, cenários e alertas) + leitura de títulos, baixas e inadimplência | Escrita no M08 — quem planeja o caixa não lança nem baixa título |
-| OPERACIONAL | Catálogo, locais, movimentação e contagem do M05 + recebimento do M06 (`goods-receipts:*`, `purchase-orders:READ`) | M04 — catálogo não implica acesso a parceiros; `inventories:APPROVE` — quem conta não homologa a própria diferença (RN-003); `stock-valuation:READ` — valor do ativo é leitura financeira; escrita do pedido — quem recebe não negocia preço |
+| OPERACIONAL | Catálogo, locais, movimentação e contagem do M05 + recebimento do M06 (`goods-receipts:*`, `purchase-orders:READ`) e `fiscal-documents:READ` | M04 — catálogo não implica acesso a parceiros; `inventories:APPROVE` — quem conta não homologa a própria diferença (RN-003); `stock-valuation:READ` — valor do ativo é leitura financeira; escrita do pedido — quem recebe não negocia preço |
+| FISCAL | Todo o M07 (importar, vincular, anexar, reprocessar, cancelar) + leitura de parceiros, catálogo, pedidos e recebimentos | `fiscal-postings:CREATE` — dar entrada no estoque e assumir a conta a pagar move ativo e dinheiro; é decisão de quem confere a mercadoria e de quem paga, não de quem arquiva o documento (RN-003) |
 
 ## Mapa de requisitos → endpoints
 
@@ -199,6 +207,14 @@ Vínculos feitos pelo seed nos perfis de sistema:
 | RF-040 | Conferir quantidade, preço e divergências | `documentPrice`/`accepted` no item da entrega; `divergenceType` e `hasDivergence` na resposta; `GET /goods-receipts?divergentOnly=true` |
 | RF-041 | Vincular pedido a fornecedor, NF, estoque e financeiro | `partnerId` no pedido; entrada de estoque por linha recebida; `generatePayable` gera o título (`origin=RECEBIMENTO`, `purchaseOrderId`) |
 | RF-042 | Histórico de compras e preços | `GET /purchase-history` (view `vw_historico_compra`) + `GET /partners/:id/history` |
+| RF-043 | Importar XML de documentos fiscais | `POST /fiscal-documents/import` (multipart `file`) |
+| RF-044 | Armazenar documento original e metadados | `xmlContent`/`xmlHash` gravados na importação; `GET /fiscal-documents/:id/xml` devolve o original |
+| RF-045 | Processar chave, emitente, destinatário, itens, valores e tributos | Leitura do XML na importação; `GET /fiscal-documents/:id` (itens com NCM/CFOP/CST e tributos) |
+| RF-046 | Detectar documentos duplicados | Reenvio do mesmo arquivo devolve `JA_IMPORTADO`; mesma chave com outro conteúdo nasce `DUPLICADO` com `duplicateOf` |
+| RF-047 | Vincular documento a fornecedor, pedido, produtos, estoque e contas | `PATCH /fiscal-documents/:id/links`, `POST /fiscal-documents/:id/postings`, `fiscalDocumentId` no recebimento |
+| RF-048 | Anexar DANFE/PDF e documentos relacionados | `POST/GET /fiscal-documents/:id/attachments`, `GET /fiscal-documents/:id/attachments/:attachmentId` |
+| RF-049 | Controlar processamento, erros e reprocessamentos | `status`/`processingError`/`attempts`; `POST /fiscal-documents/:id/reprocess`, `/cancel`, `GET /fiscal-documents?pendingOnly=true` |
+| RF-050 | Suportar coleta automática por integração externa | `POST /fiscal-documents/collect` (lote idempotente por `originReference`) |
 | RF-051 | Contas a pagar manuais ou vindas de processos | `POST /financial-entries` com `type=PAGAR` (`origin` = MANUAL/RECORRENCIA/...) |
 | RF-052 | Contas a receber manuais ou vindas de processos | `POST /financial-entries` com `type=RECEBER` |
 | RF-053 | Parcelas e recorrências | `installments`/`installmentCount`/`paymentTermId` em `/financial-entries`; `/recurrences` + `POST /recurrences/:id/generate` |
@@ -364,6 +380,72 @@ fornecedor são o mesmo fato.
 e sem entrar no estoque — é o que distingue "não chegou" de "chegou e foi
 devolvido". Uma entrega inteiramente recusada não gera título.
 
+**Nota da entrega (RF-047).** `fiscalDocumentId` é informado **na criação** do
+recebimento: o cabeçalho é imutável (`bd/11`), então não há como vinculá-lo
+depois. A nota tem de estar `PROCESSADO` e ser do mesmo fornecedor do pedido.
+
+### M07 — Documentos Fiscais: o que a API não deixa você escrever
+
+A diferença em relação a todos os módulos anteriores: **a nota não é um fato
+nosso**. Pedido, recebimento e título nascem aqui e por isso o banco os calcula; a
+nota nasce no emitente e passou pela SEFAZ. Nenhum campo fiscal é aceito do
+cliente da API — todos vêm do XML.
+
+| Campo | Quem escreve | Por quê |
+| --- | --- | --- |
+| `accessKey`, `number`, `series`, `issuedAt`, emitente e destinatário | Leitura do XML | Aceitá-los no corpo permitiria um documento cujo conteúdo diverge do arquivo que o comprova |
+| Itens, valores e tributos | Leitura do XML | O banco **não** os recalcula: ele exige que a soma das linhas feche com o total declarado (`bd/12`, conferido no commit) |
+| `status`, `processedAt`, `attempts` | Máquina de estados em `trg_valida_documento_fiscal` | "O que aconteceu com esta nota" é sequência de fatos, não campo editável |
+| `xmlContent`, `xmlHash` | Importação, uma única vez | Substituir o XML de um documento gravado não é reprocessar: é trocar a prova (`bd/12` recusa) |
+| `duplicateOfId` | Detecção de duplicidade na importação | Índices parciais em `bd/12` + trigger que exige o par status/original |
+| `generatedStock`, `generatedPayable` | Triggers `SECURITY DEFINER` (`bd/12`) | São marcados pelo próprio movimento e pelo próprio título — inclusive quando vieram do recebimento que referencia a nota |
+
+### M07 — regras e barreiras
+
+| Regra | Onde vale |
+| --- | --- |
+| XML com `<!DOCTYPE`/`<!ENTITY` é recusado (XXE, expansão de entidade) | `common/xml/xml-reader.ts` (RNF-004) |
+| Chave de acesso confere DV (módulo 11) e bate com CNPJ, modelo, série e número do XML | `nfe.parser.ts` (RF-045) |
+| Nota não autorizada pela SEFAZ (`cStat`) não vira estoque nem título | Service → status `ERRO` (RF-045/RF-047) |
+| Nota destinada a outra empresa não é importada como válida | Service → status `ERRO` (RN-001) |
+| Documento processado fecha com seus itens | Service + constraint trigger `trg_documento_fiscal_itens_somam` (RF-045) |
+| Mesma chave, ou mesmo arquivo, não entra duas vezes | Índices `ux_documento_fiscal_chave`/`_xml_hash`/`_identidade` (RF-046) |
+| Coleta é idempotente por `originReference` | Índice `ux_documento_fiscal_origem_referencia` (RF-050) |
+| Conteúdo fiscal não se edita; só vínculos e reprocessamento | Sem rota de escrita + `trg_prepara_documento_fiscal_item` (RF-045) |
+| Documento não se apaga — o que existe é cancelar com motivo | `REVOKE DELETE` em `documento_fiscal` (`bd/12`) |
+| Nota com recebimento não dá entrada por conta própria | Service + `trg_valida_movimento_documento_fiscal` (RN-004) |
+| Uma entrada por item e um título por nota | Índices `ux_movimento_origem_documento_fiscal` / `ux_titulo_origem_documento_fiscal` (RN-004) |
+| Pedido vinculado é do mesmo fornecedor que emitiu a nota | Trigger `trg_valida_vinculo_documento_fiscal` (RF-047) |
+
+**Importação (RF-043 a RF-046).** `POST /fiscal-documents/import` recebe o XML de
+NF-e/NFC-e (`nfeProc` ou `NFe`), grava o original e responde com o `outcome`:
+
+| `outcome` | Significado |
+| --- | --- |
+| `IMPORTADO` | Documento novo e consistente — `PROCESSADO` |
+| `JA_IMPORTADO` | Arquivo idêntico (mesmo hash) ou mesma referência de origem: devolve o que já existe |
+| `DUPLICADO` | Mesma chave com conteúdo diferente — nasce apontando o original, para uma pessoa decidir |
+| `ERRO` | Chegou, mas não fecha: valores, protocolo ou destinatário. Fica visível e sem efeito, e `POST /:id/reprocess` relê o mesmo XML |
+
+XML que não é NF-e/NFC-e (NFS-e municipal, CT-e, MDF-e) é recusado com 400: o
+layout deles é outro e entra com o M12. Um documento cujo XML **não pode ser
+lido** não gera registro — sem número e sem data de emissão não há documento a
+guardar.
+
+**Duas portas para a mesma entrada (RF-047).** Com pedido e conferência, quem dá
+entrada no estoque e gera o título é o recebimento (M06); a nota se vincula e nada
+é gerado por ela. Sem pedido — compra de balcão, fornecedor que entrega com a nota
+e nada mais — a nota **é** o fato de entrada, e `POST /:id/postings` a converte em
+mercadoria e conta a pagar. Que as duas portas nunca se abram para a mesma
+mercadoria é garantido no banco, não na aplicação.
+
+**Coleta automática (RF-050).** `POST /fiscal-documents/collect` recebe até 50
+documentos e responde item a item (`imported`, `alreadyKnown`, `duplicates`,
+`withError`, `rejected`). Reenviar o lote é seguro. Ressalva: o que é reportado
+por documento são as recusas detectadas **antes** de gravar; uma rejeição do banco
+aborta a requisição inteira, de propósito — requisição que falha não deixa
+escrita parcial (RNF-006/007).
+
 ### M08 — Contas a Pagar e Receber: o que a API não deixa você escrever
 
 Uma entidade só (`/financial-entries`) para as duas carteiras, discriminada por
@@ -518,7 +600,7 @@ disponível até a aprovação e `PAGO` reservado à liquidação financeira (M0
 | Evento | Quem grava | Sobrevive a rollback? |
 | --- | --- | --- |
 | `CRIACAO`, `ALTERACAO`, `EXCLUSAO` | Trigger de DML nas tabelas críticas (`bd/03`) | Não — acompanha a transação |
-| `LOGIN`, `LOGOUT`, e futuros `APROVACAO`/`PAGAMENTO`/... | `AuditService.record()` | Não — acompanha a transação |
+| `LOGIN`, `LOGOUT`, `APROVACAO`, `PAGAMENTO`, `CANCELAMENTO`, `IMPORTACAO` (documento fiscal) | `AuditService.record()` | Não — acompanha a transação |
 | `ACESSO_NEGADO` | `AuditService.recordOutOfBand()` | **Sim** — gravado fora da transação |
 
 A gravação usa `createMany`, e não `create`: `create` emite `INSERT ... RETURNING`,
@@ -542,6 +624,12 @@ estrita, para não vazar atividade entre empresas.
 - **RNF-001**: senhas com hash **argon2id**.
 - **RNF-003**: segredos em `.env` (fora do versionamento).
 - **RNF-004**: autorização validada no backend (guards globais) **e** no banco (RLS).
+- **RNF-004 (entrada hostil)**: o XML de documento fiscal chega de fora, muitas
+  vezes por integração automática. O leitor de `common/xml` recusa
+  `<!DOCTYPE`/`<!ENTITY` (XXE e expansão de entidade), limita tamanho,
+  profundidade, número de nós e tamanho de texto, não resolve entidade
+  desconhecida e não usa expressão regular sobre o conteúdo recebido (ReDoS).
+  Nenhum arquivo é aberto e nenhuma requisição é feita durante a leitura.
 - **RNF-006/007**: cada requisição é uma transação; erro reverte tudo.
 - **RNF-008**: paginação e filtros server-side nas listagens.
 - **RNF-010**: logs estruturados (pino) com correlation id + trilha de auditoria

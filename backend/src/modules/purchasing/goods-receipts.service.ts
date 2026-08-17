@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { EntryType, Prisma, StockMovementType } from '@prisma/client';
+import { EntryType, FiscalDocumentStatus, Prisma, StockMovementType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PaginatedResult } from '../../common/dto/paginated-result';
 import { ReferencesService } from '../../common/references/references.service';
@@ -23,6 +23,7 @@ const receiptInclude = {
   branch: { select: { id: true, code: true, name: true } },
   location: { select: { id: true, code: true, name: true } },
   inspector: { select: { id: true, name: true } },
+  fiscalDocument: { select: { id: true, number: true, series: true, accessKey: true } },
   items: {
     include: {
       product: { select: { id: true, code: true, description: true } },
@@ -82,6 +83,8 @@ export class GoodsReceiptsService {
       stockLocationId: dto.locationId,
     });
 
+    await this.assertFiscalDocument(companyId, order, dto.fiscalDocumentId);
+
     const lines = await this.planLines(companyId, order, dto);
 
     return this.prisma.transaction(async () => {
@@ -93,6 +96,7 @@ export class GoodsReceiptsService {
           number,
           branchId: dto.branchId ?? order.branchId,
           locationId: dto.locationId,
+          fiscalDocumentId: dto.fiscalDocumentId,
           inspectorId: userId,
           ...(dto.receivedAt ? { receivedAt: new Date(dto.receivedAt) } : {}),
           note: dto.note,
@@ -134,6 +138,7 @@ export class GoodsReceiptsService {
             // A linha conferida, e não o recebimento: é o que dá ao índice
             // único de bd/11 a granularidade de uma entrada por linha.
             originId: item.id,
+            fiscalDocumentId: dto.fiscalDocumentId,
             batch: line.dto.batch,
             note: line.dto.note,
             userId,
@@ -193,6 +198,45 @@ export class GoodsReceiptsService {
       throw new NotFoundException('Recebimento não encontrado.');
     }
     return receipt;
+  }
+
+  /**
+   * A nota informada na entrega é desta empresa, está processada e é do mesmo
+   * fornecedor do pedido (RF-047).
+   *
+   * O vínculo entra na criação porque o cabeçalho do recebimento é imutável
+   * (bd/11) — e a conferência acontece aqui, e não no M07, porque é o
+   * recebimento que aponta para a nota.
+   */
+  private async assertFiscalDocument(
+    companyId: string,
+    order: PurchaseOrderRow,
+    fiscalDocumentId?: string,
+  ): Promise<void> {
+    if (!fiscalDocumentId) return;
+
+    const document = await this.prisma.db.fiscalDocument.findFirst({
+      where: { id: fiscalDocumentId, companyId },
+      select: { number: true, status: true, issuerPartnerId: true, purchaseOrderId: true },
+    });
+    if (!document) {
+      throw new BadRequestException('Documento fiscal inválido para esta empresa.');
+    }
+    if (document.status !== FiscalDocumentStatus.PROCESSADO) {
+      throw new BadRequestException(
+        `O documento ${document.number} está ${document.status} e não pode amparar a entrega (RF-049).`,
+      );
+    }
+    if (document.issuerPartnerId && document.issuerPartnerId !== order.partnerId) {
+      throw new BadRequestException(
+        `O documento ${document.number} foi emitido por outro fornecedor que não o do pedido ${order.number} (RF-047).`,
+      );
+    }
+    if (document.purchaseOrderId && document.purchaseOrderId !== order.id) {
+      throw new BadRequestException(
+        `O documento ${document.number} está vinculado a outro pedido de compra (RF-047).`,
+      );
+    }
   }
 
   /** Número sequencial por empresa e ano, serializado no banco (bd/11). */
@@ -356,6 +400,9 @@ export class GoodsReceiptsService {
         origin: ENTRY_ORIGIN.GOODS_RECEIPT,
         originId: receiptId,
         purchaseOrderId: order.id,
+        // A nota da entrega, quando informada: é o que liga o pagamento ao
+        // documento fiscal que o sustenta (RF-047).
+        fiscalDocumentId: dto.fiscalDocumentId,
       },
     );
   }
