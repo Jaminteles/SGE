@@ -156,6 +156,12 @@ Vínculos feitos pelo seed nos perfis de sistema:
 | OPERACIONAL | Catálogo, locais, movimentação e contagem do M05 + recebimento do M06 (`goods-receipts:*`, `purchase-orders:READ`) e `fiscal-documents:READ` | M04 — catálogo não implica acesso a parceiros; `inventories:APPROVE` — quem conta não homologa a própria diferença (RN-003); `stock-valuation:READ` — valor do ativo é leitura financeira; escrita do pedido — quem recebe não negocia preço |
 | FISCAL | Todo o M07 (importar, vincular, anexar, reprocessar, cancelar) + leitura de parceiros, catálogo, pedidos e recebimentos | `fiscal-postings:CREATE` — dar entrada no estoque e assumir a conta a pagar move ativo e dinheiro; é decisão de quem confere a mercadoria e de quem paga, não de quem arquiva o documento (RN-003) |
 
+`fiscal-postings:CREATE` não vai para **nenhum** perfil de sistema: quem lança a
+nota como mercadoria e conta a pagar é o Administrador da empresa, ou um perfil
+próprio criado por ele. Perfil de sistema é o mesmo em todas as empresas, e quem
+confere a mercadoria e quem paga variam de empresa para empresa — distribuir esse
+recurso por padrão seria decidir isso por elas.
+
 ## Mapa de requisitos → endpoints
 
 | RF | Requisito | Endpoints |
@@ -439,6 +445,16 @@ e nada mais — a nota **é** o fato de entrada, e `POST /:id/postings` a conver
 mercadoria e conta a pagar. Que as duas portas nunca se abram para a mesma
 mercadoria é garantido no banco, não na aplicação.
 
+**Anexos (RF-048).** `POST /fiscal-documents/:id/attachments` guarda o DANFE
+(`category: DANFE`, o padrão) ou um documento relacionado (`ANEXO`) em
+`gestao.documento` mais o binário no storage — mesma mecânica do comprovante de
+reembolso (RF-019): tipo conferido pela assinatura do conteúdo, chave gerada pelo
+servidor e download sempre como `attachment`. Anexar exige
+`fiscal-documents:UPDATE`; listar e baixar, `:READ`. O mesmo arquivo não entra
+duas vezes no mesmo documento (hash igual é anexo duplicado), mas o mesmo DANFE
+em documentos diferentes é aceito — nota complementar e nota de origem
+compartilham espelho com frequência. Documento cancelado não recebe anexo novo.
+
 **Coleta automática (RF-050).** `POST /fiscal-documents/collect` recebe até 50
 documentos e responde item a item (`imported`, `alreadyKnown`, `duplicates`,
 `withError`, `rejected`). Reenviar o lote é seguro. Ressalva: o que é reportado
@@ -645,7 +661,10 @@ estrita, para não vazar atividade entre empresas.
   liquidação com trava de saldo, estorno, geração de recorrências, saldo
   acumulado da projeção, premissas de cenário, ruptura do alerta de caixa,
   totais e alçada do pedido de compra, recebimento acima do saldo, custo posto da
-  entrada e título gerado pela entrega).
+  entrada, título gerado pela entrega, leitura defensiva de XML, chave de acesso
+  conferida contra o conteúdo da nota, autorização da SEFAZ, destinatário,
+  detecção de duplicidade, idempotência da coleta, vínculo e reprocessamento, e
+  as duas portas de entrada da mercadoria).
 - **Financeiro (Sprint 6)**: `titulo_baixa` é append-only nas mesmas três camadas
   da trilha de auditoria — ausência de rota de escrita, trigger que rejeita
   `UPDATE`/`DELETE` e retirada do privilégio da role da aplicação. A marcação de
@@ -674,7 +693,20 @@ estrita, para não vazar atividade entre empresas.
   quem compra não confere o que chegou — senão a divergência é apurada por quem
   tem interesse nela. A duplicidade é barrada por índice único, e não por
   disciplina do chamador (RN-004).
-- **RN-001 estrutural (Sprints 3 a 8)**: as referências do M03, M04, M05, M06, M08 e M14 usam **FK composta**
+- **Documentos fiscais (Sprint 9)**: a nota é documento de terceiro e o conteúdo
+  fiscal não tem rota de escrita — nem `PUT`, nem campo fiscal aceito no corpo. O
+  XML gravado é imutável (`bd/12` recusa a troca): substituí-lo não é
+  reprocessar, é trocar a prova. `documento_fiscal` não é removível pela
+  aplicação (`REVOKE DELETE`); o que existe é cancelar com motivo, e só enquanto
+  a nota não gerou efeito. As marcas de estoque e de financeiro são escritas por
+  trigger `SECURITY DEFINER` a partir do movimento e do título que realmente
+  existem, e que a mesma mercadoria não entre pelas duas portas — recebimento
+  (M06) e nota — é garantido por índice único (RN-004), não por disciplina do
+  chamador. Arquivar e lançar são recursos separados: `fiscal-postings:CREATE`
+  fica fora do perfil FISCAL, porque dar entrada no estoque e assumir a conta a
+  pagar move ativo e dinheiro (RN-003). A importação vai à trilha como
+  `IMPORTACAO`.
+- **RN-001 estrutural (Sprints 3 a 9)**: as referências do M03, M04, M05, M06, M07, M08 e M14 usam **FK composta**
   `(empresa_id, <coluna>)`. A verificação de chave estrangeira roda no sistema,
   sem RLS: sem isso, um defeito na API poderia vincular funcionário da empresa A
   ao centro de custo da empresa B. Como FK composta não aceita `ON DELETE SET

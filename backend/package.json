@@ -1,7 +1,7 @@
 {
   "name": "sge-backend",
   "version": "0.1.0",
-  "description": "SGE - Sistema de Gestão Empresarial e Financeira | Backend (Sprint 1 - Fundação)",
+  "description": "SGE - Sistema de Gestão Empresarial e Financeira | Backend (Sprints 1 a 9 - Fases 1 a 4)",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {

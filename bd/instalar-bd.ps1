@@ -11,8 +11,8 @@
       1. valida que o psql esta acessivel
       2. derruba o banco e as roles da aplicacao (app_gestao, sge_api)
       3. cria/atualiza a role gestao_owner e cria o banco
-      4. roda 01 a 11 (schema, integracao, auditoria, RH, parceiros, catalogo,
-         estoque, financeiro, fluxo de caixa e compras)
+      4. roda 01 a 12 (schema, integracao, auditoria, RH, parceiros, catalogo,
+         estoque, financeiro, fluxo de caixa, compras e documentos fiscais)
       5. opcionalmente roda 99_smoke_test.sql
 
     Atualizacao (-Atualizar) -- PRESERVA os dados. Nao apaga nada e nao pede a
