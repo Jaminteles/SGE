@@ -119,7 +119,13 @@ describe('parseCnab240', () => {
   });
 
   it('reconhece o arquivo pelo registro de cabeçalho', () => {
-    expect(isCnab240([header, detail({ date: '05082026', amount: '000000000000000100', direction: 'C' })].join('\n'))).toBe(true);
+    expect(
+      isCnab240(
+        [header, detail({ date: '05082026', amount: '000000000000000100', direction: 'C' })].join(
+          '\n',
+        ),
+      ),
+    ).toBe(true);
     expect(isCnab240('data;valor\n2026-08-05;150,00')).toBe(false);
   });
 });

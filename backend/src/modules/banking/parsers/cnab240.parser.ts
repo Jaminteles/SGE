@@ -120,7 +120,9 @@ export function parseCnab240(content: string): ParsedStatement {
 /** Reconhece o arquivo pelo cabeçalho: registro 0 no primeiro bloco de 240. */
 export function isCnab240(content: string): boolean {
   const first = content.split(/\r?\n/).find((line) => line.trim().length > 0);
-  return first !== undefined && first.length >= RECORD_LENGTH && at(first, FIELD.recordType) === '0';
+  return (
+    first !== undefined && first.length >= RECORD_LENGTH && at(first, FIELD.recordType) === '0'
+  );
 }
 
 /** Recorte 1-based, como o manual do layout numera as posições. */
