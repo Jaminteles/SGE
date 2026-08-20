@@ -39,6 +39,7 @@ import { CashFlowModule } from './modules/cash-flow/cash-flow.module';
 import { PurchasingModule } from './modules/purchasing/purchasing.module';
 import { FiscalDocumentsModule } from './modules/fiscal-documents/fiscal-documents.module';
 import { BankingModule } from './modules/banking/banking.module';
+import { ReconciliationModule } from './modules/reconciliation/reconciliation.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -109,6 +110,7 @@ import { HealthModule } from './modules/health/health.module';
     PurchasingModule,
     FiscalDocumentsModule,
     BankingModule,
+    ReconciliationModule,
     HealthModule,
   ],
   providers: [
