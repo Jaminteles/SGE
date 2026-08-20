@@ -20,6 +20,7 @@ import { UploadedFile } from '../../common/storage/file-storage.service';
 import { StatementsService } from './statements.service';
 import {
   ImportStatementDto,
+  STATEMENT_FORMATS,
   QueryBankTransactionDto,
   QueryStatementImportDto,
 } from './dto/statement.dto';
@@ -50,11 +51,13 @@ export class StatementsController {
       properties: {
         file: { type: 'string', format: 'binary' },
         bankAccountId: { type: 'string', format: 'uuid' },
-        format: { type: 'string', enum: ['OFX', 'CSV'] },
+        format: { type: 'string', enum: [...STATEMENT_FORMATS] },
       },
     },
   })
-  @ApiOperation({ summary: 'Importar extrato OFX ou CSV, sem duplicar lançamentos (RF-060)' })
+  @ApiOperation({
+    summary: 'Importar extrato OFX, CSV ou CNAB 240, sem duplicar lançamentos (RF-060/RF-071)',
+  })
   import(
     @ActiveCompanyId() companyId: string,
     @Body() dto: ImportStatementDto,

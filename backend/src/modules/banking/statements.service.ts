@@ -12,6 +12,7 @@ import { sha256 } from '../../common/crypto/crypto.service';
 import { UploadedFile } from '../../common/storage/file-storage.service';
 import { toDateOnly } from '../../common/utils/date-only';
 import { CompanyAccountsService } from './company-accounts.service';
+import { isCnab240, parseCnab240 } from './parsers/cnab240.parser';
 import { parseCsv } from './parsers/csv.parser';
 import { parseOfx } from './parsers/ofx.parser';
 import { ParsedStatement, StatementParseError } from './parsers/statement.types';
@@ -19,6 +20,7 @@ import {
   ImportStatementDto,
   QueryBankTransactionDto,
   QueryStatementImportDto,
+  StatementFormat,
 } from './dto/statement.dto';
 
 const IMPORT_FIELDS = {
@@ -58,7 +60,7 @@ const TRANSACTION_FIELDS = {
 } satisfies Prisma.BankTransactionSelect;
 
 /**
- * Importação e consulta de extratos (RF-060).
+ * Importação e consulta de extratos (RF-060/RF-071).
  *
  * Duas deduplicações, em níveis diferentes, e as duas importam:
  *
@@ -298,18 +300,30 @@ export class StatementsService {
   }
 
   /** Formato pelo conteúdo, e não pelo nome: extensão é palpite do cliente. */
-  private detectFormat(file: UploadedFile): 'OFX' | 'CSV' {
-    const head = file.buffer.subarray(0, 512).toString('utf8').toUpperCase();
+  private detectFormat(file: UploadedFile): StatementFormat {
+    const content = file.buffer.toString('utf8');
+    const head = content.slice(0, 512).toUpperCase();
     if (head.includes('OFXHEADER') || head.includes('<OFX')) {
       return 'OFX';
+    }
+    // CNAB é posicional: o reconhecimento depende de colunas exatas do primeiro
+    // registro, e não de uma palavra-chave que possa aparecer em qualquer lugar.
+    if (isCnab240(content)) {
+      return 'CNAB240';
     }
     return 'CSV';
   }
 
-  private parse(format: 'OFX' | 'CSV', file: UploadedFile): ParsedStatement {
+  private parse(format: StatementFormat, file: UploadedFile): ParsedStatement {
     const content = file.buffer.toString('utf8');
     try {
-      return format === 'OFX' ? parseOfx(content) : parseCsv(content);
+      if (format === 'OFX') {
+        return parseOfx(content);
+      }
+      if (format === 'CNAB240') {
+        return parseCnab240(content);
+      }
+      return parseCsv(content);
     } catch (error) {
       if (error instanceof StatementParseError) {
         throw new BadRequestException(error.message);

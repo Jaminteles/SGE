@@ -4,9 +4,12 @@ import { IsEnum, IsIn, IsOptional, IsUUID } from 'class-validator';
 import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
 import { IsDateOnly } from '../../../common/utils/date-only';
 
-export const STATEMENT_FORMATS = ['OFX', 'CSV'] as const;
+/** Formatos de extrato suportados (RF-071). `API` é coleta pelo provedor (M09). */
+export const STATEMENT_FORMATS = ['OFX', 'CSV', 'CNAB240'] as const;
 
-/** Importação de extrato (RF-060). O arquivo vai no campo `file`. */
+export type StatementFormat = (typeof STATEMENT_FORMATS)[number];
+
+/** Importação de extrato (RF-060/RF-071). O arquivo vai no campo `file`. */
 export class ImportStatementDto {
   @ApiProperty({ description: 'Conta bancária a que o extrato pertence' })
   @IsUUID()
