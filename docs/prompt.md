@@ -147,6 +147,8 @@ Se não conseguir editar, apenas liste os IDs concluídos. Não invente atualiza
 
 Enxuto. Sem repetir código.
 
+Não dar commit no github, deixe isso para eu fazer apos analise do que foi feito
+
 ```
 # Sprint [N] — Relatório
 
