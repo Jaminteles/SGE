@@ -68,6 +68,8 @@ export const RESOURCES = {
   INTEGRATION_CREDENTIALS: 'integration-credentials',
   PAYMENTS: 'payments',
   BANK_STATEMENTS: 'bank-statements',
+  RECONCILIATION: 'reconciliation',
+  RECONCILIATION_RULES: 'reconciliation-rules',
 } as const;
 
 export interface PermissionDefinition {
@@ -432,6 +434,32 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     { action: A.CREATE, description: 'Importar extratos bancários' },
     { action: A.READ, description: 'Consultar extratos importados e movimentos bancários' },
   ]),
+
+  // M10 — Conciliação Bancária (RF-071 a RF-077)
+  //
+  // Conciliar não move dinheiro, mas decide o que a empresa considera pago e
+  // recebido — e é sobre esse conjunto que a divergência (RF-076) é apurada.
+  // Por isso três ações separadas, e não um CRUD:
+  //  - `:CREATE` afirma o vínculo, inclusive com divergência justificada;
+  //  - `:DELETE` desfaz o vínculo, que é a operação que faz um título voltar a
+  //    parecer em aberto — quem concilia não precisa poder desfazer;
+  //  - `:APPROVE` dispara a conciliação automática sobre um período inteiro, que
+  //    é a única capaz de criar centenas de vínculos numa chamada.
+  //
+  // A regra tem recurso próprio porque afrouxar uma tolerância muda o que o
+  // sistema aceita como correspondência sem tocar em nenhuma conciliação.
+  ...build('M10', RESOURCES.RECONCILIATION, [
+    { action: A.CREATE, description: 'Conciliar movimento bancário com título, baixa ou ordem' },
+    { action: A.READ, description: 'Consultar sugestões, conciliações, divergências e histórico' },
+    { action: A.DELETE, description: 'Desfazer conciliações' },
+    { action: A.APPROVE, description: 'Executar a conciliação automática por regras' },
+  ]),
+  ...build('M10', RESOURCES.RECONCILIATION_RULES, [
+    { action: A.CREATE, description: 'Cadastrar regras de conciliação automática' },
+    { action: A.READ, description: 'Consultar regras de conciliação' },
+    { action: A.UPDATE, description: 'Alterar regras e tolerâncias de conciliação' },
+    { action: A.DELETE, description: 'Desativar regras de conciliação' },
+  ]),
 ];
 
 /** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
@@ -648,4 +676,14 @@ export const PERMISSIONS = {
 
   BANK_STATEMENTS_CREATE: permissionCode(RESOURCES.BANK_STATEMENTS, A.CREATE),
   BANK_STATEMENTS_READ: permissionCode(RESOURCES.BANK_STATEMENTS, A.READ),
+
+  RECONCILIATION_CREATE: permissionCode(RESOURCES.RECONCILIATION, A.CREATE),
+  RECONCILIATION_READ: permissionCode(RESOURCES.RECONCILIATION, A.READ),
+  RECONCILIATION_DELETE: permissionCode(RESOURCES.RECONCILIATION, A.DELETE),
+  RECONCILIATION_APPROVE: permissionCode(RESOURCES.RECONCILIATION, A.APPROVE),
+
+  RECONCILIATION_RULES_CREATE: permissionCode(RESOURCES.RECONCILIATION_RULES, A.CREATE),
+  RECONCILIATION_RULES_READ: permissionCode(RESOURCES.RECONCILIATION_RULES, A.READ),
+  RECONCILIATION_RULES_UPDATE: permissionCode(RESOURCES.RECONCILIATION_RULES, A.UPDATE),
+  RECONCILIATION_RULES_DELETE: permissionCode(RESOURCES.RECONCILIATION_RULES, A.DELETE),
 } as const;

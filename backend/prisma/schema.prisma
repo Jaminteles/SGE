@@ -1413,6 +1413,7 @@ model FinancialInstallment {
 
   settlements         Settlement[]
   paymentTransactions PaymentTransaction[]
+  reconciliations     Reconciliation[]
 
   @@unique([entryId, number], map: "uq_titulo_parcela")
   @@map("titulo_parcela")
@@ -2274,5 +2275,115 @@ model BankTransaction {
   createdAt            DateTime             @default(now()) @map("criado_em") @db.Timestamptz(6)
   updatedAt            DateTime             @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
+  reconciliations Reconciliation[]
+
   @@map("transacao_bancaria")
+}
+
+// ---------------------------------------------------------------------------
+// M10 — Conciliação Bancária (RF-071 a RF-077)
+//
+// O extrato (M09) diz o que o banco fez; o título diz o que nós lançamos. A
+// conciliação é a afirmação de que uma linha do extrato **é** um lançamento
+// nosso — e o registro de quando os dois não fecham (RF-076).
+//
+// Ela nunca reescreve o movimento bancário nem a baixa: `transacao_bancaria` é
+// fato consumado do banco (bd/13 §9) e `titulo_baixa` é append-only (bd/09). O
+// vínculo mora numa terceira tabela, e é ela que carrega origem, score,
+// diferença e o histórico de quem confirmou e quem desfez (RF-077).
+// ---------------------------------------------------------------------------
+
+/// Como o vínculo nasceu (RF-073/RF-074/RF-075) — `enum_origem_conciliacao`.
+///
+/// MANUAL é decisão de gente; AUTOMATICA_EXATA é a correspondência que dispensa
+/// regra (mesmo valor, mesma janela, um único candidato); AUTOMATICA_REGRA vem
+/// de `regra_conciliacao`; IMPORTACAO é o vínculo que já veio pronto do arquivo.
+enum ReconciliationOrigin {
+  MANUAL
+  AUTOMATICA_REGRA
+  AUTOMATICA_EXATA
+  IMPORTACAO
+
+  @@map("enum_origem_conciliacao")
+}
+
+/// gestao.regra_conciliacao — o que a empresa considera correspondência
+/// automática (RF-075).
+///
+/// `conditions` e `actions` são JSON porque o conjunto de critérios cresce sem
+/// migration; o que **não** é livre é a semântica: o motor só entende as chaves
+/// documentadas em `ReconciliationRuleConditions`/`Actions`, e recusa o resto na
+/// validação do DTO. Regra que ninguém entende é regra que concilia errado.
+///
+/// `priority` decide o desempate: menor número decide primeiro, e a primeira
+/// regra que casa encerra a avaliação daquele movimento.
+model ReconciliationRule {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String   @map("empresa_id") @db.Uuid
+  name           String   @map("nome") @db.VarChar(120)
+  priority       Int      @default(100) @map("prioridade") @db.SmallInt
+  /// `{"descriptionContains":"TARIFA","direction":"DEBITO","maxAmount":"50.00"}`
+  conditions     Json     @map("condicoes")
+  /// `{"autoReconcile":true,"minScore":"90.00"}`
+  actions        Json     @map("acoes")
+  /// Diferença de valor aceita entre o movimento e a parcela, em reais.
+  valueTolerance Decimal  @default(0) @map("tolerancia_valor") @db.Decimal(18, 2)
+  /// Janela de dias entre a data do movimento e o vencimento da parcela.
+  dayTolerance   Int      @default(3) @map("tolerancia_dias") @db.SmallInt
+  isActive       Boolean  @default(true) @map("ativo")
+  createdAt      DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  reconciliations Reconciliation[]
+
+  @@unique([companyId, name], map: "uq_regra_conciliacao_nome")
+  @@map("regra_conciliacao")
+}
+
+/// gestao.conciliacao — o vínculo entre a linha do extrato e o lançamento
+/// interno (RF-073 a RF-077).
+///
+/// Append-only como a baixa: desfazer é preencher `undoneAt`, nunca apagar —
+/// o histórico de RF-077 é a própria tabela, e uma conciliação errada que some
+/// leva junto a evidência de que ela existiu. O banco recusa o DELETE (bd/14).
+///
+/// A soma das conciliações vivas de um movimento nunca passa do valor dele
+/// (trigger em bd/14): é isso que permite um crédito único quitar três parcelas
+/// sem que a quarta entre por engano.
+///
+/// `settlementId`, `paymentTransactionId` e os autores são escalares sem
+/// relação de propósito — mesma razão de `Settlement.bankAccountId`: ninguém
+/// navega a partir daqui, e cada relação inversa a mais é um modelo a mais
+/// carregado por engano num include.
+model Reconciliation {
+  id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId            String                @map("empresa_id") @db.Uuid
+  bankTransactionId    String                @map("transacao_bancaria_id") @db.Uuid
+  bankTransaction      BankTransaction       @relation(fields: [bankTransactionId], references: [id], onDelete: Cascade)
+  installmentId        String?               @map("titulo_parcela_id") @db.Uuid
+  installment          FinancialInstallment? @relation(fields: [installmentId], references: [id])
+  settlementId         String?               @map("titulo_baixa_id") @db.Uuid
+  paymentTransactionId String?               @map("transacao_pagamento_id") @db.Uuid
+  ruleId               String?               @map("regra_conciliacao_id") @db.Uuid
+  rule                 ReconciliationRule?   @relation(fields: [ruleId], references: [id])
+  origin               ReconciliationOrigin  @default(MANUAL) @map("origem")
+  /// Confiança da sugestão, de 0 a 100 (RF-073). Nulo em vínculo manual.
+  score                Decimal?              @map("score") @db.Decimal(5, 2)
+  reconciledAmount     Decimal               @map("valor_conciliado") @db.Decimal(18, 2)
+  /// Movimento menos lançamento. Com sinal: sobra e falta são divergências
+  /// diferentes para quem investiga (RF-076).
+  difference           Decimal               @default(0) @map("diferenca") @db.Decimal(18, 2)
+  hasDivergence        Boolean               @default(false) @map("possui_divergencia")
+  justification        String?               @map("justificativa")
+  /// Falso enquanto é só sugestão (RF-073); verdadeiro quando alguém — ou uma
+  /// regra com `autoReconcile` — assumiu o vínculo.
+  confirmed            Boolean               @default(false) @map("confirmada")
+  confirmedById        String?               @map("confirmada_por") @db.Uuid
+  confirmedAt          DateTime?             @map("confirmada_em") @db.Timestamptz(6)
+  undoneAt             DateTime?             @map("desfeita_em") @db.Timestamptz(6)
+  undoneById           String?               @map("desfeita_por") @db.Uuid
+  undoReason           String?               @map("motivo_desfazimento")
+  createdAt            DateTime              @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  @@map("conciliacao")
 }

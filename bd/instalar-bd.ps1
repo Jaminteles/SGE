@@ -119,7 +119,8 @@ $scriptsAjuste = @(
     '10_fluxo_caixa_sprint7.sql',
     '11_compras_sprint8.sql',
     '12_documentos_fiscais_sprint9.sql',
-    '13_bancos_sprint10.sql'
+    '13_bancos_sprint10.sql',
+    '14_conciliacao_sprint11.sql'
 )
 
 $scripts = $scriptsBase + $scriptsAjuste

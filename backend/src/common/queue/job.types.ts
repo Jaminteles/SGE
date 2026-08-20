@@ -12,6 +12,8 @@ export const QUEUES = {
   PAYMENTS: 'pagamentos',
   /** Notificações recebidas de provedores financeiros. */
   WEBHOOKS: 'webhooks',
+  /** Conciliação bancária em lote (RF-075). */
+  RECONCILIATION: 'conciliacao',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];

@@ -21,6 +21,9 @@ export const AUDIT_ENTITY = {
   PAYMENT_TRANSACTION: 'transacao_pagamento',
   WEBHOOK_EVENT: 'webhook_evento',
   BANK_STATEMENT_IMPORT: 'extrato_importacao',
+  BANK_TRANSACTION: 'transacao_bancaria',
+  RECONCILIATION: 'conciliacao',
+  RECONCILIATION_RULE: 'regra_conciliacao',
 } as const;
 
 export interface AuditEventInput {
