@@ -17,6 +17,9 @@ import { TransactionInterceptor } from './common/interceptors/transaction.interc
 import { AuditModule } from './common/audit/audit.module';
 import { StorageModule } from './common/storage/storage.module';
 import { ReferencesModule } from './common/references/references.module';
+import { CryptoModule } from './common/crypto/crypto.module';
+import { IdempotencyModule } from './common/idempotency/idempotency.module';
+import { QueueModule } from './common/queue/queue.module';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -35,6 +38,7 @@ import { FinanceModule } from './modules/finance/finance.module';
 import { CashFlowModule } from './modules/cash-flow/cash-flow.module';
 import { PurchasingModule } from './modules/purchasing/purchasing.module';
 import { FiscalDocumentsModule } from './modules/fiscal-documents/fiscal-documents.module';
+import { BankingModule } from './modules/banking/banking.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -80,6 +84,12 @@ import { HealthModule } from './modules/health/health.module';
     StorageModule,
     // Global: valida referências entre cadastros dentro da empresa (RF-005).
     ReferencesModule,
+    // Global: cifra os segredos de integração (RNF-003).
+    CryptoModule,
+    // Global: execução idempotente do que move dinheiro (RF-067).
+    IdempotencyModule,
+    // Global: fila e runner de jobs (RF-069/RF-070).
+    QueueModule,
 
     AuthModule,
     UsersModule,
@@ -98,6 +108,7 @@ import { HealthModule } from './modules/health/health.module';
     CashFlowModule,
     PurchasingModule,
     FiscalDocumentsModule,
+    BankingModule,
     HealthModule,
   ],
   providers: [
@@ -127,7 +138,10 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer
       .apply(TenantContextMiddleware)
-      .exclude('api/v1/health', 'api/docs', 'api/docs/(.*)')
+      // O webhook fica de fora porque não tem empresa vinda de header: ele abre
+      // o próprio contexto de sistema, com a empresa que vem na URL e a origem
+      // WEBHOOK (bd/13 §10) — e precisa persistir o evento mesmo respondendo 401.
+      .exclude('api/v1/health', 'api/v1/banking/webhooks/(.*)', 'api/docs', 'api/docs/(.*)')
       .forRoutes('*');
   }
 }

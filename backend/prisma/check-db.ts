@@ -112,9 +112,9 @@ async function main(): Promise<void> {
     `,
   );
   checks.push({
-    label: 'referências de cadastro presas à empresa (bd/06 a bd/11)',
-    ok: Number(tenantFks?.n ?? 0) >= 85,
-    detail: `${Number(tenantFks?.n ?? 0)} FKs compostas (esperado ≥ 85) — rode bd/06 a bd/11`,
+    label: 'referências de cadastro presas à empresa (bd/06 a bd/13)',
+    ok: Number(tenantFks?.n ?? 0) >= 95,
+    detail: `${Number(tenantFks?.n ?? 0)} FKs compostas (esperado ≥ 95) — rode bd/06 a bd/13`,
   });
 
   const hrTriggers = await scalar(
@@ -402,15 +402,85 @@ async function main(): Promise<void> {
     detail: 'visão vw_documento_fiscal_pendencia — rode bd/12_documentos_fiscais_sprint9.sql',
   });
 
+  // Sprint 10 (M09 Bancos): sem os triggers, a ordem de pagamento anda para
+  // qualquer situação e uma chave de idempotência pode ser reapontada; sem os
+  // índices, o mesmo pagamento vira duas baixas.
+  const bankingRules = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_trigger
+       WHERE NOT tgisinternal
+         AND tgname IN ('trg_valida_conta_bancaria', 'trg_protege_idempotencia',
+                        'trg_valida_transacao_pagamento', 'trg_valida_baixa_transacao',
+                        'trg_valida_webhook_evento', 'trg_valida_job_execucao',
+                        'trg_atualiza_saldo_conta_bancaria', 'trg_protege_transacao_bancaria')
+    `,
+  );
+  checks.push({
+    label: 'regras do módulo bancário aplicadas (bd/13)',
+    ok: Number(bankingRules?.n ?? 0) >= 8,
+    detail: `${Number(bankingRules?.n ?? 0)} triggers de 8 — rode bd/13_bancos_sprint10.sql`,
+  });
+
+  // RN-004/RN-005: as três chaves que impedem o dinheiro de sair duas vezes.
+  const bankingUnique = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_indexes
+       WHERE schemaname = 'gestao'
+         AND indexname IN ('ux_baixa_transacao_pagamento', 'ux_transacao_externa',
+                           'ux_idempotencia_empresa_escopo_chave', 'ux_job_idempotencia',
+                           'ux_webhook_payload_hash_dia', 'ux_conta_bancaria_padrao')
+    `,
+  );
+  checks.push({
+    label: 'pagamento e webhook não duplicam movimentação (RN-004/RN-005)',
+    ok: Number(bankingUnique?.n ?? 0) >= 6,
+    detail: `${Number(bankingUnique?.n ?? 0)} índices de 6 — rode bd/13_bancos_sprint10.sql`,
+  });
+
+  // A ordem de pagamento é o registro de que o dinheiro foi mandado sair: a
+  // aplicação cancela e estorna, nunca apaga.
+  const paymentRemovable = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM information_schema.table_privileges
+       WHERE table_schema = 'gestao'
+         AND table_name = 'provider'
+         AND grantee IN ('app_gestao', 'sge_api')
+         AND privilege_type IN ('INSERT', 'UPDATE', 'DELETE')
+    `,
+  );
+  checks.push({
+    label: 'catálogo de provedores somente leitura para a API (RF-061)',
+    ok: Number(paymentRemovable?.n ?? 0) === 0,
+    detail: `${Number(paymentRemovable?.n ?? 0)} privilégio(s) de escrita concedidos — rode bd/13`,
+  });
+
+  // RN-002: fila, webhook e idempotência não são catálogo global — uma linha
+  // sem empresa não pode ser legível por qualquer tenant.
+  const systemPolicies = await scalar(
+    prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*) AS n FROM pg_policies
+       WHERE schemaname = 'gestao'
+         AND tablename IN ('idempotencia', 'webhook_evento', 'job_execucao')
+         AND qual LIKE '%fn_modo_sistema%'
+    `,
+  );
+  checks.push({
+    label: 'fila, webhook e idempotência com RLS estrita (bd/13)',
+    ok: Number(systemPolicies?.n ?? 0) >= 3,
+    detail: `${Number(systemPolicies?.n ?? 0)} políticas de 3 — rode bd/13_bancos_sprint10.sql`,
+  });
+
   const permissions = await prisma.permission.count({
     where: {
-      module: { in: ['M01', 'M02', 'M03', 'M04', 'M05', 'M06', 'M07', 'M08', 'M14', 'M16'] },
+      module: {
+        in: ['M01', 'M02', 'M03', 'M04', 'M05', 'M06', 'M07', 'M08', 'M09', 'M14', 'M16'],
+      },
     },
   });
   checks.push({
     label: 'catálogo de permissões da API carregado',
     ok: permissions > 0,
-    detail: `${permissions} permissões M01/M02/M03/M04/M05/M06/M07/M08/M14/M16 — rode npm run db:seed`,
+    detail: `${permissions} permissões M01 a M09, M14 e M16 — rode npm run db:seed`,
   });
 
   const admins = await prisma.user.count({ where: { isSuperAdmin: true, isActive: true } });

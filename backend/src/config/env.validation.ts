@@ -32,6 +32,38 @@ export const envSchema = z.object({
     .max(50 * 1024 * 1024)
     .default(10 * 1024 * 1024),
 
+  // Segredos de integração (M09) são cifrados com AES-256-GCM: 32 bytes em
+  // base64. Fora de produção há um valor de desenvolvimento para que o boot não
+  // exija configuração; em produção a ausência derruba o boot, que é o correto
+  // — subir a API sem chave significaria não conseguir ler nenhuma credencial
+  // já gravada (RNF-003).
+  INTEGRATION_ENCRYPTION_KEY: z
+    .string()
+    .refine((value) => Buffer.from(value, 'base64').length === 32, {
+      message: 'INTEGRATION_ENCRYPTION_KEY deve ser 32 bytes codificados em base64',
+    })
+    .default('ZGV2LW9ubHkta2V5LWNoYW5nZS1tZS0zMmJ5dGVzISE='),
+
+  // Provedores financeiros (RF-061).
+  INTEGRATION_HTTP_TIMEOUT_MS: z.coerce.number().int().positive().max(60_000).default(10_000),
+  /** Allowlist de hosts das integrações (SSRF). Vazio = só o piso de rede privada. */
+  INTEGRATION_ALLOWED_HOSTS: z.string().default(''),
+  INTEGRATION_CIRCUIT_THRESHOLD: z.coerce.number().int().positive().default(5),
+  INTEGRATION_CIRCUIT_OPEN_MS: z.coerce.number().int().positive().default(60_000),
+
+  // Fila (RF-069/RF-070). `WORKER_ENABLED=false` sobe o processo só como API;
+  // a mesma imagem com `true` e sem `PORT` exposta é o worker (RNF-009).
+  // `z.coerce.boolean()` não serve aqui: a string "false" é truthy e viraria
+  // `true`, ligando o worker justamente onde se pediu para desligá-lo.
+  WORKER_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+  WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5_000),
+  WORKER_BATCH_SIZE: z.coerce.number().int().positive().max(100).default(5),
+  JOB_BACKOFF_BASE_MS: z.coerce.number().int().positive().default(30_000),
+  JOB_BACKOFF_MAX_MS: z.coerce.number().int().positive().default(3_600_000),
+
   THROTTLE_TTL_SECONDS: z.coerce.number().int().positive().default(60),
   THROTTLE_LIMIT: z.coerce.number().int().positive().default(120),
 

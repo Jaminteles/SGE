@@ -5,7 +5,8 @@
 // Sprint 6 (M08 Contas a Pagar e Receber),
 // Sprint 7 (M14 Fluxo de Caixa e Planejamento),
 // Sprint 8 (M06 Compras: pedidos, aprovação, recebimento e conferência) e
-// Sprint 9 (M07 Documentos Fiscais: importação de XML, processamento e vínculos)
+// Sprint 9 (M07 Documentos Fiscais: importação de XML, processamento e vínculos) e
+// Sprint 10 (M09 Bancos, Pagamentos e Recebimentos + importação de extrato)
 //
 // IMPORTANTE: este schema NÃO é dono do banco. O modelo físico vive em `bd/*.sql`
 // (schema `gestao`, PostgreSQL 14+) e é a fonte da verdade. Aqui há apenas o
@@ -301,21 +302,23 @@ model User {
   createdAt         DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
   updatedAt         DateTime  @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  memberships      Membership[]
-  sessions         Session[]
-  passwordResets   PasswordResetToken[]
-  approverOf       ApprovalApprover[]
-  inventories      Inventory[]
-  stockMovements   StockMovement[]
-  financialEntries FinancialEntry[]
-  settlements      Settlement[]
-  cashScenarios    CashFlowScenario[]
-  cashAlerts       CashAlert[]
-  purchaseOrders   PurchaseOrder[]      @relation("PedidoSolicitante")
-  purchasesCreated PurchaseOrder[]      @relation("PedidoCriador")
-  purchasesDecided PurchaseOrder[]      @relation("PedidoAprovador")
-  receiptsChecked  GoodsReceipt[]       @relation("RecebimentoConferente")
-  fiscalDocuments  FiscalDocument[]
+  memberships          Membership[]
+  sessions             Session[]
+  passwordResets       PasswordResetToken[]
+  approverOf           ApprovalApprover[]
+  inventories          Inventory[]
+  stockMovements       StockMovement[]
+  financialEntries     FinancialEntry[]
+  settlements          Settlement[]
+  cashScenarios        CashFlowScenario[]
+  cashAlerts           CashAlert[]
+  purchaseOrders       PurchaseOrder[]       @relation("PedidoSolicitante")
+  purchasesCreated     PurchaseOrder[]       @relation("PedidoCriador")
+  purchasesDecided     PurchaseOrder[]       @relation("PedidoAprovador")
+  receiptsChecked      GoodsReceipt[]        @relation("RecebimentoConferente")
+  fiscalDocuments      FiscalDocument[]
+  paymentTransactions  PaymentTransaction[]
+  bankStatementImports BankStatementImport[]
 
   @@map("usuario")
 }
@@ -481,6 +484,7 @@ model Branch {
   purchaseOrders   PurchaseOrder[]
   receipts         GoodsReceipt[]
   fiscalDocuments  FiscalDocument[]
+  bankAccounts     CompanyBankAccount[]
 
   @@unique([companyId, code], map: "uq_filial_codigo")
   @@map("filial")
@@ -1407,7 +1411,8 @@ model FinancialInstallment {
   createdAt         DateTime          @default(now()) @map("criado_em") @db.Timestamptz(6)
   updatedAt         DateTime          @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  settlements Settlement[]
+  settlements         Settlement[]
+  paymentTransactions PaymentTransaction[]
 
   @@unique([entryId, number], map: "uq_titulo_parcela")
   @@map("titulo_parcela")
@@ -1433,6 +1438,13 @@ model Settlement {
   paymentMethodId String?              @map("forma_pagamento_id") @db.Uuid
   paymentMethod   PaymentMethod?       @relation(fields: [paymentMethodId], references: [id])
   method          PaymentMethodType?   @map("metodo")
+  /// Conta de onde o dinheiro saiu ou entrou (RF-059). Escalar de propósito: a
+  /// baixa é append-only e ninguém navega dela para a conta.
+  bankAccountId   String?              @map("conta_bancaria_id") @db.Uuid
+  /// Ordem de pagamento que produziu esta baixa (RF-062). Única por transação
+  /// (bd/13 §6): é o índice que impede o pagamento duplicado — RN-004.
+  transactionId   String?              @map("transacao_pagamento_id") @db.Uuid
+  transaction     PaymentTransaction?  @relation(fields: [transactionId], references: [id])
   isReversed      Boolean              @default(false) @map("estornada")
   /// Única por definição: uma baixa é estornada uma vez só, garantido pelo
   /// índice parcial `ux_baixa_estorno_unico` (bd/09).
@@ -1884,4 +1896,383 @@ model ApprovalApprover {
   role        Role?             @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@map("alcada_aprovador")
+}
+
+// ---------------------------------------------------------------------------
+// M09 — Bancos, Pagamentos e Recebimentos (RF-059 a RF-070) — Sprint 10
+//
+// Três camadas, e elas não se misturam:
+//   1. cadastro — `Provider` (catálogo global), `IntegrationCredential`
+//      (segredo cifrado por empresa) e `CompanyBankAccount`;
+//   2. ordem de pagamento — `PaymentTransaction`, com máquina de estados no
+//      banco (bd/13) e três chaves de unicidade contra movimentação duplicada;
+//   3. infraestrutura — `IdempotencyRecord`, `WebhookEvent` e `JobExecution`,
+//      as três com RLS estrita (bd/13 §10).
+//
+// M10 entra aqui só com o que a importação de extrato (RF-060) precisa:
+// `BankStatementImport` e `BankTransaction`. A conciliação é a Sprint 11.
+// ---------------------------------------------------------------------------
+
+/// Natureza da integração externa (RF-061) — `enum_categoria_provider`.
+enum ProviderCategory {
+  BANCARIO
+  PIX
+  BOLETO
+  FISCAL
+  OCR
+  EMAIL
+  CONTABIL
+  ARMAZENAMENTO
+  OUTRO
+
+  @@map("enum_categoria_provider")
+}
+
+/// Direção do dinheiro (RF-062) — `enum_sentido_transacao`.
+enum TransactionDirection {
+  DEBITO
+  CREDITO
+
+  @@map("enum_sentido_transacao")
+}
+
+/// Situação da ordem de pagamento (RF-062 a RF-065) — `enum_status_transacao`.
+///
+/// As transições válidas são aplicadas por trigger (bd/13): CRIADA/AGENDADA
+/// abrem, ENFILEIRADA→ENVIADA→CONFIRMADA é o caminho feliz, FALHA volta para a
+/// fila enquanto houver tentativa e CANCELADA/ESTORNADA/EXPIRADA são terminais.
+enum PaymentTransactionStatus {
+  CRIADA
+  AGENDADA
+  ENFILEIRADA
+  ENVIADA
+  PROCESSANDO
+  CONFIRMADA
+  FALHA
+  CANCELADA
+  ESTORNADA
+  EXPIRADA
+
+  @@map("enum_status_transacao")
+}
+
+/// Situação de um job da fila e de um webhook recebido — `enum_status_job`.
+enum JobStatus {
+  PENDENTE
+  PROCESSANDO
+  CONCLUIDO
+  FALHA
+  CANCELADO
+  AGENDADO
+
+  @@map("enum_status_job")
+}
+
+/// Situação da conciliação de um movimento bancário — `enum_status_conciliacao`.
+/// Escrita só na Sprint 11 (M10); aqui a importação nasce NAO_CONCILIADO.
+enum ReconciliationStatus {
+  NAO_CONCILIADO
+  SUGERIDO
+  CONCILIADO
+  DIVERGENTE
+  IGNORADO
+
+  @@map("enum_status_conciliacao")
+}
+
+/// gestao.provider — catálogo global de integrações (RF-061).
+///
+/// Não tem `empresa_id`: é o mesmo banco para todo mundo. Somente leitura pela
+/// API (bd/13 revoga a escrita) — deixar uma empresa editar provedores
+/// permitiria apontar o pagamento de outra para um endpoint próprio.
+model Provider {
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code         String           @unique(map: "uq_provider_codigo") @map("codigo") @db.VarChar(40)
+  name         String           @map("nome") @db.VarChar(120)
+  category     ProviderCategory @map("categoria")
+  description  String?          @map("descricao")
+  /// O que este provedor sabe fazer: `{"pix":true,"cancelamento":false,...}`.
+  /// É daqui que sai `PaymentTransaction.cancellable` (RF-065).
+  capabilities Json             @default("{}") @map("capacidades")
+  isActive     Boolean          @default(true) @map("ativo")
+  createdAt    DateTime         @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  credentials IntegrationCredential[]
+
+  @@map("provider")
+}
+
+/// gestao.credencial_integracao — segredo do provedor, por empresa e ambiente.
+///
+/// `secret` é o payload cifrado (AES-256-GCM) e **nunca** sai pela API: não há
+/// endpoint que o devolva e nenhum select do módulo o projeta (RNF-003/RNF-005).
+model IntegrationCredential {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String    @map("empresa_id") @db.Uuid
+  providerId     String    @map("provider_id") @db.Uuid
+  provider       Provider  @relation(fields: [providerId], references: [id])
+  name           String    @map("nome") @db.VarChar(120)
+  environment    String    @default("PRODUCAO") @map("ambiente") @db.VarChar(20)
+  secret         Bytes     @map("credenciais_cifradas")
+  kmsKey         String?   @map("chave_kms") @db.VarChar(255)
+  certificateRef String?   @map("certificado_ref") @db.VarChar(255)
+  expiresAt      DateTime? @map("expira_em") @db.Timestamptz(6)
+  isActive       Boolean   @default(true) @map("ativo")
+  createdAt      DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  bankAccounts CompanyBankAccount[]
+
+  @@unique([companyId, providerId, environment, name], map: "uq_credencial")
+  @@map("credencial_integracao")
+}
+
+/// gestao.conta_bancaria — conta da empresa no banco (RF-059).
+///
+/// Não confundir com `BankAccount` (`gestao.dado_bancario`), que é a conta de
+/// **terceiro** para onde a empresa credita — funcionário (RF-013) ou parceiro
+/// (RF-024). Esta é a conta de onde o dinheiro sai.
+///
+/// `currentBalance` é o saldo informado pelo banco no último extrato importado,
+/// não um saldo contábil: quem o move é o trigger de `BankStatementImport`
+/// (bd/13 §9). A divergência entre ele e as baixas lançadas é exatamente o que a
+/// conciliação (M10) precisa enxergar.
+model CompanyBankAccount {
+  id             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String                 @map("empresa_id") @db.Uuid
+  branchId       String?                @map("filial_id") @db.Uuid
+  branch         Branch?                @relation(fields: [branchId], references: [id])
+  providerId     String?                @map("provider_id") @db.Uuid
+  credentialId   String?                @map("credencial_id") @db.Uuid
+  credential     IntegrationCredential? @relation(fields: [credentialId], references: [id])
+  description    String                 @map("descricao") @db.VarChar(120)
+  bankCode       String                 @map("banco_codigo") @db.VarChar(5)
+  bankName       String?                @map("banco_nome") @db.VarChar(120)
+  agency         String                 @map("agencia") @db.VarChar(10)
+  agencyDigit    String?                @map("agencia_digito") @db.VarChar(2)
+  account        String                 @map("conta") @db.VarChar(20)
+  accountDigit   String?                @map("conta_digito") @db.VarChar(2)
+  accountType    String                 @default("CORRENTE") @map("tipo_conta") @db.VarChar(20)
+  pixKey         String?                @map("chave_pix") @db.VarChar(140)
+  openingBalance Decimal                @default(0) @map("saldo_inicial") @db.Decimal(18, 2)
+  currentBalance Decimal                @default(0) @map("saldo_atual") @db.Decimal(18, 2)
+  balanceDate    DateTime?              @map("data_saldo") @db.Date
+  allowsPayment  Boolean                @default(true) @map("permite_pagamento")
+  allowsReceipt  Boolean                @default(true) @map("permite_recebimento")
+  isDefault      Boolean                @default(false) @map("padrao")
+  isActive       Boolean                @default(true) @map("ativo")
+  note           String?                @map("observacao")
+  createdAt      DateTime               @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt      DateTime               @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  transactions     PaymentTransaction[]
+  statementImports BankStatementImport[]
+  bankTransactions BankTransaction[]
+
+  @@unique([companyId, bankCode, agency, account], map: "uq_conta_bancaria")
+  @@map("conta_bancaria")
+}
+
+/// gestao.idempotencia — reserva de uma operação por chave (RF-067).
+///
+/// Registro imutável: depois de gravada, a linha só aceita o preenchimento do
+/// resultado, e uma vez só (bd/13 §4). É isso que faz a segunda chamada devolver
+/// o resultado da primeira em vez de executar de novo — RN-004/RN-005.
+model IdempotencyRecord {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId    String?   @map("empresa_id") @db.Uuid
+  scope        String    @map("escopo") @db.VarChar(60)
+  key          String    @map("chave") @db.VarChar(255)
+  /// SHA-256 do corpo da requisição: mesma chave com corpo diferente é conflito,
+  /// não repetição (RF-067).
+  requestHash  String?   @map("request_hash") @db.VarChar(64)
+  resourceType String?   @map("recurso_tipo") @db.VarChar(60)
+  resourceId   String?   @map("recurso_id") @db.Uuid
+  response     Json?     @map("resposta")
+  statusCode   Int?      @map("status_http") @db.SmallInt
+  userId       String?   @map("usuario_id") @db.Uuid
+  expiresAt    DateTime? @map("expira_em") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  @@map("idempotencia")
+}
+
+/// gestao.transacao_pagamento — a ordem de pagamento ou recebimento
+/// (RF-062 a RF-065, RF-068, RF-070).
+///
+/// Três chaves de unicidade empilhadas contra movimentação duplicada (RN-004):
+/// `idempotencyKey` por empresa, `externalId` por provedor e a baixa única por
+/// transação (bd/13 §6). Um retry da API, um reenvio do worker e um webhook
+/// repetido batem, cada um, numa delas.
+model PaymentTransaction {
+  id                 String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId          String                   @map("empresa_id") @db.Uuid
+  bankAccountId      String                   @map("conta_bancaria_id") @db.Uuid
+  bankAccount        CompanyBankAccount       @relation(fields: [bankAccountId], references: [id])
+  providerId         String?                  @map("provider_id") @db.Uuid
+  installmentId      String?                  @map("titulo_parcela_id") @db.Uuid
+  installment        FinancialInstallment?    @relation(fields: [installmentId], references: [id])
+  direction          TransactionDirection     @map("sentido")
+  method             PaymentMethodType        @map("metodo")
+  status             PaymentTransactionStatus @default(CRIADA) @map("status")
+  amount             Decimal                  @map("valor") @db.Decimal(18, 2)
+  description        String?                  @map("descricao") @db.VarChar(255)
+  scheduledFor       DateTime?                @map("data_agendamento") @db.Date
+  executedAt         DateTime?                @map("data_execucao") @db.Timestamptz(6)
+  confirmedAt        DateTime?                @map("data_confirmacao") @db.Timestamptz(6)
+  payeeName          String?                  @map("favorecido_nome") @db.VarChar(255)
+  payeeDocument      String?                  @map("favorecido_documento") @db.VarChar(14)
+  payeeBankCode      String?                  @map("favorecido_banco") @db.VarChar(5)
+  payeeAgency        String?                  @map("favorecido_agencia") @db.VarChar(10)
+  payeeAccount       String?                  @map("favorecido_conta") @db.VarChar(20)
+  pixKey             String?                  @map("chave_pix") @db.VarChar(140)
+  barcode            String?                  @map("codigo_barras") @db.VarChar(60)
+  idempotencyKey     String                   @map("idempotency_key") @db.VarChar(255)
+  /// Id da operação no provedor (RF-068) — único por provider.
+  externalId         String?                  @map("identificador_externo") @db.VarChar(140)
+  endToEndId         String?                  @map("end_to_end_id") @db.VarChar(60)
+  /// Payloads sem segredo: o adaptador remove credenciais antes de gravar.
+  requestPayload     Json?                    @map("payload_envio")
+  responsePayload    Json?                    @map("payload_retorno")
+  errorCode          String?                  @map("codigo_erro") @db.VarChar(60)
+  errorMessage       String?                  @map("mensagem_erro")
+  attempts           Int                      @default(0) @map("tentativas") @db.SmallInt
+  maxAttempts        Int                      @default(5) @map("max_tentativas") @db.SmallInt
+  nextAttemptAt      DateTime?                @map("proxima_tentativa_em") @db.Timestamptz(6)
+  cancellable        Boolean                  @default(false) @map("cancelavel")
+  cancelledAt        DateTime?                @map("cancelada_em") @db.Timestamptz(6)
+  cancellationReason String?                  @map("motivo_cancelamento")
+  reversalOfId       String?                  @map("estorno_de_id") @db.Uuid
+  reversalOf         PaymentTransaction?      @relation("TransacaoEstorno", fields: [reversalOfId], references: [id])
+  requestedById      String?                  @map("solicitado_por") @db.Uuid
+  requestedBy        User?                    @relation(fields: [requestedById], references: [id])
+  createdAt          DateTime                 @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt          DateTime                 @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  reversals   PaymentTransaction[] @relation("TransacaoEstorno")
+  settlements Settlement[]
+
+  @@unique([companyId, idempotencyKey], map: "uq_transacao_idempotency")
+  @@map("transacao_pagamento")
+}
+
+/// gestao.webhook_evento — notificação recebida do provedor (RF-066).
+///
+/// Guardado antes de processado, e guardado mesmo quando a assinatura não
+/// confere: um evento forjado é a única evidência de que alguém tentou. Só não
+/// vira efeito — bd/13 §7 recusa qualquer status de processamento nesse caso.
+model WebhookEvent {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String?   @map("empresa_id") @db.Uuid
+  providerId     String?   @map("provider_id") @db.Uuid
+  eventType      String    @map("evento_tipo") @db.VarChar(80)
+  externalId     String?   @map("evento_id_externo") @db.VarChar(160)
+  signature      String?   @map("assinatura")
+  signatureValid Boolean?  @map("assinatura_valida")
+  payload        Json      @map("payload")
+  /// SHA-256 do corpo: dedupe do provedor que não manda id de evento (bd/13 §7).
+  payloadHash    String?   @map("payload_hash") @db.VarChar(64)
+  headers        Json?     @map("headers")
+  status         JobStatus @default(PENDENTE) @map("status")
+  attempts       Int       @default(0) @map("tentativas") @db.SmallInt
+  nextAttemptAt  DateTime? @map("proxima_tentativa_em") @db.Timestamptz(6)
+  processedAt    DateTime? @map("processado_em") @db.Timestamptz(6)
+  error          String?   @map("erro")
+  transactionId  String?   @map("transacao_pagamento_id") @db.Uuid
+  receivedAt     DateTime  @default(now()) @map("recebido_em") @db.Timestamptz(6)
+
+  @@map("webhook_evento")
+}
+
+/// gestao.job_execucao — a fila (RF-069/RF-070, RN-011).
+///
+/// Fila no próprio banco, e não em Redis, por uma razão de correção: enfileirar
+/// participa da mesma transação que grava a ordem de pagamento. Um job que só
+/// existe se a transação confirmar não dispara sobre um pagamento que foi
+/// revertido — e o inverso, um pagamento gravado cujo job se perdeu, também não
+/// acontece. Trocar o driver por BullMQ depois é trocar `JobQueueService`; o
+/// contrato dos handlers não muda.
+model JobExecution {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String?   @map("empresa_id") @db.Uuid
+  queue          String    @map("fila") @db.VarChar(60)
+  name           String    @map("nome") @db.VarChar(120)
+  payload        Json      @default("{}") @map("payload")
+  status         JobStatus @default(PENDENTE) @map("status")
+  attempts       Int       @default(0) @map("tentativas") @db.SmallInt
+  maxAttempts    Int       @default(5) @map("max_tentativas") @db.SmallInt
+  /// Dedupe do enfileiramento: o mesmo job pedido duas vezes é um job só
+  /// enquanto não terminar (índice parcial `ux_job_idempotencia`).
+  idempotencyKey String?   @map("chave_idempotencia") @db.VarChar(255)
+  scheduledFor   DateTime? @default(now()) @map("agendado_para") @db.Timestamptz(6)
+  startedAt      DateTime? @map("iniciado_em") @db.Timestamptz(6)
+  finishedAt     DateTime? @map("finalizado_em") @db.Timestamptz(6)
+  durationMs     Int?      @map("duracao_ms")
+  error          String?   @map("erro")
+  lastErrorAt    DateTime? @map("ultimo_erro_em") @db.Timestamptz(6)
+  correlationId  String?   @map("correlation_id") @db.VarChar(60)
+  createdAt      DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  @@map("job_execucao")
+}
+
+/// gestao.extrato_importacao — um arquivo de extrato que entrou (RF-060).
+///
+/// `fileHash` é único por conta: o mesmo arquivo não entra duas vezes. O saldo
+/// da conta segue daqui (bd/13 §9).
+model BankStatementImport {
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String             @map("empresa_id") @db.Uuid
+  bankAccountId  String             @map("conta_bancaria_id") @db.Uuid
+  bankAccount    CompanyBankAccount @relation(fields: [bankAccountId], references: [id])
+  format         String             @map("formato") @db.VarChar(20)
+  fileName       String?            @map("nome_arquivo") @db.VarChar(255)
+  fileHash       String?            @map("hash_arquivo") @db.VarChar(64)
+  periodStart    DateTime?          @map("periodo_inicio") @db.Date
+  periodEnd      DateTime?          @map("periodo_fim") @db.Date
+  openingBalance Decimal?           @map("saldo_inicial") @db.Decimal(18, 2)
+  closingBalance Decimal?           @map("saldo_final") @db.Decimal(18, 2)
+  totalCount     Int                @default(0) @map("quantidade_registros")
+  importedCount  Int                @default(0) @map("quantidade_importada")
+  duplicateCount Int                @default(0) @map("quantidade_duplicada")
+  status         JobStatus          @default(PENDENTE) @map("status")
+  error          String?            @map("erro")
+  importedById   String?            @map("importado_por") @db.Uuid
+  importedBy     User?              @relation(fields: [importedById], references: [id])
+  createdAt      DateTime           @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  transactions BankTransaction[]
+
+  @@unique([bankAccountId, fileHash], map: "uq_extrato_hash")
+  @@map("extrato_importacao")
+}
+
+/// gestao.transacao_bancaria — linha do extrato (RF-060).
+///
+/// Fato consumado do banco: imutável depois de gravada, exceto o par
+/// (`reconciliationStatus`, `metadata`), que é da conciliação (bd/13 §9).
+/// `externalId` é o FITID do OFX — a dedupe da reimportação do mesmo período.
+model BankTransaction {
+  id                   String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId            String               @map("empresa_id") @db.Uuid
+  bankAccountId        String               @map("conta_bancaria_id") @db.Uuid
+  bankAccount          CompanyBankAccount   @relation(fields: [bankAccountId], references: [id])
+  statementImportId    String?              @map("extrato_importacao_id") @db.Uuid
+  statementImport      BankStatementImport? @relation(fields: [statementImportId], references: [id])
+  movementDate         DateTime             @map("data_movimento") @db.Date
+  postedDate           DateTime?            @map("data_lancamento") @db.Date
+  direction            TransactionDirection @map("sentido")
+  amount               Decimal              @map("valor") @db.Decimal(18, 2)
+  balanceAfter         Decimal?             @map("saldo_apos") @db.Decimal(18, 2)
+  description          String?              @map("descricao") @db.VarChar(255)
+  document             String?              @map("documento") @db.VarChar(60)
+  externalId           String?              @map("identificador_externo") @db.VarChar(140)
+  counterpartName      String?              @map("contraparte_nome") @db.VarChar(255)
+  counterpartDocument  String?              @map("contraparte_documento") @db.VarChar(14)
+  reconciliationStatus ReconciliationStatus @default(NAO_CONCILIADO) @map("status_conciliacao")
+  metadata             Json                 @default("{}") @map("metadados")
+  createdAt            DateTime             @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt            DateTime             @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  @@map("transacao_bancaria")
 }

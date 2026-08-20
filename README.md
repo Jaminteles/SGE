@@ -13,7 +13,7 @@ consumido pela API — Swagger em `/api/docs`.
 
 - [`bd/`](bd) — **modelo físico PostgreSQL** (schema `gestao`), fonte da verdade
   do banco: M01 a M18, RLS multiempresa, triggers de auditoria e regras de negócio.
-- [`backend/`](backend/README.md) — API REST (NestJS). Sprints 1 a 9 implementadas.
+- [`backend/`](backend/README.md) — API REST (NestJS). Sprints 1 a 10 implementadas.
 - `docs/` — ERS e planejamento de sprints.
 
 ## Banco de dados
@@ -35,6 +35,8 @@ Ordem de execução dos scripts (a partir de `bd/`):
 | `10_fluxo_caixa_sprint7.sql` | M14: fluxo consolidado (realizado, previsto e vencido), cenários com premissas, projeção manual e alerta de caixa | `gestao_owner` |
 | `11_compras_sprint8.sql` | M06: numeração do pedido e do recebimento, total projetado dos itens com rateio de despesas, aprovação, recebimento append-only, divergências e histórico de preços | `gestao_owner` |
 | `12_documentos_fiscais_sprint9.sql` | M07: consistência dos itens e dos totais da nota, duplicidade, máquina de estados do processamento, imutabilidade do XML e vínculo com estoque/financeiro sem duplicidade | `gestao_owner` |
+| `13_bancos_sprint10.sql` | M09: conta bancária, máquina de estados da ordem de pagamento, idempotência imutável, uma baixa por transação, webhook deduplicado, fila com retry e RLS estrita | `gestao_owner` |
+| `98_smoke_bancos_sprint10.sql` | Confere as regras de `13` num banco já migrado; termina em `ROLLBACK` | `gestao_owner` |
 | `99_smoke_test.sql` | Exercita estoque, títulos e partidas dobradas | `gestao_owner` |
 
 ```bash
@@ -51,6 +53,7 @@ psql -U gestao_owner -h localhost -d gestao_empresarial -f 09_financeiro_sprint6
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 10_fluxo_caixa_sprint7.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 11_compras_sprint8.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 12_documentos_fiscais_sprint9.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 13_bancos_sprint10.sql
 ```
 
 No Windows, `bd/instalar-bd.ps1` executa toda a sequência acima — inclusive o

@@ -271,7 +271,7 @@ export class FiscalDocumentsService {
 
     // BOM antes de `<?xml` faria o leitor recusar o documento por "texto fora da
     // raiz" — e o Windows o escreve com frequência.
-    const xml = file.buffer.toString('utf8').replace(/^﻿/, '');
+    const xml = file.buffer.toString('utf8').replace(/^\u{FEFF}/u, '');
 
     return this.import(companyId, xml, options, userId);
   }

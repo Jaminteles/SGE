@@ -64,6 +64,10 @@ export const RESOURCES = {
   PURCHASE_HISTORY: 'purchase-history',
   FISCAL_DOCUMENTS: 'fiscal-documents',
   FISCAL_POSTINGS: 'fiscal-postings',
+  COMPANY_BANK_ACCOUNTS: 'company-bank-accounts',
+  INTEGRATION_CREDENTIALS: 'integration-credentials',
+  PAYMENTS: 'payments',
+  BANK_STATEMENTS: 'bank-statements',
 } as const;
 
 export interface PermissionDefinition {
@@ -389,6 +393,45 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
       description: 'Gerar entrada de estoque e título a pagar a partir do documento fiscal',
     },
   ]),
+  // M09 — Bancos, Pagamentos e Recebimentos (RF-059 a RF-070).
+  //
+  // Quatro recursos, e as separações são todas sobre dinheiro saindo:
+  //
+  //  - `company-bank-accounts` é cadastro: quem mantém a conta da empresa não
+  //    precisa poder pagar por ela;
+  //  - `integration-credentials` guarda o que assina a ordem no banco. É a
+  //    permissão mais sensível do módulo, e por isso é separada do cadastro da
+  //    conta — o segredo nunca é devolvido pela API, mas quem pode gravá-lo pode
+  //    apontar a integração para outro lugar;
+  //  - `payments` tem quatro ações porque são quatro decisões diferentes:
+  //    `:CREATE` emite a ordem, `:READ` consulta, `:UPDATE` pergunta a situação
+  //    ao provedor, `:DELETE` cancela e `:APPROVE` **confirma manualmente** —
+  //    esta última é a que gera a baixa do título sem ninguém ter falado com o
+  //    banco, e por isso não acompanha a de criar;
+  //  - `bank-statements` separa importar de consultar: a importação move o saldo
+  //    da conta e alimenta a conciliação.
+  ...build('M09', RESOURCES.COMPANY_BANK_ACCOUNTS, [
+    { action: A.CREATE, description: 'Cadastrar contas bancárias da empresa' },
+    { action: A.READ, description: 'Consultar contas bancárias e saldos informados pelo banco' },
+    { action: A.UPDATE, description: 'Alterar e encerrar contas bancárias' },
+  ]),
+  ...build('M09', RESOURCES.INTEGRATION_CREDENTIALS, [
+    { action: A.CREATE, description: 'Cadastrar credenciais de provedores financeiros' },
+    { action: A.READ, description: 'Consultar provedores e credenciais (sem o segredo)' },
+    { action: A.UPDATE, description: 'Alterar credenciais e rotacionar segredos' },
+    { action: A.DELETE, description: 'Desativar credenciais de integração' },
+  ]),
+  ...build('M09', RESOURCES.PAYMENTS, [
+    { action: A.CREATE, description: 'Emitir e agendar ordens de pagamento e recebimento' },
+    { action: A.READ, description: 'Consultar ordens, situação e identificadores externos' },
+    { action: A.UPDATE, description: 'Sincronizar a situação da ordem com o provedor' },
+    { action: A.DELETE, description: 'Cancelar ordens de pagamento' },
+    { action: A.APPROVE, description: 'Confirmar manualmente a ordem e gerar a baixa do título' },
+  ]),
+  ...build('M09', RESOURCES.BANK_STATEMENTS, [
+    { action: A.CREATE, description: 'Importar extratos bancários' },
+    { action: A.READ, description: 'Consultar extratos importados e movimentos bancários' },
+  ]),
 ];
 
 /** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
@@ -587,4 +630,22 @@ export const PERMISSIONS = {
   FISCAL_DOCUMENTS_DELETE: permissionCode(RESOURCES.FISCAL_DOCUMENTS, A.DELETE),
 
   FISCAL_POSTINGS_CREATE: permissionCode(RESOURCES.FISCAL_POSTINGS, A.CREATE),
+
+  COMPANY_BANK_ACCOUNTS_CREATE: permissionCode(RESOURCES.COMPANY_BANK_ACCOUNTS, A.CREATE),
+  COMPANY_BANK_ACCOUNTS_READ: permissionCode(RESOURCES.COMPANY_BANK_ACCOUNTS, A.READ),
+  COMPANY_BANK_ACCOUNTS_UPDATE: permissionCode(RESOURCES.COMPANY_BANK_ACCOUNTS, A.UPDATE),
+
+  INTEGRATION_CREDENTIALS_CREATE: permissionCode(RESOURCES.INTEGRATION_CREDENTIALS, A.CREATE),
+  INTEGRATION_CREDENTIALS_READ: permissionCode(RESOURCES.INTEGRATION_CREDENTIALS, A.READ),
+  INTEGRATION_CREDENTIALS_UPDATE: permissionCode(RESOURCES.INTEGRATION_CREDENTIALS, A.UPDATE),
+  INTEGRATION_CREDENTIALS_DELETE: permissionCode(RESOURCES.INTEGRATION_CREDENTIALS, A.DELETE),
+
+  PAYMENTS_CREATE: permissionCode(RESOURCES.PAYMENTS, A.CREATE),
+  PAYMENTS_READ: permissionCode(RESOURCES.PAYMENTS, A.READ),
+  PAYMENTS_UPDATE: permissionCode(RESOURCES.PAYMENTS, A.UPDATE),
+  PAYMENTS_DELETE: permissionCode(RESOURCES.PAYMENTS, A.DELETE),
+  PAYMENTS_APPROVE: permissionCode(RESOURCES.PAYMENTS, A.APPROVE),
+
+  BANK_STATEMENTS_CREATE: permissionCode(RESOURCES.BANK_STATEMENTS, A.CREATE),
+  BANK_STATEMENTS_READ: permissionCode(RESOURCES.BANK_STATEMENTS, A.READ),
 } as const;

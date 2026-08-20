@@ -16,6 +16,11 @@ export const AUDIT_ENTITY = {
   PURCHASE_ORDER: 'pedido_compra',
   GOODS_RECEIPT: 'recebimento',
   FISCAL_DOCUMENT: 'documento_fiscal',
+  COMPANY_BANK_ACCOUNT: 'conta_bancaria',
+  INTEGRATION_CREDENTIAL: 'credencial_integracao',
+  PAYMENT_TRANSACTION: 'transacao_pagamento',
+  WEBHOOK_EVENT: 'webhook_evento',
+  BANK_STATEMENT_IMPORT: 'extrato_importacao',
 } as const;
 
 export interface AuditEventInput {

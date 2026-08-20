@@ -360,7 +360,7 @@ describe('FiscalDocumentsService — upload', () => {
 
   it('aceita XML com BOM', async () => {
     const { service, created } = buildService();
-    const buffer = Buffer.from(`﻿${nfeXml()}`, 'utf8');
+    const buffer = Buffer.from(`\u{FEFF}${nfeXml()}`, 'utf8');
 
     await service.importUpload(
       'empresa-1',

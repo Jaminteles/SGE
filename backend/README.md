@@ -1,4 +1,4 @@
-# SGE — Backend (Fases 1 a 4 completas)
+# SGE — Backend (Fases 1 a 5 em andamento)
 
 Backend do **Sistema de Gestão Empresarial e Financeira**, implementado conforme a
 stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
@@ -42,6 +42,12 @@ stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
   duplicidade, vínculo com fornecedor, pedido, produtos, estoque e contas, anexo
   de DANFE/PDF, controle de erros e reprocessamento, e coleta automática por
   integração externa (RF-043 a RF-050).
+- **Sprint 10 — M09 (Bancos, Pagamentos e Recebimentos)**: contas bancárias da
+  empresa, provedores financeiros atrás de uma porta única com credenciais
+  cifradas, ordens PIX, boleto, TED e transferência com agendamento, envio e
+  consulta por fila com retry controlado, cancelamento onde o provedor suporta,
+  webhooks idempotentes com assinatura conferida, identificador externo
+  registrado e importação de extratos OFX/CSV (RF-059 a RF-070).
 
 ## Banco de dados
 
@@ -73,11 +79,12 @@ psql -U gestao_owner -h localhost -d gestao_empresarial -f 09_financeiro_sprint6
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 10_fluxo_caixa_sprint7.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 11_compras_sprint8.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 12_documentos_fiscais_sprint9.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 13_bancos_sprint10.sql
 ```
 
 Se o banco já existe e você só quer trazê-lo para a sprint atual **sem perder os
 dados**, rode `pwsh ../bd/instalar-bd.ps1 -Atualizar`: reaplica apenas `04` a
-`12`, que são idempotentes.
+`13`, que são idempotentes.
 
 ```bash
 # 2. Backend
@@ -99,6 +106,7 @@ npm run start:dev
 | --- | --- |
 | `npm run build` | Compila o projeto (TypeScript) |
 | `npm test` | Testes unitários (regras críticas — RNF-012) |
+| `node test/manual/banking-flow.js` | Roteiro de ponta a ponta do M09, com a API no ar ([test/manual](test/manual/README.md)) |
 | `npm run lint` | ESLint + Prettier |
 | `npm run prisma:generate` | Gera o Prisma Client a partir do mapeamento |
 | `npm run db:check` | Diagnostica se o banco está pronto para a API |
@@ -141,7 +149,7 @@ associações, mas não são editáveis pela API.
 
 `gestao.permissao` não tem coluna de código: a chave é a tripla
 (`modulo`, `recurso`, `acao`). A API deriva o código `recurso:AÇÃO` e grava seu
-catálogo com `modulo` = `M01`/`M02`/`M03`/`M04`/`M05`/`M06`/`M07`/`M08`/`M14`/`M16`. As permissões em
+catálogo com `modulo` = `M01`/`M02`/`M03`/`M04`/`M05`/`M06`/`M07`/`M08`/`M09`/`M14`/`M16`. As permissões em
 português da carga inicial de `bd/03` continuam lá, reservadas para os módulos
 das próximas sprints.
 
@@ -151,8 +159,8 @@ Vínculos feitos pelo seed nos perfis de sistema:
 | --- | --- | --- |
 | RH | Todo o M03 | `reimbursements:APPROVE` — quem lança a despesa não decide sobre ela (RN-003) |
 | COMPRAS | M04, o catálogo do M05 e o M06 (pedido e histórico) | `partner-bank-accounts:*` — quem negocia o preço não redireciona o crédito; `stock-movements:*`, `inventories:*` e `goods-receipts:CREATE` — quem compra não dá baixa nem confere o que chegou; `purchase-orders:APPROVE` — quem pede não aprova (RN-003) |
-| FINANCEIRO | Todo o M08, `partner-bank-accounts:*`, leitura de parceiros, histórico, condições, `stock:READ`, `stock-valuation:READ`, `cash-flow:READ`, leitura de cenários e alertas, leitura do M06 (pedido, recebimento e preços) e `fiscal-documents:READ` | `financial-entries:APPROVE` — quem lança o título não decide sobre ele (RN-003); escrita do cadastro comercial e do estoque; escrita de cenário e alerta — afrouxar o próprio saldo mínimo é apagar o aviso |
-| DIRETOR | Todo o M14 (fluxo, cenários e alertas) + leitura de títulos, baixas e inadimplência | Escrita no M08 — quem planeja o caixa não lança nem baixa título |
+| FINANCEIRO | Todo o M08, `partner-bank-accounts:*`, leitura de parceiros, histórico, condições, `stock:READ`, `stock-valuation:READ`, `cash-flow:READ`, leitura de cenários e alertas, leitura do M06 (pedido, recebimento e preços), `fiscal-documents:READ` e o M09 (contas, ordens e extratos) | `financial-entries:APPROVE` — quem lança o título não decide sobre ele (RN-003); `payments:APPROVE` — a confirmação manual é a afirmação de que o banco pagou, e é ela que gera a baixa; escrita de `integration-credentials` — quem guarda o que assina a ordem pode apontar a integração para outro destino; escrita do cadastro comercial e do estoque; escrita de cenário e alerta |
+| DIRETOR | Todo o M14 (fluxo, cenários e alertas) + leitura de títulos, baixas, inadimplência, contas bancárias, ordens e extratos | Escrita no M08 e no M09 — quem planeja o caixa não lança, não baixa título e não emite ordem |
 | OPERACIONAL | Catálogo, locais, movimentação e contagem do M05 + recebimento do M06 (`goods-receipts:*`, `purchase-orders:READ`) e `fiscal-documents:READ` | M04 — catálogo não implica acesso a parceiros; `inventories:APPROVE` — quem conta não homologa a própria diferença (RN-003); `stock-valuation:READ` — valor do ativo é leitura financeira; escrita do pedido — quem recebe não negocia preço |
 | FISCAL | Todo o M07 (importar, vincular, anexar, reprocessar, cancelar) + leitura de parceiros, catálogo, pedidos e recebimentos | `fiscal-postings:CREATE` — dar entrada no estoque e assumir a conta a pagar move ativo e dinheiro; é decisão de quem confere a mercadoria e de quem paga, não de quem arquiva o documento (RN-003) |
 
@@ -234,6 +242,18 @@ recurso por padrão seria decidir isso por elas.
 | RF-103 | Separar realizado, previsto e vencido | `bySituation` no summary e `inflow`/`outflow` por situação na projeção |
 | RF-104 | Criar cenários e projeções | `/cash-flow/scenarios` (CRUD) + `/cash-flow/scenarios/:id/projections`; `?scenarioId=` na projeção |
 | RF-105 | Alertar insuficiência de caixa | `/cash-flow/alerts` (CRUD), `GET /cash-flow/alerts/evaluation`, `GET /cash-flow/balance` |
+| RF-059 | Cadastrar contas bancárias | `/banking/accounts` (POST/GET/PATCH — banco, agência e conta são imutáveis) |
+| RF-060 | Importar e consultar extratos | `POST /banking/statements/import` (OFX/CSV), `GET /banking/statements`, `GET /banking/bank-transactions` |
+| RF-061 | Interface abstrata para provedores financeiros | `GET /banking/providers`, `/banking/credentials` (CRUD, segredo cifrado e nunca devolvido); porta `PaymentProvider` com adaptadores `MANUAL` e `SANDBOX` |
+| RF-062 | Pagamentos PIX, boleto, transferência e modalidades | `POST /banking/payments` (`method` = PIX/BOLETO/TED/DOC/TRANSFERENCIA_INTERNA) |
+| RF-063 | Agendar pagamentos | `scheduledFor` em `POST /banking/payments` (nasce `AGENDADA`, a fila a segura até a data) |
+| RF-064 | Enviar e consultar transações | Envio pela fila (`payment.send`); `GET /banking/payments`, `GET /banking/payments/:id`, `POST /banking/payments/:id/sync`, `POST /banking/payments/:id/confirm` |
+| RF-065 | Cancelar quando suportado | `POST /banking/payments/:id/cancel` — antes do envio sempre; depois, só se `cancellable` (capacidade do provedor) |
+| RF-066 | Processar webhooks | `POST /banking/webhooks/:providerCode/:companyId` (público, HMAC sobre o corpo cru) + job `webhook.process` |
+| RF-067 | Garantir idempotência | Header `Idempotency-Key` obrigatório na criação + `gestao.idempotencia` + `uq_transacao_idempotency` |
+| RF-068 | Registrar identificador externo | `externalId`/`endToEndId`, únicos por empresa e provedor (`ux_transacao_externa`) |
+| RF-069 | Executar operações assíncronas por fila | `gestao.job_execucao` + `JobWorkerService` (`FOR UPDATE SKIP LOCKED`) |
+| RF-070 | Executar retry controlado | Tentativas, backoff exponencial com jitter, teto e fila morta em `FALHA` |
 
 ## Contrato da API — pontos de atenção
 
@@ -706,7 +726,25 @@ estrita, para não vazar atividade entre empresas.
   fica fora do perfil FISCAL, porque dar entrada no estoque e assumir a conta a
   pagar move ativo e dinheiro (RN-003). A importação vai à trilha como
   `IMPORTACAO`.
-- **RN-001 estrutural (Sprints 3 a 9)**: as referências do M03, M04, M05, M06, M07, M08 e M14 usam **FK composta**
+- **Bancos e pagamentos (Sprint 10)**: o dinheiro sai uma vez só, e quem garante
+  isso é o modelo — três chaves de unicidade empilhadas (a `Idempotency-Key` do
+  cliente por empresa, o identificador externo por provedor e a baixa única por
+  transação, `bd/13`). Um retry da API, um reenvio do worker e um webhook
+  repetido batem, cada um, numa delas. O envio é assíncrono e o worker **só
+  escreve depois de o provedor responder**: falha de rede não deixa ordem em
+  estado intermediário. A rota de webhook é a única pública da API e o que a
+  autentica é o HMAC sobre o corpo cru — evento com assinatura inválida é
+  **gravado** (é a evidência da tentativa) e recusado com 401, e o banco impede
+  que ele seja processado. Credencial de integração é cifrada com AES-256-GCM e
+  não tem rota que a devolva. A URL do provedor vem de cadastro, e por isso é
+  validada antes de cada chamada: sem HTTPS, fora da allowlist ou apontando para
+  loopback, link-local ou rede privada, a chamada não sai (SSRF). Confirmar
+  manualmente é recurso separado de criar (`payments:APPROVE`), porque é a
+  afirmação que gera a baixa do título sem ninguém ter falado com o banco
+  (RN-003). `conta_bancaria.saldo_atual` é o saldo **do banco**, movido só por
+  extrato importado — a divergência entre ele e as baixas lançadas é o que a
+  conciliação (M10) precisa enxergar.
+- **RN-001 estrutural (Sprints 3 a 10)**: as referências do M03, M04, M05, M06, M07, M08, M09 e M14 usam **FK composta**
   `(empresa_id, <coluna>)`. A verificação de chave estrangeira roda no sistema,
   sem RLS: sem isso, um defeito na API poderia vincular funcionário da empresa A
   ao centro de custo da empresa B. Como FK composta não aceita `ON DELETE SET
@@ -735,3 +773,15 @@ estrita, para não vazar atividade entre empresas.
   o access token é stateless e valeria até expirar (RF-009).
 - A transação por requisição mantém uma conexão ocupada enquanto a requisição
   dura; `REQUEST_TX_TIMEOUT_MS` limita esse tempo.
+- A fila (M09) vive no próprio PostgreSQL (`gestao.job_execucao`), e não em
+  Redis, por uma razão de correção: enfileirar participa da mesma transação que
+  grava a ordem de pagamento — não existe ordem gravada sem job, nem job sem
+  ordem. Os jobs são reivindicados com `FOR UPDATE SKIP LOCKED`, então vários
+  processos consomem a mesma fila sem coordenação externa: para separar API e
+  worker (RNF-009), suba a mesma imagem com `WORKER_ENABLED=false` na API e
+  `true` no processo de fila. Trocar o driver por BullMQ depois é reescrever
+  `JobQueueService` e `JobWorkerService`; o contrato de `JobHandler` não muda.
+- `INTEGRATION_ENCRYPTION_KEY` tem um valor de desenvolvimento no schema de
+  ambiente para que o boot não exija configuração. **Trocar a chave torna
+  ilegíveis as credenciais já gravadas**: rotacionar é recadastrar os segredos,
+  não substituir a chave.

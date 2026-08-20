@@ -216,6 +216,50 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   /**
+   * Executa `fn` fora do ciclo de requisição, em transação própria e com a
+   * origem declarada na sessão de banco (RF-115).
+   *
+   * É o contexto do worker de filas e do receptor de webhooks (M09): eles não
+   * têm requisição HTTP e, portanto, não têm empresa vinda de header. A origem
+   * também é o limite de confiança da RLS estrita de `idempotencia`,
+   * `webhook_evento` e `job_execucao` (bd/13 §10) — só `WORKER`, `WEBHOOK` e
+   * `SISTEMA` atravessam empresas, e a API sempre declara `API`.
+   *
+   * Informe `companyId` sempre que ele for conhecido: sem ele, nenhuma tabela
+   * de negócio responde, porque a RLS delas continua exigindo a empresa.
+   */
+  async runAsSystem<T>(
+    context: {
+      origin: Exclude<AuditOrigin, 'API'>;
+      companyId?: string;
+      userId?: string;
+      correlationId?: string;
+    },
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    return this.$transaction(
+      async (tx) => {
+        const store: RequestStore = {
+          tx,
+          companyId: context.companyId,
+          userId: context.userId,
+          metadata: { origin: context.origin, correlationId: context.correlationId },
+        };
+        return this.als.run(store, async () => {
+          await tx.$queryRaw`
+            SELECT set_config('app.origem', ${context.origin}, true),
+                   set_config('app.empresa_id', ${context.companyId ?? ''}, true),
+                   set_config('app.usuario_id', ${context.userId ?? ''}, true),
+                   set_config('app.correlation_id', ${context.correlationId ?? ''}, true)
+          `;
+          return fn();
+        });
+      },
+      { timeout: this.txTimeoutMs },
+    );
+  }
+
+  /**
    * Executa `fn` em transação. Dentro de uma requisição reaproveita a transação
    * já aberta (Postgres não tem transações aninhadas reais).
    */

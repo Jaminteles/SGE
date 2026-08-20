@@ -121,6 +121,23 @@ async function seedSystemRoles(): Promise<void> {
         // M07: pagar sem enxergar a nota é pagar contra o que alguém digitou.
         // Só leitura — importar e vincular é do Fiscal.
         PERMISSIONS.FISCAL_DOCUMENTS_READ,
+        // M09: é o Financeiro quem paga. Vem o módulo bancário inteiro, com
+        // duas exclusões que seguem a mesma lógica das outras alçadas (RN-003):
+        //
+        //  - `payments:APPROVE` é a confirmação manual — a afirmação de que o
+        //    banco pagou, sem que ninguém tenha falado com o banco, e é ela que
+        //    gera a baixa do título. Quem emite a ordem não a confirma;
+        //  - a escrita de `integration-credentials` guarda o que assina a ordem
+        //    no banco, e quem a tem pode apontar a integração para outro
+        //    destino. É do administrador; ao Financeiro basta enxergar qual
+        //    credencial está em uso.
+        ...PERMISSION_CATALOG.filter(
+          (p) =>
+            p.module === 'M09' &&
+            p.code !== PERMISSIONS.PAYMENTS_APPROVE &&
+            (p.resource !== RESOURCES.INTEGRATION_CREDENTIALS ||
+              p.code === PERMISSIONS.INTEGRATION_CREDENTIALS_READ),
+        ).map((p) => p.code),
       ],
     },
     // M07: Fiscal é quem responde pelos RF-043 a RF-050 — importa, confere,
@@ -153,6 +170,11 @@ async function seedSystemRoles(): Promise<void> {
         PERMISSIONS.FINANCIAL_ENTRIES_READ,
         PERMISSIONS.SETTLEMENTS_READ,
         PERMISSIONS.DELINQUENCY_READ,
+        // M09: o saldo em conta e as ordens em andamento são a parte do caixa
+        // que já saiu do controle da carteira — leitura, nunca emissão.
+        PERMISSIONS.COMPANY_BANK_ACCOUNTS_READ,
+        PERMISSIONS.PAYMENTS_READ,
+        PERMISSIONS.BANK_STATEMENTS_READ,
       ],
     },
     // Operacional cadastra e consulta o catálogo, movimenta e conta o estoque,

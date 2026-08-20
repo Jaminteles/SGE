@@ -7,7 +7,10 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // `rawBody`: a assinatura HMAC do webhook (RF-066) é calculada sobre o corpo
+  // exatamente como o provedor o enviou — reserializar o JSON produziria outro
+  // texto e outra assinatura.
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
   const config = app.get(ConfigService);
 
   app.useLogger(app.get(Logger));
@@ -33,7 +36,7 @@ async function bootstrap(): Promise<void> {
   if (config.get('NODE_ENV') !== 'production') {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('SGE API')
-      .setDescription('Sistema de Gestão Empresarial e Financeira — Sprint 1 (Fundação)')
+      .setDescription('Sistema de Gestão Empresarial e Financeira — Sprints 1 a 10 (Fases 1 a 5)')
       .setVersion('1.0')
       .addBearerAuth()
       .addGlobalParameters({
