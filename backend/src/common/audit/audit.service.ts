@@ -24,6 +24,7 @@ export const AUDIT_ENTITY = {
   BANK_TRANSACTION: 'transacao_bancaria',
   RECONCILIATION: 'conciliacao',
   RECONCILIATION_RULE: 'regra_conciliacao',
+  OCR_PROCESSING: 'ocr_processamento',
 } as const;
 
 export interface AuditEventInput {

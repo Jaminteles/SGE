@@ -36,6 +36,8 @@ Ordem de execução dos scripts (a partir de `bd/`):
 | `11_compras_sprint8.sql` | M06: numeração do pedido e do recebimento, total projetado dos itens com rateio de despesas, aprovação, recebimento append-only, divergências e histórico de preços | `gestao_owner` |
 | `12_documentos_fiscais_sprint9.sql` | M07: consistência dos itens e dos totais da nota, duplicidade, máquina de estados do processamento, imutabilidade do XML e vínculo com estoque/financeiro sem duplicidade | `gestao_owner` |
 | `13_bancos_sprint10.sql` | M09: conta bancária, máquina de estados da ordem de pagamento, idempotência imutável, uma baixa por transação, webhook deduplicado, fila com retry e RLS estrita | `gestao_owner` |
+| `14_conciliacao_sprint11.sql` | M10: FKs multiempresa da conciliação, regra com prioridade e tolerâncias, soma limitada pelo movimento, status derivado e histórico append-only | `gestao_owner` |
+| `15_ocr_sprint12.sql` | M13: um processamento por documento, domínio dos campos lidos, máquina de estados da leitura, validação humana registrada e resultado preservado | `gestao_owner` |
 | `98_smoke_bancos_sprint10.sql` | Confere as regras de `13` num banco já migrado; termina em `ROLLBACK` | `gestao_owner` |
 | `99_smoke_test.sql` | Exercita estoque, títulos e partidas dobradas | `gestao_owner` |
 

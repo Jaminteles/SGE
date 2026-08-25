@@ -70,6 +70,7 @@ export const RESOURCES = {
   BANK_STATEMENTS: 'bank-statements',
   RECONCILIATION: 'reconciliation',
   RECONCILIATION_RULES: 'reconciliation-rules',
+  OCR: 'ocr',
 } as const;
 
 export interface PermissionDefinition {
@@ -460,6 +461,18 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     { action: A.UPDATE, description: 'Alterar regras e tolerâncias de conciliação' },
     { action: A.DELETE, description: 'Desativar regras de conciliação' },
   ]),
+  // M13 — OCR e Automação de Documentos.
+  //
+  // `:APPROVE` é a permissão que importa: validar a leitura é assumir que
+  // aquele valor está certo, e é dela que sai o lançamento adiante. Quem
+  // digitaliza comprovante o dia inteiro (`:CREATE`) não precisa ser quem
+  // assume. `:UPDATE` é só devolver à fila o que falhou — não decide nada.
+  ...build('M13', RESOURCES.OCR, [
+    { action: A.CREATE, description: 'Enviar documentos para leitura automática' },
+    { action: A.READ, description: 'Consultar leituras e baixar o documento de origem' },
+    { action: A.UPDATE, description: 'Reprocessar leituras que falharam' },
+    { action: A.APPROVE, description: 'Validar ou rejeitar o resultado da leitura' },
+  ]),
 ];
 
 /** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
@@ -686,4 +699,9 @@ export const PERMISSIONS = {
   RECONCILIATION_RULES_READ: permissionCode(RESOURCES.RECONCILIATION_RULES, A.READ),
   RECONCILIATION_RULES_UPDATE: permissionCode(RESOURCES.RECONCILIATION_RULES, A.UPDATE),
   RECONCILIATION_RULES_DELETE: permissionCode(RESOURCES.RECONCILIATION_RULES, A.DELETE),
+
+  OCR_CREATE: permissionCode(RESOURCES.OCR, A.CREATE),
+  OCR_READ: permissionCode(RESOURCES.OCR, A.READ),
+  OCR_UPDATE: permissionCode(RESOURCES.OCR, A.UPDATE),
+  OCR_APPROVE: permissionCode(RESOURCES.OCR, A.APPROVE),
 } as const;

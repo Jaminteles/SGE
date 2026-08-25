@@ -48,6 +48,16 @@ stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
   consulta por fila com retry controlado, cancelamento onde o provedor suporta,
   webhooks idempotentes com assinatura conferida, identificador externo
   registrado e importação de extratos OFX/CSV (RF-059 a RF-070).
+- **Sprint 11 — M10 (Conciliação Bancária)**: importação de extrato em OFX, CSV
+  e CNAB 240, identificação do movimento, sugestão de correspondência com
+  título, baixa e ordem, conciliação manual e automática por regras, painel de
+  divergências e histórico append-only (RF-071 a RF-077).
+- **Sprint 12 — M13 (OCR e Automação de Documentos)**: recepção de imagens e
+  PDFs, leitura na fila atrás de uma porta de provedor (com adaptador manual
+  para quem não contratou OCR), extração de valor, data, estabelecimento, chave
+  e número do documento, sugestão de parceiro, categoria e centro de custo pelo
+  histórico, validação humana registrada e documento e resultado preservados
+  (RF-095 a RF-100).
 
 ## Banco de dados
 

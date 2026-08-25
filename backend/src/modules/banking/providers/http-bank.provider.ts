@@ -1,8 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { isIP } from 'node:net';
-import { CircuitBreaker } from './circuit-breaker';
+import {
+  OutboundUrlError,
+  outboundUrlOptions,
+  resolveOutboundUrl,
+} from '../../../common/http/outbound-url';
+import { CircuitBreaker } from '../../../common/http/circuit-breaker';
 import {
   ParsedWebhookEvent,
   PaymentOrder,
@@ -72,17 +76,12 @@ export class HttpBankProvider implements PaymentProvider {
 
   private readonly logger = new Logger(HttpBankProvider.name);
   private readonly timeoutMs: number;
-  private readonly allowedHosts: string[];
-  private readonly allowInsecure: boolean;
+  private readonly outbound: ReturnType<typeof outboundUrlOptions>;
   private readonly breaker: CircuitBreaker;
 
   constructor(config: ConfigService) {
     this.timeoutMs = config.get<number>('INTEGRATION_HTTP_TIMEOUT_MS') ?? 10_000;
-    this.allowedHosts = (config.get<string>('INTEGRATION_ALLOWED_HOSTS') ?? '')
-      .split(',')
-      .map((host) => host.trim().toLowerCase())
-      .filter(Boolean);
-    this.allowInsecure = config.get<string>('NODE_ENV') !== 'production';
+    this.outbound = outboundUrlOptions((key) => config.get<string>(key));
     this.breaker = new CircuitBreaker({
       failureThreshold: config.get<number>('INTEGRATION_CIRCUIT_THRESHOLD') ?? 5,
       openMs: config.get<number>('INTEGRATION_CIRCUIT_OPEN_MS') ?? 60_000,
@@ -291,82 +290,15 @@ export class HttpBankProvider implements PaymentProvider {
    * metadata service da nuvem ou um serviço interno.
    */
   private resolveUrl(context: ProviderContext, path: string): string {
-    const baseUrl = context.credentials.baseUrl;
-    if (!baseUrl) {
-      throw new ProviderError(
-        `A credencial de ${context.providerCode} não informa a URL do provedor.`,
-        'CREDENCIAL_INCOMPLETA',
-        false,
-      );
-    }
-
-    let url: URL;
     try {
-      url = new URL(path.replace(/^\//, ''), baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
-    } catch {
-      throw new ProviderError(
-        `A credencial de ${context.providerCode} tem URL inválida.`,
-        'CREDENCIAL_INVALIDA',
-        false,
-      );
+      return resolveOutboundUrl(context.credentials.baseUrl, path, this.outbound);
+    } catch (error) {
+      if (error instanceof OutboundUrlError) {
+        // O motivo já está no vocabulário dos adaptadores; falta dizer de quem é
+        // a credencial recusada.
+        throw new ProviderError(`${error.message} (${context.providerCode})`, error.code, false);
+      }
+      throw error;
     }
-
-    if (url.protocol !== 'https:' && !(this.allowInsecure && url.protocol === 'http:')) {
-      throw new ProviderError('A integração exige HTTPS.', 'DESTINO_INVALIDO', false);
-    }
-
-    const host = url.hostname.toLowerCase();
-    if (this.allowedHosts.length > 0 && !this.allowedHosts.includes(host)) {
-      throw new ProviderError(
-        `Destino ${host} não está na lista de hosts permitidos.`,
-        'DESTINO_NAO_PERMITIDO',
-        false,
-      );
-    }
-    if (isPrivateHost(host)) {
-      throw new ProviderError(
-        'A integração não pode apontar para um endereço interno.',
-        'DESTINO_INVALIDO',
-        false,
-      );
-    }
-
-    return url.toString();
   }
-}
-
-/**
- * Endereço que não deve ser alcançado a partir de uma credencial cadastrada.
- *
- * A checagem é sobre o host literal — resolução de DNS pode mudar entre a
- * validação e a chamada (rebinding). Por isso a allowlist de hosts é o controle
- * principal em produção, e esta função é o piso mínimo quando ela não existe.
- */
-function isPrivateHost(host: string): boolean {
-  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.internal')) {
-    return true;
-  }
-  if (isIP(host) === 4) {
-    const [a, b] = host.split('.').map(Number);
-    return (
-      a === 10 ||
-      a === 127 ||
-      a === 0 ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 169 && b === 254) ||
-      (a === 100 && b >= 64 && b <= 127)
-    );
-  }
-  if (isIP(host) === 6) {
-    const normalized = host.replace(/^\[|\]$/g, '').toLowerCase();
-    return (
-      normalized === '::1' ||
-      normalized === '::' ||
-      normalized.startsWith('fe80') ||
-      normalized.startsWith('fc') ||
-      normalized.startsWith('fd')
-    );
-  }
-  return false;
 }

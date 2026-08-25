@@ -7,6 +7,8 @@
 // Sprint 8 (M06 Compras: pedidos, aprovação, recebimento e conferência) e
 // Sprint 9 (M07 Documentos Fiscais: importação de XML, processamento e vínculos) e
 // Sprint 10 (M09 Bancos, Pagamentos e Recebimentos + importação de extrato)
+// Sprint 11 (M10 Conciliação Bancária) e
+// Sprint 12 (M13 OCR e Automação de Documentos)
 //
 // IMPORTANTE: este schema NÃO é dono do banco. O modelo físico vive em `bd/*.sql`
 // (schema `gestao`, PostgreSQL 14+) e é a fonte da verdade. Aqui há apenas o
@@ -539,6 +541,7 @@ model Category {
   recurrences      Recurrence[]
   cashProjections  CashFlowProjection[]
   purchaseOrders   PurchaseOrder[]
+  ocrSuggestions   OcrProcessing[]
 
   @@unique([companyId, code], map: "uq_categoria_financeira_codigo")
   @@map("categoria_financeira")
@@ -566,6 +569,7 @@ model CostCenter {
   cashProjections  CashFlowProjection[]
   purchaseOrders   PurchaseOrder[]
   purchaseItems    PurchaseOrderItem[]
+  ocrSuggestions   OcrProcessing[]
 
   @@unique([companyId, code], map: "uq_centro_custo_codigo")
   @@map("centro_custo")
@@ -872,6 +876,7 @@ model StoredDocument {
   createdAt       DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
 
   reimbursementItems ReimbursementItem[]
+  ocrProcessings     OcrProcessing[]
 
   @@index([companyId, entity, entityId], map: "ix_documento_entidade")
   @@map("documento")
@@ -922,6 +927,7 @@ model Partner {
   purchaseOrders   PurchaseOrder[]
   documentsIssued  FiscalDocument[]  @relation("NotaEmitente")
   documentsAddress FiscalDocument[]  @relation("NotaDestinatario")
+  ocrSuggestions   OcrProcessing[]
 
   @@map("parceiro")
 }
@@ -2386,4 +2392,68 @@ model Reconciliation {
   createdAt            DateTime              @default(now()) @map("criado_em") @db.Timestamptz(6)
 
   @@map("conciliacao")
+}
+
+// ---------------------------------------------------------------------------
+// M13 — OCR e Automação de Documentos (RF-095 a RF-100) — Sprint 12
+//
+// O processamento não lança nada: produz uma leitura com confiança e sugestões,
+// e quem cria título, reembolso ou nota continua sendo M08, M03 e M07, a partir
+// de uma decisão humana (RF-099). Ver bd/15 para as restrições e triggers.
+// ---------------------------------------------------------------------------
+
+/// Situação da leitura automática (`enum_status_ocr`, bd/01).
+/// Transições válidas em bd/15 §4 — a API não escreve status fora delas.
+enum OcrStatus {
+  PENDENTE
+  PROCESSANDO
+  PROCESSADO
+  ERRO
+  VALIDADO
+  REJEITADO
+
+  @@map("enum_status_ocr")
+}
+
+/// gestao.ocr_processamento — leitura de um documento e o que se decidiu sobre
+/// ela (RF-095 a RF-100). Append-only: rejeitar é status, não DELETE (bd/15 §7).
+model OcrProcessing {
+  id                       String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId                String         @map("empresa_id") @db.Uuid
+  documentId               String         @map("documento_id") @db.Uuid
+  document                 StoredDocument @relation(fields: [documentId], references: [id])
+  providerId               String?        @map("provider_id") @db.Uuid
+  status                   OcrStatus      @default(PENDENTE)
+  /// Texto cru devolvido pelo provedor. Imutável depois de PROCESSADO (bd/15 §6).
+  extractedText            String?        @map("texto_extraido")
+  /// Confiança de 0 a 100 — `Decimal`, como todo número que decide alguma coisa.
+  confidence               Decimal?       @map("confianca_geral") @db.Decimal(5, 2)
+  amount                   Decimal?       @map("valor_extraido") @db.Decimal(18, 2)
+  issueDate                DateTime?      @map("data_extraida") @db.Date
+  merchantName             String?        @map("estabelecimento_nome") @db.VarChar(255)
+  /// Só dígitos: 11 (CPF) ou 14 (CNPJ) — é assim que casa com `parceiro`.
+  merchantDocument         String?        @map("estabelecimento_documento") @db.VarChar(14)
+  /// Chave de acesso da NF-e/NFC-e, 44 dígitos (RF-097).
+  documentKey              String?        @map("chave_documento") @db.VarChar(44)
+  documentNumber           String?        @map("numero_documento") @db.VarChar(30)
+  suggestedCategoryId      String?        @map("categoria_sugerida_id") @db.Uuid
+  suggestedCategory        Category?      @relation(fields: [suggestedCategoryId], references: [id])
+  suggestedCostCenterId    String?        @map("centro_custo_sugerido_id") @db.Uuid
+  suggestedCostCenter      CostCenter?    @relation(fields: [suggestedCostCenterId], references: [id])
+  suggestedPartnerId       String?        @map("parceiro_sugerido_id") @db.Uuid
+  suggestedPartner         Partner?       @relation(fields: [suggestedPartnerId], references: [id])
+  /// Resposta crua do provedor, sem credencial. Imutável depois de PROCESSADO.
+  rawPayload               Json?          @map("payload_bruto")
+  validatedById            String?        @map("validado_por") @db.Uuid
+  validatedAt              DateTime?      @map("validado_em") @db.Timestamptz(6)
+  /// O que a pessoa corrigiu, ao lado do que a máquina leu — nunca por cima.
+  corrections              Json?          @map("correcoes")
+  error                    String?        @map("erro")
+  attempts                 Int            @default(0) @map("tentativas") @db.SmallInt
+  createdAt                DateTime       @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt                DateTime       @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  @@unique([companyId, documentId], map: "uq_ocr_documento")
+  @@index([companyId, status], map: "ix_ocr_status")
+  @@map("ocr_processamento")
 }

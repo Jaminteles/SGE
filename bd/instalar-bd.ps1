@@ -16,7 +16,7 @@
       5. opcionalmente roda 99_smoke_test.sql
 
     Atualizacao (-Atualizar) -- PRESERVA os dados. Nao apaga nada e nao pede a
-    senha do superusuario: roda apenas os scripts de ajuste (04 a 13), que sao
+    senha do superusuario: roda apenas os scripts de ajuste (04 a 15), que sao
     idempotentes e reaplicaveis. E o caminho para levar um banco de uma sprint
     anterior ate a atual sem perder o que ja foi cadastrado.
 
@@ -26,7 +26,7 @@
     Nome do banco a recriar (ou a atualizar). Padrao: gestao_empresarial
 
 .PARAMETER Atualizar
-    Aplica so os scripts de ajuste (04 a 13) sobre um banco existente, sem
+    Aplica so os scripts de ajuste (04 a 15) sobre um banco existente, sem
     apagar dados. Incompativel com -Forcar.
 
 .PARAMETER Forcar
@@ -49,7 +49,7 @@
 
 .EXAMPLE
     .\instalar-bd.ps1 -Atualizar
-    Aplica os ajustes das sprints (04 a 13) em gestao_empresarial, sem apagar
+    Aplica os ajustes das sprints (04 a 15) em gestao_empresarial, sem apagar
     dados. E o que rodar depois de atualizar o repositorio.
 #>
 
@@ -120,7 +120,8 @@ $scriptsAjuste = @(
     '11_compras_sprint8.sql',
     '12_documentos_fiscais_sprint9.sql',
     '13_bancos_sprint10.sql',
-    '14_conciliacao_sprint11.sql'
+    '14_conciliacao_sprint11.sql',
+    '15_ocr_sprint12.sql'
 )
 
 $scripts = $scriptsBase + $scriptsAjuste

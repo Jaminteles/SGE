@@ -1,5 +1,5 @@
 /**
- * Disjuntor por provedor (RNF-011).
+ * Disjuntor por integração externa (RNF-011).
  *
  * Quando o banco está fora, insistir a cada job é gastar o pool de conexões e
  * as tentativas de todas as transações da fila contra um endereço que não

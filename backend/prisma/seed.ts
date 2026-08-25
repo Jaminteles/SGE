@@ -199,6 +199,14 @@ async function seedSystemRoles(): Promise<void> {
         PERMISSIONS.PURCHASE_ORDERS_READ,
         // M07: a conferência é contra a nota que veio com a carga (RF-047).
         PERMISSIONS.FISCAL_DOCUMENTS_READ,
+        // M13: quem digitaliza o comprovante é quem o envia (RF-095) e quem
+        // acompanha a leitura. Validar o resultado fica de fora pela mesma razão
+        // do inventário e do reembolso (RN-003): assumir que o valor lido está
+        // certo é decisão de quem responde pelo lançamento — atribua
+        // `ocr:APPROVE` a esse perfil.
+        ...PERMISSION_CATALOG.filter(
+          (p) => p.module === 'M13' && p.code !== PERMISSIONS.OCR_APPROVE,
+        ).map((p) => p.code),
       ],
     },
   ];
