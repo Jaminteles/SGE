@@ -2457,3 +2457,129 @@ model OcrProcessing {
   @@index([companyId, status], map: "ix_ocr_status")
   @@map("ocr_processamento")
 }
+
+// ---------------------------------------------------------------------------
+// M17 — Notificações e Automação (RF-119 a RF-125) — Sprint 13
+//
+// Duas decisões estruturais governam este módulo:
+//
+//  1. **notificar não é agir**. Uma notificação registra que algo merece
+//     atenção humana e para por aí — nenhum alerta prorroga parcela, cancela
+//     ordem ou concilia movimento. A "automação" da RF-125 automatiza *o
+//     aviso*, não a decisão: uma regra que pagasse sozinha transformaria um
+//     erro de configuração em dinheiro saindo, sem ninguém no caminho.
+//  2. **o aviso é idempotente**. `chave_dedupe` é o que impede a mesma parcela
+//     vencendo de virar uma notificação por varredura — quinze avisos iguais
+//     por dia treinam o destinatário a ignorar todos, inclusive o que importa.
+// ---------------------------------------------------------------------------
+
+/// Canal de entrega da notificação — `enum_canal_notificacao` (bd/01).
+///
+/// Só `INTERNO` e `EMAIL` têm adaptador nesta sprint (RF-119/RF-120); os demais
+/// existem no tipo do banco e são recusados pela API até haver quem os entregue.
+enum NotificationChannel {
+  INTERNO
+  EMAIL
+  SMS
+  PUSH
+  WEBHOOK
+
+  @@map("enum_canal_notificacao")
+}
+
+/// Situação da notificação — `enum_status_notificacao` (bd/01).
+///
+/// `PENDENTE` é o estado de quem ainda não foi entregue; `INTERNO` nasce
+/// direto em `ENVIADA` porque a entrega é a própria gravação. A máquina de
+/// estados é imposta pelo banco (bd/16 §4).
+enum NotificationStatus {
+  PENDENTE
+  ENVIADA
+  LIDA
+  FALHA
+  CANCELADA
+
+  @@map("enum_status_notificacao")
+}
+
+/// gestao.notificacao — um aviso endereçado a alguém (RF-119 a RF-124).
+///
+/// `userId` nulo é aviso da empresa, visível a quem tem a permissão do assunto;
+/// preenchido, é pessoal e só o destinatário lê. Sem relação com `User` de
+/// propósito, como no restante do schema: ninguém navega a partir daqui.
+model Notification {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String              @map("empresa_id") @db.Uuid
+  userId         String?             @map("usuario_id") @db.Uuid
+  channel        NotificationChannel @default(INTERNO) @map("canal")
+  /// VENCIMENTO | PAGAMENTO_PROCESSADO | PAGAMENTO_FALHOU | APROVACAO_PENDENTE | DIVERGENCIA.
+  type           String              @map("tipo") @db.VarChar(60)
+  title          String              @map("titulo") @db.VarChar(255)
+  message        String              @map("mensagem")
+  /// 1 (mais urgente) a 5. Ordena a caixa de entrada, não decide entrega.
+  priority       Int                 @default(3) @map("prioridade") @db.SmallInt
+  /// Tabela de `gestao` a que o aviso se refere, e o id dentro dela.
+  entity         String?             @map("entidade") @db.VarChar(60)
+  entityId       String?             @map("entidade_id") @db.Uuid
+  link           String?             @map("link")
+  status         NotificationStatus  @default(PENDENTE) @map("status")
+  recipientEmail String?             @map("destinatario_email") @db.VarChar(255)
+  /// Idempotência do aviso (bd/16 §3): o mesmo fato não notifica duas vezes.
+  dedupeKey      String?             @map("chave_dedupe") @db.VarChar(200)
+  sentAt         DateTime?           @map("enviada_em") @db.Timestamptz(6)
+  readAt         DateTime?           @map("lida_em") @db.Timestamptz(6)
+  error          String?             @map("erro")
+  attempts       Int                 @default(0) @map("tentativas") @db.SmallInt
+  createdAt      DateTime            @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  @@index([userId, status, createdAt(sort: Desc)], map: "ix_notificacao_usuario")
+  @@map("notificacao")
+}
+
+/// gestao.regra_automacao — quando avisar, quem avisar e por onde (RF-125).
+///
+/// `conditions` e `actions` são `jsonb` para o conjunto crescer sem migration,
+/// mas a forma é fechada nos DTOs: uma condição que o motor não entende é uma
+/// regra que avisa mais — ou menos — do que quem a escreveu autorizou.
+model AutomationRule {
+  id           String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId    String              @map("empresa_id") @db.Uuid
+  name         String              @map("nome") @db.VarChar(120)
+  description  String?             @map("descricao")
+  /// TITULO_VENCENDO | PAGAMENTO_PROCESSADO | PAGAMENTO_FALHOU | APROVACAO_PENDENTE | DIVERGENCIA_CONCILIACAO.
+  triggerEvent String              @map("evento_gatilho") @db.VarChar(80)
+  conditions   Json                @default("{}") @map("condicoes")
+  actions      Json                @map("acoes")
+  /// Reservado para agendamento próprio (M18). A varredura desta sprint é
+  /// periódica e única: uma expressão por regra multiplicaria as varreduras.
+  cronSchedule String?             @map("agendamento_cron") @db.VarChar(60)
+  isActive     Boolean             @default(true) @map("ativo")
+  lastRunAt    DateTime?           @map("ultima_execucao_em") @db.Timestamptz(6)
+  createdAt    DateTime            @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt    DateTime            @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  runs AutomationRuleRun[]
+
+  @@unique([companyId, name], map: "uq_regra_automacao")
+  @@index([companyId, triggerEvent], map: "ix_regra_automacao_evento")
+  @@map("regra_automacao")
+}
+
+/// gestao.regra_automacao_execucao — o que cada rodada da regra produziu.
+///
+/// Append-only (bd/16 §7): é a resposta para "por que ninguém foi avisado?",
+/// e uma execução que some leva a pergunta junto.
+model AutomationRuleRun {
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId  String         @map("empresa_id") @db.Uuid
+  ruleId     String         @map("regra_automacao_id") @db.Uuid
+  rule       AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  status     JobStatus      @default(PENDENTE) @map("status")
+  entityId   String?        @map("entidade_id") @db.Uuid
+  result     Json?          @map("resultado")
+  error      String?        @map("erro")
+  executedAt DateTime       @default(now()) @map("executado_em") @db.Timestamptz(6)
+
+  @@index([companyId, ruleId, executedAt(sort: Desc)], map: "ix_regra_automacao_execucao")
+  @@map("regra_automacao_execucao")
+}

@@ -211,6 +211,19 @@ async function seedSystemRoles(): Promise<void> {
     },
   ];
 
+  // M17: a caixa de entrada é de todo mundo. Ler e marcar como lido valem para
+  // qualquer perfil — um aviso que o destinatário não pode abrir não avisa nada.
+  // Emitir aviso para terceiros (`notifications:CREATE`) e manter as regras
+  // (`automation-rules:*`) ficam com o Administrador: as duas decidem o que
+  // aparece na tela dos outros, e desativar uma regra é a maneira silenciosa de
+  // fazer o alerta de pagamento falho ou de aprovação parada deixar de sair.
+  const inbox = [PERMISSIONS.NOTIFICATIONS_READ, PERMISSIONS.NOTIFICATIONS_UPDATE];
+  for (const grant of grants) {
+    if (grant.codes !== 'all') {
+      grant.codes = [...grant.codes, ...inbox];
+    }
+  }
+
   for (const { role, codes } of grants) {
     // Perfis de sistema: `empresa_id` nulo, visíveis a todas as empresas.
     const profile = await prisma.role.findFirst({

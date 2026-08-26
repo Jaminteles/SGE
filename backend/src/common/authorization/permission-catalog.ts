@@ -71,6 +71,8 @@ export const RESOURCES = {
   RECONCILIATION: 'reconciliation',
   RECONCILIATION_RULES: 'reconciliation-rules',
   OCR: 'ocr',
+  NOTIFICATIONS: 'notifications',
+  AUTOMATION_RULES: 'automation-rules',
 } as const;
 
 export interface PermissionDefinition {
@@ -473,6 +475,30 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     { action: A.UPDATE, description: 'Reprocessar leituras que falharam' },
     { action: A.APPROVE, description: 'Validar ou rejeitar o resultado da leitura' },
   ]),
+  // M17 — Notificações e Automação (RF-119 a RF-125).
+  //
+  // Duas separações intencionais:
+  //
+  //  - **ler não é escrever**. `notifications:READ` dá acesso à própria caixa
+  //    de entrada — nunca à de outra pessoa, que é limite aplicado no serviço, e
+  //    não por permissão. `:CREATE` é a capacidade de avisar terceiros, que é
+  //    outra coisa: quem a tem escolhe o que aparece na tela dos colegas;
+  //  - **a regra é recurso próprio, e o mais sensível do módulo**. Desativar uma
+  //    regra é a maneira silenciosa de fazer o aviso de pagamento falho, de
+  //    aprovação parada ou de divergência parar de sair — sem apagar nada, e o
+  //    que some é um e-mail que ninguém esperava conscientemente. Por isso
+  //    `:UPDATE` e `:DELETE` não acompanham a leitura.
+  ...build('M17', RESOURCES.NOTIFICATIONS, [
+    { action: A.CREATE, description: 'Emitir avisos para outros usuários da empresa' },
+    { action: A.READ, description: 'Consultar a própria caixa de entrada de avisos' },
+    { action: A.UPDATE, description: 'Marcar avisos como lidos' },
+  ]),
+  ...build('M17', RESOURCES.AUTOMATION_RULES, [
+    { action: A.CREATE, description: 'Cadastrar regras de automação de avisos' },
+    { action: A.READ, description: 'Consultar regras de automação e suas execuções' },
+    { action: A.UPDATE, description: 'Alterar gatilhos, condições e destinatários' },
+    { action: A.DELETE, description: 'Desativar regras de automação' },
+  ]),
 ];
 
 /** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
@@ -704,4 +730,13 @@ export const PERMISSIONS = {
   OCR_READ: permissionCode(RESOURCES.OCR, A.READ),
   OCR_UPDATE: permissionCode(RESOURCES.OCR, A.UPDATE),
   OCR_APPROVE: permissionCode(RESOURCES.OCR, A.APPROVE),
+
+  NOTIFICATIONS_CREATE: permissionCode(RESOURCES.NOTIFICATIONS, A.CREATE),
+  NOTIFICATIONS_READ: permissionCode(RESOURCES.NOTIFICATIONS, A.READ),
+  NOTIFICATIONS_UPDATE: permissionCode(RESOURCES.NOTIFICATIONS, A.UPDATE),
+
+  AUTOMATION_RULES_CREATE: permissionCode(RESOURCES.AUTOMATION_RULES, A.CREATE),
+  AUTOMATION_RULES_READ: permissionCode(RESOURCES.AUTOMATION_RULES, A.READ),
+  AUTOMATION_RULES_UPDATE: permissionCode(RESOURCES.AUTOMATION_RULES, A.UPDATE),
+  AUTOMATION_RULES_DELETE: permissionCode(RESOURCES.AUTOMATION_RULES, A.DELETE),
 } as const;

@@ -16,6 +16,8 @@ export const QUEUES = {
   RECONCILIATION: 'conciliacao',
   /** Leitura automática de documentos (RF-096). */
   OCR: 'ocr',
+  /** Varredura de alertas e entrega de notificações (RF-119 a RF-124). */
+  NOTIFICATIONS: 'notificacoes',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
