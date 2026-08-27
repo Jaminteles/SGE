@@ -32,6 +32,12 @@ export const AUDIT_ENTITY = {
   TAX_CLASSIFICATION: 'classificacao_fiscal',
   TAX_RULE: 'regra_fiscal',
   FISCAL_EVENT: 'evento_fiscal',
+  /**
+   * Exportação de relatório (RF-113). Único valor que não nomeia uma tabela:
+   * o M15 não tem dado próprio, e o que se audita é a saída do dado do sistema
+   * — quem exportou, qual relatório e sob que recorte.
+   */
+  REPORT: 'relatorio',
 } as const;
 
 export interface AuditEventInput {

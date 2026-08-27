@@ -43,6 +43,6 @@ import { ParseClassifiableSourcePipe } from './parse-classifiable-source.pipe';
     AccountingExportService,
     ParseClassifiableSourcePipe,
   ],
-  exports: [JournalPostingsService, AccountingPeriodsService],
+  exports: [JournalPostingsService, AccountingPeriodsService, AccountingReportsService],
 })
 export class AccountingModule {}

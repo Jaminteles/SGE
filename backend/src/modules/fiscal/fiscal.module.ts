@@ -55,6 +55,6 @@ import { TaxRulesService } from './tax-rules.service';
     HttpFiscalProvider,
     FiscalJobsService,
   ],
-  exports: [TaxParametersService, TaxClassificationsService, TaxRulesService],
+  exports: [TaxParametersService, TaxClassificationsService, TaxRulesService, FiscalReportsService],
 })
 export class FiscalModule {}

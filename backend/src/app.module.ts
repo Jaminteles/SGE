@@ -44,6 +44,7 @@ import { OcrModule } from './modules/ocr/ocr.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
 import { FiscalModule } from './modules/fiscal/fiscal.module';
+import { ReportingModule } from './modules/reporting/reporting.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -119,6 +120,7 @@ import { HealthModule } from './modules/health/health.module';
     NotificationsModule,
     AccountingModule,
     FiscalModule,
+    ReportingModule,
     HealthModule,
   ],
   providers: [

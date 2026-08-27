@@ -84,6 +84,8 @@ export const RESOURCES = {
   DOCUMENT_TAXES: 'document-taxes',
   FISCAL_EVENTS: 'fiscal-events',
   FISCAL_REPORTS: 'fiscal-reports',
+  DASHBOARDS: 'dashboards',
+  REPORTS: 'reports',
 } as const;
 
 export interface PermissionDefinition {
@@ -602,6 +604,28 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   ...build('M12', RESOURCES.FISCAL_REPORTS, [
     { action: A.READ, description: 'Consultar apuração e livro fiscal' },
   ]),
+  // M15 — Relatórios e Dashboards (RF-106 a RF-113).
+  //
+  // Dois recursos, e a separação não é cosmética:
+  //
+  //  - `dashboards:READ` abre os painéis. Um painel é agregado: mostra o total
+  //    da carteira, o resultado do mês e o quadro de pessoal, sem expor a linha
+  //    individual — é o acesso do gestor que acompanha, não do operador que
+  //    lança;
+  //  - `reports:READ` gera relatório detalhado, inclusive o contábil e o fiscal
+  //    (RF-111). Estes exigem **também** a permissão de leitura do módulo de
+  //    origem: quem não pode ver a DRE em `/accounting` não passa a poder vê-la
+  //    porque pediu pela porta do M15;
+  //  - `reports:EXPORT` tira o dado de dentro do sistema (RF-113), e por isso
+  //    não acompanha a leitura. Ver na tela e sair com o arquivo são decisões
+  //    diferentes — a segunda é auditada.
+  ...build('M15', RESOURCES.DASHBOARDS, [
+    { action: A.READ, description: 'Consultar os painéis gerenciais consolidados' },
+  ]),
+  ...build('M15', RESOURCES.REPORTS, [
+    { action: A.READ, description: 'Gerar relatórios gerenciais, contábeis e fiscais' },
+    { action: A.EXPORT, description: 'Exportar relatórios em PDF, XLSX e CSV' },
+  ]),
 ];
 
 /** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
@@ -884,4 +908,8 @@ export const PERMISSIONS = {
   FISCAL_EVENTS_APPROVE: permissionCode(RESOURCES.FISCAL_EVENTS, A.APPROVE),
 
   FISCAL_REPORTS_READ: permissionCode(RESOURCES.FISCAL_REPORTS, A.READ),
+
+  DASHBOARDS_READ: permissionCode(RESOURCES.DASHBOARDS, A.READ),
+  REPORTS_READ: permissionCode(RESOURCES.REPORTS, A.READ),
+  REPORTS_EXPORT: permissionCode(RESOURCES.REPORTS, A.EXPORT),
 } as const;
