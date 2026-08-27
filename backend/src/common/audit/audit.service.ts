@@ -25,6 +25,9 @@ export const AUDIT_ENTITY = {
   RECONCILIATION: 'conciliacao',
   RECONCILIATION_RULE: 'regra_conciliacao',
   OCR_PROCESSING: 'ocr_processamento',
+  LEDGER_ACCOUNT: 'conta_contabil',
+  ACCOUNTING_PERIOD: 'periodo_contabil',
+  JOURNAL_ENTRY: 'lancamento_contabil',
 } as const;
 
 export interface AuditEventInput {

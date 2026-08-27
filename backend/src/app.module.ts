@@ -42,6 +42,7 @@ import { BankingModule } from './modules/banking/banking.module';
 import { ReconciliationModule } from './modules/reconciliation/reconciliation.module';
 import { OcrModule } from './modules/ocr/ocr.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { AccountingModule } from './modules/accounting/accounting.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -115,6 +116,7 @@ import { HealthModule } from './modules/health/health.module';
     ReconciliationModule,
     OcrModule,
     NotificationsModule,
+    AccountingModule,
     HealthModule,
   ],
   providers: [

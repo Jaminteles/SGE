@@ -73,6 +73,11 @@ export const RESOURCES = {
   OCR: 'ocr',
   NOTIFICATIONS: 'notifications',
   AUTOMATION_RULES: 'automation-rules',
+  LEDGER_ACCOUNTS: 'ledger-accounts',
+  ACCOUNTING_PERIODS: 'accounting-periods',
+  JOURNAL_ENTRIES: 'journal-entries',
+  ACCOUNTING_REPORTS: 'accounting-reports',
+  ACCOUNTING_CLASSIFICATIONS: 'accounting-classifications',
 } as const;
 
 export interface PermissionDefinition {
@@ -499,6 +504,48 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     { action: A.UPDATE, description: 'Alterar gatilhos, condições e destinatários' },
     { action: A.DELETE, description: 'Desativar regras de automação' },
   ]),
+  // M11 — Contabilidade (RF-078 a RF-087).
+  //
+  // Cinco recursos, e as separações são todas sobre o número que sai daqui:
+  //
+  //  - `ledger-accounts` é o plano de contas. Mudar uma conta reclassifica
+  //    retroativamente todo saldo já apurado: o balancete de um mês fechado muda
+  //    sem que nenhum lançamento tenha sido tocado, e por isso a escrita não
+  //    acompanha a leitura;
+  //  - `journal-entries` tem três ações, não um CRUD, porque o lançamento é
+  //    imutável (bd/17 §5): `:CREATE` lança e contabiliza, `:READ` consulta o
+  //    diário e `:DELETE` **estorna** — nunca apaga. Estornar desfaz o efeito de
+  //    um lançamento já refletido em balancete e DRE, inclusive de mês reaberto;
+  //  - `accounting-periods` fecha e reabre. Reabrir é mexer em número já
+  //    entregue ao contador, e é a operação mais sensível do módulo;
+  //  - `accounting-classifications` escolhe a conta de cada origem financeira.
+  //    Quem a tem decide em que linha da DRE cada despesa cai, sem tocar em
+  //    lançamento nenhum — e a mudança só aparece nos lançamentos seguintes;
+  //  - `accounting-reports` separa ler de exportar: o razão é o resultado
+  //    inteiro da empresa, e a exportação tira esse dado de dentro do sistema.
+  ...build('M11', RESOURCES.LEDGER_ACCOUNTS, [
+    { action: A.CREATE, description: 'Cadastrar contas do plano de contas' },
+    { action: A.READ, description: 'Consultar o plano de contas' },
+    { action: A.UPDATE, description: 'Editar contas e a classificação SPED' },
+    { action: A.DELETE, description: 'Inativar contas contábeis' },
+  ]),
+  ...build('M11', RESOURCES.JOURNAL_ENTRIES, [
+    { action: A.CREATE, description: 'Registrar lançamentos e contabilizar baixas' },
+    { action: A.READ, description: 'Consultar o diário e as partidas' },
+    { action: A.DELETE, description: 'Estornar lançamentos contábeis' },
+  ]),
+  ...build('M11', RESOURCES.ACCOUNTING_PERIODS, [
+    { action: A.READ, description: 'Consultar períodos contábeis e sua situação' },
+    { action: A.UPDATE, description: 'Abrir exercício, fechar e reabrir períodos' },
+  ]),
+  ...build('M11', RESOURCES.ACCOUNTING_CLASSIFICATIONS, [
+    { action: A.READ, description: 'Consultar a classificação contábil das origens financeiras' },
+    { action: A.UPDATE, description: 'Classificar categorias, verbas e contas bancárias' },
+  ]),
+  ...build('M11', RESOURCES.ACCOUNTING_REPORTS, [
+    { action: A.READ, description: 'Consultar razão, balancete e DRE' },
+    { action: A.EXPORT, description: 'Exportar lançamentos para o sistema contábil' },
+  ]),
 ];
 
 /** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
@@ -739,4 +786,22 @@ export const PERMISSIONS = {
   AUTOMATION_RULES_READ: permissionCode(RESOURCES.AUTOMATION_RULES, A.READ),
   AUTOMATION_RULES_UPDATE: permissionCode(RESOURCES.AUTOMATION_RULES, A.UPDATE),
   AUTOMATION_RULES_DELETE: permissionCode(RESOURCES.AUTOMATION_RULES, A.DELETE),
+
+  LEDGER_ACCOUNTS_CREATE: permissionCode(RESOURCES.LEDGER_ACCOUNTS, A.CREATE),
+  LEDGER_ACCOUNTS_READ: permissionCode(RESOURCES.LEDGER_ACCOUNTS, A.READ),
+  LEDGER_ACCOUNTS_UPDATE: permissionCode(RESOURCES.LEDGER_ACCOUNTS, A.UPDATE),
+  LEDGER_ACCOUNTS_DELETE: permissionCode(RESOURCES.LEDGER_ACCOUNTS, A.DELETE),
+
+  JOURNAL_ENTRIES_CREATE: permissionCode(RESOURCES.JOURNAL_ENTRIES, A.CREATE),
+  JOURNAL_ENTRIES_READ: permissionCode(RESOURCES.JOURNAL_ENTRIES, A.READ),
+  JOURNAL_ENTRIES_DELETE: permissionCode(RESOURCES.JOURNAL_ENTRIES, A.DELETE),
+
+  ACCOUNTING_PERIODS_READ: permissionCode(RESOURCES.ACCOUNTING_PERIODS, A.READ),
+  ACCOUNTING_PERIODS_UPDATE: permissionCode(RESOURCES.ACCOUNTING_PERIODS, A.UPDATE),
+
+  ACCOUNTING_CLASSIFICATIONS_READ: permissionCode(RESOURCES.ACCOUNTING_CLASSIFICATIONS, A.READ),
+  ACCOUNTING_CLASSIFICATIONS_UPDATE: permissionCode(RESOURCES.ACCOUNTING_CLASSIFICATIONS, A.UPDATE),
+
+  ACCOUNTING_REPORTS_READ: permissionCode(RESOURCES.ACCOUNTING_REPORTS, A.READ),
+  ACCOUNTING_REPORTS_EXPORT: permissionCode(RESOURCES.ACCOUNTING_REPORTS, A.EXPORT),
 } as const;

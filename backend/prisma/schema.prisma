@@ -532,6 +532,10 @@ model Category {
   code         String     @map("codigo") @db.VarChar(30)
   name         String     @map("nome") @db.VarChar(255)
   type         EntryType  @map("tipo")
+  /// Conta contábil da categoria (RF-080): é por ela que uma despesa lançada
+  /// no financeiro sabe em que linha do resultado entra.
+  ledgerAccountId String?  @map("conta_contabil_id") @db.Uuid
+  ledgerAccount   LedgerAccount? @relation(fields: [ledgerAccountId], references: [id])
   acceptsEntry Boolean    @default(true) @map("aceita_lancamento")
   isActive     Boolean    @default(true) @map("ativo")
   createdAt    DateTime   @default(now()) @map("criado_em") @db.Timestamptz(6)
@@ -774,6 +778,7 @@ model PayrollItem {
   type            PayrollItemType @map("tipo")
   /// Conta contábil e categoria financeira ligam a folha à contabilidade (RF-021).
   ledgerAccountId String?         @map("conta_contabil_id") @db.Uuid
+  ledgerAccount   LedgerAccount?  @relation(fields: [ledgerAccountId], references: [id])
   categoryId      String?         @map("categoria_financeira_id") @db.Uuid
   affectsInss     Boolean         @default(false) @map("incide_inss")
   affectsIrrf     Boolean         @default(false) @map("incide_irrf")
@@ -2060,6 +2065,9 @@ model CompanyBankAccount {
   account        String                 @map("conta") @db.VarChar(20)
   accountDigit   String?                @map("conta_digito") @db.VarChar(2)
   accountType    String                 @default("CORRENTE") @map("tipo_conta") @db.VarChar(20)
+  /// Conta contábil de caixa/banco (RF-080): a contrapartida de toda baixa.
+  ledgerAccountId String?               @map("conta_contabil_id") @db.Uuid
+  ledgerAccount   LedgerAccount?        @relation(fields: [ledgerAccountId], references: [id])
   pixKey         String?                @map("chave_pix") @db.VarChar(140)
   openingBalance Decimal                @default(0) @map("saldo_inicial") @db.Decimal(18, 2)
   currentBalance Decimal                @default(0) @map("saldo_atual") @db.Decimal(18, 2)
@@ -2582,4 +2590,188 @@ model AutomationRuleRun {
 
   @@index([companyId, ruleId, executedAt(sort: Desc)], map: "ix_regra_automacao_execucao")
   @@map("regra_automacao_execucao")
+}
+
+// ---------------------------------------------------------------------------
+// M11 — Contabilidade (RF-078 a RF-087) — Sprint 14
+//
+// Três decisões estruturais governam este módulo:
+//
+//  1. **o lançamento é imutável**. Depois de gravado, nada nele muda — corrigir
+//     é estornar e relançar (bd/17 §5). Um razão em que a linha de ontem pode
+//     ser reescrita hoje não é razão: é uma planilha com histórico perdido, e é
+//     sobre ele que balancete, DRE e a obrigação acessória saem;
+//  2. **débito é igual a crédito, sempre**. A partida dobrada é garantida por
+//     constraint trigger DEFERRABLE (bd/03), não pela aplicação: um lançamento
+//     desbalanceado não chega a existir nem por caminho de código novo;
+//  3. **o período fechado não recebe nada** (RN-008). Fechar é a afirmação de
+//     que aquele mês parou de mudar, e é dela que depende qualquer número já
+//     entregue ao contador.
+// ---------------------------------------------------------------------------
+
+/// Natureza patrimonial ou de resultado da conta — `enum_tipo_conta_contabil`.
+enum LedgerAccountType {
+  ATIVO
+  PASSIVO
+  PATRIMONIO_LIQUIDO
+  RECEITA
+  DESPESA
+  CUSTO
+  COMPENSACAO
+
+  @@map("enum_tipo_conta_contabil")
+}
+
+/// Saldo esperado da conta — `enum_natureza_conta`.
+///
+/// Não é informação livre: decorre do tipo (ativo, despesa e custo são
+/// devedoras; passivo, patrimônio líquido e receita, credoras). O banco confere
+/// (bd/17 §3) porque uma conta com natureza trocada inverte o sinal dela no
+/// balancete e na DRE sem que nenhum lançamento esteja errado.
+enum AccountNature {
+  DEVEDORA
+  CREDORA
+
+  @@map("enum_natureza_conta")
+}
+
+/// Lado da partida — `enum_tipo_partida`.
+enum JournalLineType {
+  DEBITO
+  CREDITO
+
+  @@map("enum_tipo_partida")
+}
+
+/// Situação do período contábil (RF-086) — `enum_status_periodo`.
+///
+/// `EM_FECHAMENTO` ainda aceita lançamento: é a janela de ajuste. `FECHADO` não
+/// aceita nada (RN-008). `REABERTO` é fechado que voltou a aceitar, com motivo
+/// registrado — e continua distinguível de um período que nunca fechou.
+enum AccountingPeriodStatus {
+  ABERTO
+  EM_FECHAMENTO
+  FECHADO
+  REABERTO
+
+  @@map("enum_status_periodo")
+}
+
+/// gestao.conta_contabil — plano de contas hierárquico (RF-078/RF-079).
+///
+/// Sintética agrupa, analítica recebe lançamento: `acceptsEntry` é o que separa
+/// as duas, e o banco recusa partida em conta sintética (bd/03). Sem essa
+/// separação o saldo de uma conta apareceria somado duas vezes — nela e no
+/// grupo dela.
+model LedgerAccount {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String            @map("empresa_id") @db.Uuid
+  parentId          String?           @map("conta_pai_id") @db.Uuid
+  parent            LedgerAccount?    @relation("LedgerAccountTree", fields: [parentId], references: [id])
+  children          LedgerAccount[]   @relation("LedgerAccountTree")
+  /// Código estruturado, no formato 1.1.01.001.
+  code              String            @map("codigo") @db.VarChar(30)
+  shortCode         String?           @map("codigo_reduzido") @db.VarChar(15)
+  name              String            @map("nome") @db.VarChar(255)
+  type              LedgerAccountType @map("tipo")
+  nature            AccountNature     @map("natureza")
+  level             Int               @default(1) @map("nivel") @db.SmallInt
+  /// Só a folha da árvore recebe partida (RF-078).
+  acceptsEntry      Boolean           @default(false) @map("aceita_lancamento")
+  /// Conta referencial da Receita, para o SPED (RF-087).
+  spedReferenceCode String?           @map("codigo_referencial_sped") @db.VarChar(20)
+  isActive          Boolean           @default(true) @map("ativo")
+  createdAt         DateTime          @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt         DateTime          @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  lines      JournalEntryLine[]
+  categories Category[]
+  payrollItems PayrollItem[]
+  bankAccounts CompanyBankAccount[]
+
+  @@unique([companyId, code], map: "uq_conta_contabil_codigo")
+  @@map("conta_contabil")
+}
+
+/// gestao.periodo_contabil — o mês contábil e sua situação (RF-086, RN-008).
+model AccountingPeriod {
+  id           String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId    String                 @map("empresa_id") @db.Uuid
+  year         Int                    @map("exercicio") @db.SmallInt
+  month        Int                    @map("mes") @db.SmallInt
+  startDate    DateTime               @map("data_inicio") @db.Date
+  endDate      DateTime               @map("data_fim") @db.Date
+  status       AccountingPeriodStatus @default(ABERTO) @map("status")
+  closedAt     DateTime?              @map("fechado_em") @db.Timestamptz(6)
+  closedById   String?                @map("fechado_por") @db.Uuid
+  reopenedAt   DateTime?              @map("reaberto_em") @db.Timestamptz(6)
+  reopenedById String?                @map("reaberto_por") @db.Uuid
+  /// Obrigatório na reabertura (bd/17 §6): reabrir mês fechado sem dizer por
+  /// quê é a alteração que ninguém consegue explicar depois.
+  reopenReason String?                @map("motivo_reabertura")
+  createdAt    DateTime               @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt    DateTime               @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  entries JournalEntry[]
+
+  @@unique([companyId, year, month], map: "uq_periodo_contabil")
+  @@map("periodo_contabil")
+}
+
+/// gestao.lancamento_contabil — cabeçalho do lançamento (RF-081/RF-082).
+///
+/// `origin`/`originId` guardam de onde o lançamento veio e sustentam a
+/// idempotência da contabilização automática: a mesma baixa não vira dois
+/// lançamentos, garantido pelo índice parcial `ux_lancamento_origem` (bd/17 §5)
+/// — sem ele, um retry dobraria a despesa no resultado do mês.
+model JournalEntry {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId        String            @map("empresa_id") @db.Uuid
+  branchId         String?           @map("filial_id") @db.Uuid
+  periodId         String?           @map("periodo_contabil_id") @db.Uuid
+  period           AccountingPeriod? @relation(fields: [periodId], references: [id])
+  /// Sequencial gerado pelo banco — é o número do lançamento.
+  number           BigInt            @default(autoincrement()) @map("numero")
+  entryDate        DateTime          @map("data_lancamento") @db.Date
+  competenceDate   DateTime          @map("data_competencia") @db.Date
+  history          String            @map("historico") @db.VarChar(500)
+  totalAmount      Decimal           @map("valor_total") @db.Decimal(18, 2)
+  /// MANUAL | TITULO_BAIXA | DOCUMENTO_FISCAL | ESTOQUE | ESTORNO.
+  origin           String?           @map("origem_tipo") @db.VarChar(40)
+  originId         String?           @map("origem_id") @db.Uuid
+  fiscalDocumentId String?           @map("documento_fiscal_id") @db.Uuid
+  settlementId     String?           @map("titulo_baixa_id") @db.Uuid
+  batch            String?           @map("lote") @db.VarChar(30)
+  /// Estorno é lançamento novo com as partidas invertidas — nunca alteração.
+  reversalOfId     String?           @map("estorno_de_id") @db.Uuid
+  isReversed       Boolean           @default(false) @map("estornado")
+  exported         Boolean           @default(false) @map("exportado")
+  exportedAt       DateTime?         @map("exportado_em") @db.Timestamptz(6)
+  createdById      String?           @map("criado_por") @db.Uuid
+  createdAt        DateTime          @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  lines JournalEntryLine[]
+
+  @@index([companyId, competenceDate], map: "ix_lancamento_competencia")
+  @@map("lancamento_contabil")
+}
+
+/// gestao.lancamento_partida — o débito e o crédito do lançamento (RF-080/RF-081).
+model JournalEntryLine {
+  id           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId    String          @map("empresa_id") @db.Uuid
+  entryId      String          @map("lancamento_contabil_id") @db.Uuid
+  entry        JournalEntry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  sequence     Int             @map("sequencia") @db.SmallInt
+  accountId    String          @map("conta_contabil_id") @db.Uuid
+  account      LedgerAccount   @relation(fields: [accountId], references: [id])
+  type         JournalLineType @map("tipo")
+  amount       Decimal         @map("valor") @db.Decimal(18, 2)
+  costCenterId String?         @map("centro_custo_id") @db.Uuid
+  extraHistory String?         @map("historico_complementar") @db.VarChar(500)
+
+  @@unique([entryId, sequence], map: "uq_lancamento_partida")
+  @@index([accountId], map: "ix_partida_conta")
+  @@map("lancamento_partida")
 }

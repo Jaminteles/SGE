@@ -52,7 +52,34 @@ async function seedSystemRoles(): Promise<void> {
     { role: 'ADMINISTRADOR', codes: 'all' },
     // RF-117: o Auditor é o responsável pelo requisito e precisa da trilha —
     // somente leitura, que é tudo o que o módulo expõe (RF-118).
-    { role: 'AUDITOR', codes: [PERMISSIONS.AUDIT_READ] },
+    { role: 'AUDITOR', codes: [PERMISSIONS.AUDIT_READ, PERMISSIONS.ACCOUNTING_REPORTS_READ] },
+    // M11: a Contabilidade responde pelos RF-078 a RF-087 — mantém o plano de
+    // contas, classifica as origens, lança, apura e exporta. Duas exclusões
+    // seguem a mesma lógica das outras alçadas (RN-003):
+    //
+    //  - `journal-entries:DELETE` estorna, e estorno desfaz o efeito de um
+    //    lançamento já refletido em balancete e DRE — inclusive de mês reaberto;
+    //  - `accounting-periods:UPDATE` fecha e reabre. Reabrir é mexer em número
+    //    já entregue ao contador, e é decisão de quem responde pelo exercício.
+    //
+    // Junto vem a leitura do que a escrituração precisa referenciar: o título
+    // que deu origem à baixa e a conta de onde o dinheiro saiu.
+    {
+      role: 'CONTABILIDADE',
+      codes: [
+        ...PERMISSION_CATALOG.filter(
+          (p) =>
+            p.module === 'M11' &&
+            p.code !== PERMISSIONS.JOURNAL_ENTRIES_DELETE &&
+            p.code !== PERMISSIONS.ACCOUNTING_PERIODS_UPDATE,
+        ).map((p) => p.code),
+        PERMISSIONS.FINANCIAL_ENTRIES_READ,
+        PERMISSIONS.SETTLEMENTS_READ,
+        PERMISSIONS.COMPANY_BANK_ACCOUNTS_READ,
+        PERMISSIONS.CATEGORIES_READ,
+        PERMISSIONS.COST_CENTERS_READ,
+      ],
+    },
     // M03: o perfil RH mantém o cadastro funcional inteiro. A aprovação de
     // reembolso fica de fora de propósito — quem lança não decide (RN-003);
     // atribua `reimbursements:APPROVE` ao perfil que responde pela alçada.
@@ -175,6 +202,11 @@ async function seedSystemRoles(): Promise<void> {
         PERMISSIONS.COMPANY_BANK_ACCOUNTS_READ,
         PERMISSIONS.PAYMENTS_READ,
         PERMISSIONS.BANK_STATEMENTS_READ,
+        // M11: razão, balancete e DRE são o resultado do exercício — a leitura
+        // que sustenta o planejamento. Escriturar, não: quem decide o rumo não
+        // lança nem fecha o mês.
+        PERMISSIONS.ACCOUNTING_REPORTS_READ,
+        PERMISSIONS.ACCOUNTING_PERIODS_READ,
       ],
     },
     // Operacional cadastra e consulta o catálogo, movimenta e conta o estoque,
