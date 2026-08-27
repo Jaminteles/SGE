@@ -1071,7 +1071,8 @@ model ProductCategory {
   isActive  Boolean           @default(true) @map("ativo")
   createdAt DateTime          @default(now()) @map("criado_em") @db.Timestamptz(6)
 
-  products Product[]
+  products  Product[]
+  taxRules  TaxRule[]
 
   @@unique([companyId, code], map: "uq_categoria_produto")
   @@map("categoria_produto")
@@ -1121,6 +1122,7 @@ model Product {
   purchaseItems  PurchaseOrderItem[]
   receiptItems   GoodsReceiptItem[]
   fiscalItems    FiscalDocumentItem[]
+  taxRules       TaxRule[]
 
   @@unique([companyId, code], map: "uq_produto_codigo")
   @@map("produto")
@@ -1818,6 +1820,7 @@ model FiscalDocument {
   receipts         GoodsReceipt[]
   financialEntries FinancialEntry[]
   stockMovements   StockMovement[]
+  fiscalEvents     FiscalEvent[]
 
   @@map("documento_fiscal")
 }
@@ -1856,6 +1859,10 @@ model FiscalDocumentItem {
   ipiAmount      Decimal        @default(0) @map("valor_ipi") @db.Decimal(18, 2)
   pisAmount      Decimal        @default(0) @map("valor_pis") @db.Decimal(18, 2)
   cofinsAmount   Decimal        @default(0) @map("valor_cofins") @db.Decimal(18, 2)
+  /// Classificação de NCM da empresa correspondente ao NCM declarado (RF-090).
+  /// Não altera nada do que o emitente declarou — é leitura nossa sobre a nota.
+  classificationId String?          @map("classificacao_fiscal_id") @db.Uuid
+  classification   TaxClassification? @relation(fields: [classificationId], references: [id])
 
   @@unique([documentId, sequence], map: "uq_documento_fiscal_item")
   @@map("documento_fiscal_item")
@@ -2774,4 +2781,137 @@ model JournalEntryLine {
   @@unique([entryId, sequence], map: "uq_lancamento_partida")
   @@index([accountId], map: "ix_partida_conta")
   @@map("lancamento_partida")
+}
+
+// ---------------------------------------------------------------------------
+// M12 — Fiscal (RF-088 a RF-094)
+//
+// O módulo descreve o tratamento tributário **esperado** e guarda o que foi
+// **declarado**. As duas coisas não se misturam:
+//
+//  1. `TaxParameter` e `TaxClassification` são cadastro da empresa — regime,
+//     alíquotas por NCM, códigos. Mudam a apuração do que vier depois, nunca o
+//     que já foi recebido;
+//  2. `TaxRule` resolve, para uma operação, qual CFOP/CST/alíquota deveria
+//     valer. Resolve, e só: não escreve tributo em nota de terceiro (bd/18);
+//  3. `FiscalEvent` é o que foi transmitido ao fisco. Imutável depois de
+//     registrado — só o transporte anda (bd/18 §6).
+// ---------------------------------------------------------------------------
+
+/// gestao.parametro_fiscal — regime e alíquotas vigentes da empresa (RF-088).
+///
+/// Vigência sem sobreposição por empresa/filial, garantida por EXCLUDE no banco
+/// (bd/18 §2): "qual era o regime naquela data" precisa ter uma resposta só.
+model TaxParameter {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId            String    @map("empresa_id") @db.Uuid
+  /// Nulo = parâmetro da empresa inteira. Preenchido = exceção daquela filial.
+  branchId             String?   @map("filial_id") @db.Uuid
+  taxRegime            TaxRegime @map("regime_tributario")
+  effectiveFrom        DateTime  @map("vigencia_inicio") @db.Date
+  effectiveTo          DateTime? @map("vigencia_fim") @db.Date
+  /// Só faz sentido no Simples Nacional; o banco recusa nos demais regimes.
+  simplesRate          Decimal?  @map("aliquota_simples") @db.Decimal(9, 6)
+  issRate              Decimal?  @map("aliquota_iss") @db.Decimal(9, 6)
+  ipiTaxpayer          Boolean   @default(false) @map("contribuinte_ipi")
+  taxSubstitute        Boolean   @default(false) @map("substituto_tributario")
+  additionalParameters Json      @default("{}") @map("parametros_adicionais")
+  createdAt            DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  @@map("parametro_fiscal")
+}
+
+/// gestao.classificacao_fiscal — NCM, CEST, CFOP, CST e LC 116 da empresa (RF-089).
+///
+/// O código é conferido contra o tipo no banco (bd/18 §3): um NCM com sete
+/// dígitos não casa com item nenhum, e a regra fiscal presa a ele silenciosamente
+/// deixa de valer.
+model TaxClassification {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String   @map("empresa_id") @db.Uuid
+  code        String   @map("codigo") @db.VarChar(30)
+  /// NCM | CEST | CFOP | CST | LC116.
+  type        String   @map("tipo") @db.VarChar(20)
+  description String   @map("descricao") @db.VarChar(255)
+  icmsRate    Decimal? @map("aliquota_icms") @db.Decimal(9, 6)
+  ipiRate     Decimal? @map("aliquota_ipi") @db.Decimal(9, 6)
+  pisRate     Decimal? @map("aliquota_pis") @db.Decimal(9, 6)
+  cofinsRate  Decimal? @map("aliquota_cofins") @db.Decimal(9, 6)
+  isActive    Boolean  @default(true) @map("ativo")
+  createdAt   DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  rules         TaxRule[]
+  documentItems FiscalDocumentItem[]
+
+  @@unique([companyId, type, code], map: "uq_classificacao_fiscal")
+  @@map("classificacao_fiscal")
+}
+
+/// gestao.regra_fiscal — tratamento esperado de uma operação (RF-091).
+///
+/// A regra é escolhida por prioridade (menor vence) e, no empate, pela
+/// especificidade dos critérios — produto é mais específico que categoria, que é
+/// mais específica que NCM. Regra sem critério nenhum é recusada pelo banco
+/// (bd/18 §5): ela casaria com toda operação da empresa.
+model TaxRule {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String             @map("empresa_id") @db.Uuid
+  name              String             @map("nome") @db.VarChar(120)
+  /// 1 a 999; menor número decide primeiro.
+  priority          Int                @default(100) @map("prioridade") @db.SmallInt
+  originState       String?            @map("uf_origem") @db.Char(2)
+  destinationState  String?            @map("uf_destino") @db.Char(2)
+  /// COMPRA | VENDA | TRANSFERENCIA | DEVOLUCAO.
+  operationType     String?            @map("tipo_operacao") @db.VarChar(30)
+  classificationId  String?            @map("classificacao_fiscal_id") @db.Uuid
+  classification    TaxClassification? @relation(fields: [classificationId], references: [id])
+  productId         String?            @map("produto_id") @db.Uuid
+  product           Product?           @relation(fields: [productId], references: [id])
+  productCategoryId String?            @map("categoria_produto_id") @db.Uuid
+  productCategory   ProductCategory?   @relation(fields: [productCategoryId], references: [id])
+  cfop              String?            @db.VarChar(4)
+  icmsCst           String?            @map("cst_icms") @db.VarChar(4)
+  icmsRate          Decimal?           @map("aliquota_icms") @db.Decimal(9, 6)
+  icmsBaseReduction Decimal?           @map("reducao_base_icms") @db.Decimal(9, 6)
+  conditions        Json               @default("{}") @map("condicoes")
+  effectiveFrom     DateTime           @default(now()) @map("vigencia_inicio") @db.Date
+  effectiveTo       DateTime?          @map("vigencia_fim") @db.Date
+  isActive          Boolean            @default(true) @map("ativo")
+  createdAt         DateTime           @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt         DateTime           @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  @@unique([companyId, name], map: "uq_regra_fiscal_nome")
+  @@index([companyId, priority], map: "ix_regra_fiscal_empresa")
+  @@map("regra_fiscal")
+}
+
+/// gestao.evento_fiscal — cancelamento, CC-e, manifestação e inutilização (RF-092).
+///
+/// É prova entregue ao fisco: não se apaga e não se reescreve. Depois do
+/// registro, só `status`, `protocolo` e `retorno` mudam, e só para frente
+/// (bd/18 §6). `protocolo` é único por empresa — é o que impede o retry do job
+/// de transformar uma autorização em duas.
+model FiscalEvent {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId     String          @map("empresa_id") @db.Uuid
+  /// Nulo apenas na inutilização, que se refere a faixa de numeração, não a nota.
+  documentId    String?         @map("documento_fiscal_id") @db.Uuid
+  document      FiscalDocument? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  /// CANCELAMENTO | CCE | MANIFESTACAO | INUTILIZACAO.
+  type          String          @map("tipo") @db.VarChar(60)
+  protocol      String?         @map("protocolo") @db.VarChar(40)
+  sequence      Int?            @map("sequencia_evento") @db.SmallInt
+  occurredAt    DateTime        @default(now()) @map("data_evento") @db.Timestamptz(6)
+  justification String?         @map("justificativa")
+  xmlContent    String?         @map("xml_conteudo")
+  /// REGISTRADO | TRANSMITIDO | AUTORIZADO | REJEITADO.
+  status        String          @default("REGISTRADO") @map("status") @db.VarChar(30)
+  /// Resposta do provedor, já sem credencial.
+  response      Json?           @map("retorno")
+  createdAt     DateTime        @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  @@index([documentId], map: "ix_evento_fiscal_doc")
+  @@map("evento_fiscal")
 }

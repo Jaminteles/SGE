@@ -18,6 +18,8 @@ export const QUEUES = {
   OCR: 'ocr',
   /** Varredura de alertas e entrega de notificações (RF-119 a RF-124). */
   NOTIFICATIONS: 'notificacoes',
+  /** Transmissão de eventos fiscais ao provedor (RF-092/RF-094). */
+  FISCAL: 'fiscal',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];

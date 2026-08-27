@@ -43,6 +43,7 @@ import { ReconciliationModule } from './modules/reconciliation/reconciliation.mo
 import { OcrModule } from './modules/ocr/ocr.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
+import { FiscalModule } from './modules/fiscal/fiscal.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -117,6 +118,7 @@ import { HealthModule } from './modules/health/health.module';
     OcrModule,
     NotificationsModule,
     AccountingModule,
+    FiscalModule,
     HealthModule,
   ],
   providers: [

@@ -36,3 +36,46 @@ export enum InventoryStatus {
   CONCLUIDO = 'CONCLUIDO',
   CANCELADO = 'CANCELADO',
 }
+
+/**
+ * Tipo da classificação fiscal (RF-089) — gravado em
+ * `classificacao_fiscal.tipo`, que é `varchar(20)` com CHECK no banco
+ * (bd/18 §3), e não um enum do PostgreSQL.
+ */
+export enum TaxClassificationType {
+  NCM = 'NCM',
+  CEST = 'CEST',
+  CFOP = 'CFOP',
+  CST = 'CST',
+  LC116 = 'LC116',
+}
+
+/** Operação a que a regra fiscal se aplica (RF-091) — `regra_fiscal.tipo_operacao`. */
+export enum TaxOperationType {
+  COMPRA = 'COMPRA',
+  VENDA = 'VENDA',
+  TRANSFERENCIA = 'TRANSFERENCIA',
+  DEVOLUCAO = 'DEVOLUCAO',
+}
+
+/** Evento transmitido ao fisco (RF-092) — `evento_fiscal.tipo`. */
+export enum FiscalEventType {
+  CANCELAMENTO = 'CANCELAMENTO',
+  CCE = 'CCE',
+  MANIFESTACAO = 'MANIFESTACAO',
+  INUTILIZACAO = 'INUTILIZACAO',
+}
+
+/**
+ * Situação do transporte do evento (RF-092) — `evento_fiscal.status`.
+ *
+ * Só anda para frente: REGISTRADO → TRANSMITIDO → AUTORIZADO/REJEITADO, e os
+ * dois últimos são terminais (bd/18 §6). A resposta do fisco não é revista por
+ * retentativa nossa.
+ */
+export enum FiscalEventStatus {
+  REGISTRADO = 'REGISTRADO',
+  TRANSMITIDO = 'TRANSMITIDO',
+  AUTORIZADO = 'AUTORIZADO',
+  REJEITADO = 'REJEITADO',
+}

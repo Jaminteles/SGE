@@ -28,6 +28,10 @@ export const AUDIT_ENTITY = {
   LEDGER_ACCOUNT: 'conta_contabil',
   ACCOUNTING_PERIOD: 'periodo_contabil',
   JOURNAL_ENTRY: 'lancamento_contabil',
+  TAX_PARAMETER: 'parametro_fiscal',
+  TAX_CLASSIFICATION: 'classificacao_fiscal',
+  TAX_RULE: 'regra_fiscal',
+  FISCAL_EVENT: 'evento_fiscal',
 } as const;
 
 export interface AuditEventInput {

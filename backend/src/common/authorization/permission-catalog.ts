@@ -78,6 +78,12 @@ export const RESOURCES = {
   JOURNAL_ENTRIES: 'journal-entries',
   ACCOUNTING_REPORTS: 'accounting-reports',
   ACCOUNTING_CLASSIFICATIONS: 'accounting-classifications',
+  TAX_PARAMETERS: 'tax-parameters',
+  TAX_CLASSIFICATIONS: 'tax-classifications',
+  TAX_RULES: 'tax-rules',
+  DOCUMENT_TAXES: 'document-taxes',
+  FISCAL_EVENTS: 'fiscal-events',
+  FISCAL_REPORTS: 'fiscal-reports',
 } as const;
 
 export interface PermissionDefinition {
@@ -546,6 +552,56 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     { action: A.READ, description: 'Consultar razão, balancete e DRE' },
     { action: A.EXPORT, description: 'Exportar lançamentos para o sistema contábil' },
   ]),
+  // M12 — Fiscal (RF-088 a RF-094).
+  //
+  // Seis recursos, e a separação segue o que cada um decide:
+  //
+  //  - `tax-parameters` guarda o regime tributário vigente. Trocar o regime
+  //    muda a apuração inteira da empresa, e por isso a escrita é separada da
+  //    leitura — quem consulta a apuração não precisa poder reescrevê-la;
+  //  - `tax-classifications` são NCM, CEST, CFOP e CST com suas alíquotas. É a
+  //    tabela contra a qual a nota recebida é comparada;
+  //  - `tax-rules` decide o tratamento esperado de uma operação. Quem a tem
+  //    define qual CFOP e qual alíquota o sistema vai apontar como corretos;
+  //  - `document-taxes` separa ler a tributação da nota de **classificá-la**:
+  //    o `:UPDATE` liga a linha ao NCM cadastrado, e não altera nada do que o
+  //    emitente declarou (bd/18 §4);
+  //  - `fiscal-events` tem `:CREATE` e `:READ`, e nenhuma ação de alteração ou
+  //    remoção — o evento é prova entregue ao fisco e o banco recusa as duas
+  //    (bd/18 §6). `:APPROVE` é a transmissão: é ela que fala com a SEFAZ;
+  //  - `fiscal-reports` é a apuração e o livro fiscal, em leitura. A exportação
+  //    do movimento fiscal ainda não tem endpoint, e permissão que não governa
+  //    nenhuma rota só atrapalha quem monta perfil.
+  ...build('M12', RESOURCES.TAX_PARAMETERS, [
+    { action: A.CREATE, description: 'Cadastrar parâmetros fiscais da empresa' },
+    { action: A.READ, description: 'Consultar parâmetros fiscais e sua vigência' },
+    { action: A.UPDATE, description: 'Alterar regime, alíquotas e vigência' },
+    { action: A.DELETE, description: 'Encerrar a vigência de um parâmetro fiscal' },
+  ]),
+  ...build('M12', RESOURCES.TAX_CLASSIFICATIONS, [
+    { action: A.CREATE, description: 'Cadastrar classificações fiscais (NCM, CEST, CFOP, CST)' },
+    { action: A.READ, description: 'Consultar classificações fiscais' },
+    { action: A.UPDATE, description: 'Alterar descrição e alíquotas das classificações' },
+    { action: A.DELETE, description: 'Inativar classificações fiscais' },
+  ]),
+  ...build('M12', RESOURCES.TAX_RULES, [
+    { action: A.CREATE, description: 'Cadastrar regras fiscais por operação e produto' },
+    { action: A.READ, description: 'Consultar e simular a resolução de regras fiscais' },
+    { action: A.UPDATE, description: 'Alterar critérios, prioridade e vigência das regras' },
+    { action: A.DELETE, description: 'Inativar regras fiscais' },
+  ]),
+  ...build('M12', RESOURCES.DOCUMENT_TAXES, [
+    { action: A.READ, description: 'Consultar a tributação declarada nos documentos fiscais' },
+    { action: A.UPDATE, description: 'Classificar as linhas do documento pelo NCM cadastrado' },
+  ]),
+  ...build('M12', RESOURCES.FISCAL_EVENTS, [
+    { action: A.CREATE, description: 'Registrar eventos fiscais do documento' },
+    { action: A.READ, description: 'Consultar eventos fiscais e seus protocolos' },
+    { action: A.APPROVE, description: 'Transmitir eventos fiscais ao provedor' },
+  ]),
+  ...build('M12', RESOURCES.FISCAL_REPORTS, [
+    { action: A.READ, description: 'Consultar apuração e livro fiscal' },
+  ]),
 ];
 
 /** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
@@ -804,4 +860,28 @@ export const PERMISSIONS = {
 
   ACCOUNTING_REPORTS_READ: permissionCode(RESOURCES.ACCOUNTING_REPORTS, A.READ),
   ACCOUNTING_REPORTS_EXPORT: permissionCode(RESOURCES.ACCOUNTING_REPORTS, A.EXPORT),
+
+  TAX_PARAMETERS_CREATE: permissionCode(RESOURCES.TAX_PARAMETERS, A.CREATE),
+  TAX_PARAMETERS_READ: permissionCode(RESOURCES.TAX_PARAMETERS, A.READ),
+  TAX_PARAMETERS_UPDATE: permissionCode(RESOURCES.TAX_PARAMETERS, A.UPDATE),
+  TAX_PARAMETERS_DELETE: permissionCode(RESOURCES.TAX_PARAMETERS, A.DELETE),
+
+  TAX_CLASSIFICATIONS_CREATE: permissionCode(RESOURCES.TAX_CLASSIFICATIONS, A.CREATE),
+  TAX_CLASSIFICATIONS_READ: permissionCode(RESOURCES.TAX_CLASSIFICATIONS, A.READ),
+  TAX_CLASSIFICATIONS_UPDATE: permissionCode(RESOURCES.TAX_CLASSIFICATIONS, A.UPDATE),
+  TAX_CLASSIFICATIONS_DELETE: permissionCode(RESOURCES.TAX_CLASSIFICATIONS, A.DELETE),
+
+  TAX_RULES_CREATE: permissionCode(RESOURCES.TAX_RULES, A.CREATE),
+  TAX_RULES_READ: permissionCode(RESOURCES.TAX_RULES, A.READ),
+  TAX_RULES_UPDATE: permissionCode(RESOURCES.TAX_RULES, A.UPDATE),
+  TAX_RULES_DELETE: permissionCode(RESOURCES.TAX_RULES, A.DELETE),
+
+  DOCUMENT_TAXES_READ: permissionCode(RESOURCES.DOCUMENT_TAXES, A.READ),
+  DOCUMENT_TAXES_UPDATE: permissionCode(RESOURCES.DOCUMENT_TAXES, A.UPDATE),
+
+  FISCAL_EVENTS_CREATE: permissionCode(RESOURCES.FISCAL_EVENTS, A.CREATE),
+  FISCAL_EVENTS_READ: permissionCode(RESOURCES.FISCAL_EVENTS, A.READ),
+  FISCAL_EVENTS_APPROVE: permissionCode(RESOURCES.FISCAL_EVENTS, A.APPROVE),
+
+  FISCAL_REPORTS_READ: permissionCode(RESOURCES.FISCAL_REPORTS, A.READ),
 } as const;
