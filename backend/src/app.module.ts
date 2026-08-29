@@ -20,6 +20,7 @@ import { ReferencesModule } from './common/references/references.module';
 import { CryptoModule } from './common/crypto/crypto.module';
 import { IdempotencyModule } from './common/idempotency/idempotency.module';
 import { QueueModule } from './common/queue/queue.module';
+import { IntegrationEventsModule } from './common/integrations/integration-events.module';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -45,6 +46,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { AccountingModule } from './modules/accounting/accounting.module';
 import { FiscalModule } from './modules/fiscal/fiscal.module';
 import { ReportingModule } from './modules/reporting/reporting.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -96,6 +98,8 @@ import { HealthModule } from './modules/health/health.module';
     IdempotencyModule,
     // Global: fila e runner de jobs (RF-069/RF-070).
     QueueModule,
+    // Global: diário de eventos e erros das integrações (RF-129).
+    IntegrationEventsModule,
 
     AuthModule,
     UsersModule,
@@ -121,6 +125,7 @@ import { HealthModule } from './modules/health/health.module';
     AccountingModule,
     FiscalModule,
     ReportingModule,
+    IntegrationsModule,
     HealthModule,
   ],
   providers: [

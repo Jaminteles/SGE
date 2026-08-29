@@ -125,7 +125,8 @@ $scriptsAjuste = @(
     '16_notificacoes_sprint13.sql',
     '17_contabilidade_sprint14.sql',
     '18_fiscal_sprint15.sql',
-    '19_relatorios_sprint16.sql'
+    '19_relatorios_sprint16.sql',
+    '20_integracoes_sprint17.sql'
 )
 
 $scripts = $scriptsBase + $scriptsAjuste

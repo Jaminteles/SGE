@@ -64,6 +64,14 @@ export const envSchema = z.object({
   JOB_BACKOFF_BASE_MS: z.coerce.number().int().positive().default(30_000),
   JOB_BACKOFF_MAX_MS: z.coerce.number().int().positive().default(3_600_000),
 
+  // Interface do Swagger (RF-131). A especificacao OpenAPI sai sempre por rota
+  // autenticada; a UI e publica, e por isso o padrao (quando a variavel nao e
+  // informada) e ligada fora de producao e desligada em producao -- o mesmo
+  // comportamento de antes, agora explicitavel. Fica como string, e nao boolean:
+  // 'ausente' e 'false' precisam ser distinguiveis para que o padrao por ambiente
+  // funcione, e z.coerce.boolean() transformaria a string 'false' em true.
+  SWAGGER_UI_ENABLED: z.enum(['true', 'false']).optional(),
+
   THROTTLE_TTL_SECONDS: z.coerce.number().int().positive().default(60),
   THROTTLE_LIMIT: z.coerce.number().int().positive().default(120),
 

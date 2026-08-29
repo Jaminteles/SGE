@@ -86,6 +86,8 @@ export const RESOURCES = {
   FISCAL_REPORTS: 'fiscal-reports',
   DASHBOARDS: 'dashboards',
   REPORTS: 'reports',
+  INTEGRATIONS: 'integrations',
+  INTEGRATION_EVENTS: 'integration-events',
 } as const;
 
 export interface PermissionDefinition {
@@ -626,6 +628,25 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     { action: A.READ, description: 'Gerar relatórios gerenciais, contábeis e fiscais' },
     { action: A.EXPORT, description: 'Exportar relatórios em PDF, XLSX e CSV' },
   ]),
+  // M18 — Administração e Integrações (RF-126 a RF-131)
+  //
+  // O reprocessamento (RF-130) é APPROVE, e não UPDATE: reexecutar uma
+  // integração que move dinheiro é autorizar a operação de novo, não editar um
+  // cadastro. Quem lê o diário para investigar um incidente não precisa poder
+  // reenviar um pagamento por causa disso.
+  ...build('M18', RESOURCES.INTEGRATIONS, [
+    { action: A.CREATE, description: 'Cadastrar integração externa' },
+    { action: A.READ, description: 'Consultar integrações, sua saúde e a documentação da API' },
+    { action: A.UPDATE, description: 'Configurar parâmetros, credencial e situação da integração' },
+    { action: A.DELETE, description: 'Desativar integração' },
+  ]),
+  ...build('M18', RESOURCES.INTEGRATION_EVENTS, [
+    { action: A.READ, description: 'Consultar o diário de eventos e erros das integrações' },
+    {
+      action: A.APPROVE,
+      description: 'Reprocessar job, webhook ou evento de integração que falhou',
+    },
+  ]),
 ];
 
 /** Índice por código, para resolver (recurso, ação) na consulta ao banco. */
@@ -912,4 +933,12 @@ export const PERMISSIONS = {
   DASHBOARDS_READ: permissionCode(RESOURCES.DASHBOARDS, A.READ),
   REPORTS_READ: permissionCode(RESOURCES.REPORTS, A.READ),
   REPORTS_EXPORT: permissionCode(RESOURCES.REPORTS, A.EXPORT),
+
+  INTEGRATIONS_CREATE: permissionCode(RESOURCES.INTEGRATIONS, A.CREATE),
+  INTEGRATIONS_READ: permissionCode(RESOURCES.INTEGRATIONS, A.READ),
+  INTEGRATIONS_UPDATE: permissionCode(RESOURCES.INTEGRATIONS, A.UPDATE),
+  INTEGRATIONS_DELETE: permissionCode(RESOURCES.INTEGRATIONS, A.DELETE),
+
+  INTEGRATION_EVENTS_READ: permissionCode(RESOURCES.INTEGRATION_EVENTS, A.READ),
+  INTEGRATION_EVENTS_APPROVE: permissionCode(RESOURCES.INTEGRATION_EVENTS, A.APPROVE),
 } as const;

@@ -2016,7 +2016,8 @@ model Provider {
   isActive     Boolean          @default(true) @map("ativo")
   createdAt    DateTime         @default(now()) @map("criado_em") @db.Timestamptz(6)
 
-  credentials IntegrationCredential[]
+  credentials  IntegrationCredential[]
+  integrations Integration[]
 
   @@map("provider")
 }
@@ -2041,6 +2042,7 @@ model IntegrationCredential {
   updatedAt      DateTime  @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
   bankAccounts CompanyBankAccount[]
+  integrations Integration[]
 
   @@unique([companyId, providerId, environment, name], map: "uq_credencial")
   @@map("credencial_integracao")
@@ -2914,4 +2916,119 @@ model FiscalEvent {
 
   @@index([documentId], map: "ix_evento_fiscal_doc")
   @@map("evento_fiscal")
+}
+
+// ---------------------------------------------------------------------------
+// M18 — Administração e Integrações (RF-126 a RF-131) — Sprint 17
+//
+// O que o M09 já dava: o catálogo global de provedores (`Provider`) e o segredo
+// por empresa (`IntegrationCredential`). O que faltava é a camada de operação:
+// *qual* integração desta empresa está ligada, com que parâmetros, o que
+// aconteceu com ela e como reexecutar o que falhou.
+//
+// `Integration` é a configuração; `IntegrationEvent` é o diário append-only do
+// que a integração fez. A separação importa: parâmetro se corrige, evento não.
+// ---------------------------------------------------------------------------
+
+/// Situação operacional da integração (RF-126) — `enum_status_integracao`.
+///
+/// `SUSPENSA` é diferente de `INATIVA`: inativa é decisão do administrador,
+/// suspensa é o sistema recusando-se a continuar chamando um provedor que só
+/// devolve erro (RF-128). Sair de SUSPENSA exige ação humana — retomar sozinho
+/// é como o disjuntor em `CircuitBreaker` já se comporta dentro de uma janela;
+/// aqui a janela já foi excedida.
+enum IntegrationStatus {
+  ATIVA
+  INATIVA
+  SUSPENSA
+  ERRO
+
+  @@map("enum_status_integracao")
+}
+
+/// Gravidade do evento de integração (RF-129) — `enum_severidade_integracao`.
+enum IntegrationEventSeverity {
+  INFO
+  AVISO
+  ERRO
+  CRITICO
+
+  @@map("enum_severidade_integracao")
+}
+
+/// gestao.integracao — uma integração externa configurada pela empresa (RF-126).
+///
+/// Aponta para o provedor do catálogo global e, opcionalmente, para a credencial
+/// que a autentica. `parameters` guarda o que é específico daquele provedor
+/// (URL base, conta, fila, agência) — **nunca** segredo: segredo mora cifrado em
+/// `IntegrationCredential.secret` e não sai pela API (RNF-003/RNF-005). O
+/// trigger de bd/20 recusa chave de parâmetro com cara de credencial, porque um
+/// segredo em JSON legível é um segredo vazado.
+model Integration {
+  id           String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId    String                 @map("empresa_id") @db.Uuid
+  providerId   String                 @map("provider_id") @db.Uuid
+  provider     Provider               @relation(fields: [providerId], references: [id])
+  credentialId String?                @map("credencial_id") @db.Uuid
+  credential   IntegrationCredential? @relation(fields: [credentialId], references: [id])
+  code         String                 @map("codigo") @db.VarChar(60)
+  name         String                 @map("nome") @db.VarChar(120)
+  environment  String                 @default("PRODUCAO") @map("ambiente") @db.VarChar(20)
+  /// Parâmetros não sensíveis do provedor (RF-127).
+  parameters   Json                   @default("{}") @map("parametros")
+  status       IntegrationStatus      @default(INATIVA) @map("status")
+  isActive     Boolean                @default(true) @map("ativo")
+  timeoutMs    Int                    @default(10000) @map("timeout_ms")
+  maxAttempts  Int                    @default(5) @map("max_tentativas") @db.SmallInt
+  /// Falhas seguidas desde o último sucesso — é o que dispara a suspensão.
+  failureStreak       Int       @default(0) @map("falhas_consecutivas") @db.SmallInt
+  /// Piso de falhas seguidas para suspender automaticamente (RF-128).
+  failureThreshold    Int       @default(10) @map("limite_falhas") @db.SmallInt
+  lastRunAt           DateTime? @map("ultima_execucao_em") @db.Timestamptz(6)
+  lastSuccessAt       DateTime? @map("ultimo_sucesso_em") @db.Timestamptz(6)
+  lastFailureAt       DateTime? @map("ultimo_erro_em") @db.Timestamptz(6)
+  lastError           String?   @map("ultimo_erro")
+  suspensionReason    String?   @map("motivo_suspensao")
+  note                String?   @map("observacao")
+  createdAt           DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  events IntegrationEvent[]
+
+  @@unique([companyId, code], map: "uq_integracao_codigo")
+  @@index([companyId, status], map: "ix_integracao_status")
+  @@map("integracao")
+}
+
+/// gestao.integracao_evento — diário da integração (RF-129).
+///
+/// Append-only por trigger (bd/20): UPDATE e DELETE são recusados. Um log de
+/// erro que pode ser reescrito depois do incidente não serve para investigar o
+/// incidente. `detail` é o payload já redigido — o serviço remove chaves com
+/// cara de segredo antes de gravar, porque a alternativa é a trilha virar o
+/// lugar mais fácil de achar credencial no sistema.
+model IntegrationEvent {
+  id            String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId     String                   @map("empresa_id") @db.Uuid
+  integrationId String?                  @map("integracao_id") @db.Uuid
+  integration   Integration?             @relation(fields: [integrationId], references: [id])
+  providerId    String?                  @map("provider_id") @db.Uuid
+  /// CHAMADA | RESPOSTA | ERRO | WEBHOOK | REPROCESSAMENTO | CONFIGURACAO | TESTE.
+  type          String                   @map("tipo") @db.VarChar(60)
+  severity      IntegrationEventSeverity @default(INFO) @map("severidade")
+  operation     String?                  @map("operacao") @db.VarChar(120)
+  message       String                   @map("mensagem")
+  detail        Json?                    @map("detalhe")
+  /// Tabela referida (`job_execucao`, `webhook_evento`, ...) e o id da linha.
+  referenceType String?                  @map("referencia_tipo") @db.VarChar(60)
+  referenceId   String?                  @map("referencia_id") @db.Uuid
+  httpStatus    Int?                     @map("status_http")
+  durationMs    Int?                     @map("duracao_ms")
+  attempt       Int?                     @map("tentativa") @db.SmallInt
+  correlationId String?                  @map("correlation_id") @db.VarChar(60)
+  occurredAt    DateTime                 @default(now()) @map("ocorrido_em") @db.Timestamptz(6)
+
+  @@index([companyId, occurredAt(sort: Desc)], map: "ix_integracao_evento_data")
+  @@index([integrationId, severity], map: "ix_integracao_evento_severidade")
+  @@map("integracao_evento")
 }
