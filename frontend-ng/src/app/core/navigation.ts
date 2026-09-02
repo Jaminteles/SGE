@@ -11,8 +11,9 @@ export interface NavItem {
 }
 
 /**
- * Navegação por módulo (UI-004 / UI-005). Portada de
- * `../frontend/src/layout/navigation.ts`, com o ícone acrescentado.
+ * Navegação por módulo (UI-004 / UI-005). Portada da fundação React, com o
+ * ícone acrescentado — o original está em
+ * `git show 483e777:frontend/src/layout/navigation.ts`.
  *
  * Item sem permissão aparece **desabilitado**, com o aviso "Sem permissão no
  * perfil", em vez de sumir: assim o usuário sabe que o módulo existe e pode

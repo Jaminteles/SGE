@@ -16,8 +16,6 @@ consumido pela API — Swagger em `/api/docs`.
 - [`backend/`](backend/README.md) — API REST (NestJS). Sprints 1 a 10 implementadas.
 - [`frontend-ng/`](frontend-ng/README.md) — interface web (Angular 21 + PrimeNG).
   Fundação da Sprint 18 completa.
-- `frontend/` — **fundação anterior em React**, mantida até a conferência lado a
-  lado com o backend no ar. Será removida em seguida.
 - `docs/` — ERS e planejamento de sprints.
 
 ## Telas Figma

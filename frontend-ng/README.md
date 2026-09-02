@@ -1,12 +1,10 @@
 # SGE — Interface Web (Angular)
 
-Interface do Sistema de Gestão Empresarial e Financeira em **Angular + PrimeNG**,
-substituindo a fundação React (`../frontend/`).
+Interface do Sistema de Gestão Empresarial e Financeira em **Angular 21 + PrimeNG**.
 
-> **Estado:** fundação da Sprint 18 **completa** — tema, núcleo portado, camada
-> HTTP, sessão, empresa ativa, RBAC, rotas com guardas, componentes base e as
-> telas de autenticação. 117 testes passando. Falta só remover o projeto React
-> — veja *O que falta* no fim.
+> **Estado:** fundação da Sprint 18 **completa**, com 117 testes passando. A
+> fundação anterior em React foi removida no commit seguinte ao `483e777`; para
+> consultá-la, `git show 483e777:frontend/`.
 
 ## Executar
 
@@ -320,11 +318,11 @@ modo zoneless, atribuir a uma propriedade dentro de um callback assíncrono não
 notifica o Angular — funcionaria só por carona numa outra escrita de signal
 próxima, o que é frágil demais para depender.
 
-## O que falta
+## Próximo passo
 
-1. **Remover `../frontend/`** — a paridade com o React está fechada. Falta
-   conferir os dois lado a lado, apagar o projeto antigo e atualizar o README
-   raiz e o texto do `UI-001` na planilha.
+As telas dos módulos — Sprints 19 a 24, com as 74 telas do Figma como
+referência. A conferência do fluxo completo (login real, troca de empresa,
+permissões) ainda depende do backend NestJS no ar.
 
 As telas de referência estão no Figma:
 [SGE — Telas do sistema](https://www.figma.com/design/2fHfjDKNSzL2QJiM8jPkI5)
