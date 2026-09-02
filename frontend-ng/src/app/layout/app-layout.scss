@@ -1,0 +1,199 @@
+/* Moldura da área autenticada. As cores saem dos tokens do PrimeNG (--p-*),
+   então claro e escuro acompanham o botão de tema sem código extra.
+   Estilos de página (cards, KPIs, tabela) ficam em src/styles.scss. */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ---------- Barra superior ---------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  height: 60px;
+  padding: 0 1.25rem;
+  background: var(--p-content-background);
+  border-bottom: 1px solid var(--p-content-border-color);
+}
+
+.topbar__spacer {
+  flex: 1;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.brand__mark {
+  padding: 0.3rem 0.55rem;
+  border-radius: 8px;
+  background: var(--p-primary-color);
+  color: var(--p-primary-contrast-color);
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+}
+
+.brand__name {
+  font-weight: 500;
+  color: var(--p-text-color);
+}
+
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+
+  input {
+    width: 20rem;
+    padding-left: 2.25rem;
+    padding-right: 4rem;
+  }
+}
+
+.search__icon {
+  position: absolute;
+  left: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--p-text-muted-color);
+  pointer-events: none;
+}
+
+.search__kbd {
+  position: absolute;
+  right: 0.5rem;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--p-content-border-color);
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 0.68rem;
+  color: var(--p-text-muted-color);
+  pointer-events: none;
+}
+
+.company {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--p-content-border-color);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--p-text-color);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover {
+    background: var(--p-content-hover-background);
+  }
+
+  i {
+    font-size: 0.75rem;
+    color: var(--p-text-muted-color);
+  }
+}
+
+.company__caret {
+  font-size: 0.65rem !important;
+}
+
+:host ::ng-deep .avatar {
+  background: color-mix(in srgb, var(--p-primary-color) 22%, transparent);
+  color: var(--p-primary-color);
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+/* ---------- Corpo ---------- */
+
+.body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 232px;
+  flex-shrink: 0;
+  padding: 0.875rem 0.625rem;
+  background: var(--p-content-background);
+  border-right: 1px solid var(--p-content-border-color);
+}
+
+.navitem {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 2px;
+  border-radius: 8px;
+  color: var(--p-text-muted-color);
+  font-size: 0.8rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+
+  i {
+    font-size: 0.8rem;
+  }
+
+  &:hover {
+    background: var(--p-content-hover-background);
+    color: var(--p-text-color);
+  }
+}
+
+.navitem--active {
+  background: var(--p-primary-color);
+  color: var(--p-primary-contrast-color);
+  font-weight: 600;
+
+  &:hover {
+    background: var(--p-primary-hover-color);
+    color: var(--p-primary-contrast-color);
+  }
+}
+
+/* Item sem permissão fica visível, porém inerte (UI-004): o usuário precisa
+   saber que o módulo existe para poder pedir acesso. */
+.navitem--bloqueado {
+  color: var(--p-surface-600);
+  cursor: not-allowed;
+
+  &:hover {
+    background: transparent;
+    color: var(--p-surface-600);
+  }
+}
+
+.navitem__cadeado {
+  margin-left: auto;
+  font-size: 0.7rem !important;
+}
+
+.sidebar__aviso {
+  margin: auto 0 0;
+  padding: 0.75rem 0.75rem 0.25rem;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: var(--p-surface-500);
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  padding: 1.375rem 1.625rem;
+  overflow: auto;
+}

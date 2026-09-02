@@ -1,0 +1,79 @@
+<div class="shell">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand__mark">SGE</span>
+      <span class="brand__name">Gestão Empresarial e Financeira</span>
+    </div>
+
+    <div class="topbar__spacer"></div>
+
+    <span class="search">
+      <i class="pi pi-search search__icon"></i>
+      <input pInputText type="text" placeholder="Buscar…" aria-label="Busca global" />
+      <kbd class="search__kbd">Ctrl K</kbd>
+    </span>
+
+    <button type="button" class="company" (click)="trocarEmpresa()" aria-label="Trocar empresa ativa">
+      <i class="pi pi-building"></i>
+      <span>{{ nomeEmpresa() }}</span>
+      <i class="pi pi-chevron-down company__caret"></i>
+    </button>
+
+    <p-button
+      [text]="true"
+      severity="secondary"
+      [icon]="theme.escuro() ? 'pi pi-sun' : 'pi pi-moon'"
+      [ariaLabel]="theme.escuro() ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'"
+      [pTooltip]="theme.escuro() ? 'Tema claro' : 'Tema escuro'"
+      tooltipPosition="bottom"
+      (onClick)="theme.alternar()"
+    />
+
+    <p-avatar [label]="iniciais()" shape="circle" styleClass="avatar" />
+
+    <p-button
+      [text]="true"
+      severity="secondary"
+      icon="pi pi-sign-out"
+      ariaLabel="Sair"
+      pTooltip="Sair"
+      tooltipPosition="bottom"
+      (onClick)="sair()"
+    />
+  </header>
+
+  <div class="body">
+    <aside class="sidebar">
+      <nav aria-label="Módulos">
+        @for (item of itens(); track item.path) {
+          @if (item.liberado) {
+            <a
+              class="navitem"
+              [routerLink]="item.path"
+              routerLinkActive="navitem--active"
+              [routerLinkActiveOptions]="{ exact: item.path === '/' }"
+            >
+              <i class="pi {{ item.icon }}"></i>
+              <span>{{ item.label }}</span>
+            </a>
+          } @else {
+            <span class="navitem navitem--bloqueado" aria-disabled="true" title="Sem permissão no perfil">
+              <i class="pi {{ item.icon }}"></i>
+              <span>{{ item.label }}</span>
+              <i class="pi pi-lock navitem__cadeado"></i>
+            </span>
+          }
+        }
+      </nav>
+
+      @if (bloqueados() > 0) {
+        <p class="sidebar__aviso">Sem permissão no perfil: {{ bloqueados() }} módulo(s)</p>
+      }
+    </aside>
+
+    <main class="content">
+      <sge-session-expiry-banner />
+      <router-outlet />
+    </main>
+  </div>
+</div>

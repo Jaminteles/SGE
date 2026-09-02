@@ -1,0 +1,55 @@
+<div class="auth">
+  <div class="auth__inner">
+    <div class="brand">
+      <span class="brand__mark">SGE</span>
+      <span class="brand__name">Gestão Empresarial e Financeira</span>
+    </div>
+
+    <form class="card auth__card" (ngSubmit)="entrar()">
+      <div class="auth__titulo">
+        <h1>Entrar no sistema</h1>
+        <p>Informe suas credenciais para acessar a plataforma.</p>
+      </div>
+
+      @if (erro(); as mensagem) {
+        <p-message severity="error" [text]="mensagem" styleClass="auth__erro" />
+      }
+
+      <label class="campo">
+        <span class="campo__rotulo">E-mail</span>
+        <input
+          pInputText
+          type="email"
+          name="email"
+          autocomplete="username"
+          placeholder="nome@empresa.com.br"
+          required
+          [ngModel]="email()"
+          (ngModelChange)="email.set($event)"
+        />
+      </label>
+
+      <label class="campo">
+        <span class="campo__rotulo">Senha</span>
+        <input
+          pInputText
+          type="password"
+          name="senha"
+          autocomplete="current-password"
+          placeholder="••••••••••"
+          required
+          [ngModel]="senha()"
+          (ngModelChange)="senha.set($event)"
+        />
+      </label>
+
+      <!-- `type="submit"` dentro do <form> já dispara o (ngSubmit); um
+           (onClick) aqui chamaria `entrar()` duas vezes por clique. -->
+      <p-button type="submit" label="Entrar" [loading]="enviando()" [fluid]="true" />
+
+      <a class="auth__link" routerLink="/recuperar-senha">Esqueci minha senha</a>
+    </form>
+
+    <p class="auth__rodape">SGE v1.0 · Sistema de Gestão Empresarial e Financeira</p>
+  </div>
+</div>

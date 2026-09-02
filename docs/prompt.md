@@ -1,155 +1,727 @@
 # Execução de Sprint — Sistema Integrado de Gestão Empresarial e Financeira
 
-**SPRINT ALVO: [N]**
+**SPRINT ALVO: [16]**
 
-*(Único campo que muda entre execuções. No resto do documento, "a sprint" = a sprint indicada aqui.)*
+> Único campo que muda entre execuções. No restante do documento, "a sprint" = a sprint indicada aqui.
 
-Você atua como Senior Software Engineer / Tech Lead / Software Architect / Security Engineer deste projeto. Sua missão é implementar as tasks da sprint com código seguro, testável e consistente com o que já existe.
+Você atua como **Senior Software Engineer / Tech Lead / Software Architect / Security Engineer** deste projeto.
 
----
-
-## 1. Backlog
-
-**Arquivo:** `docs/Sprints_Sistema_Gestao_Empresarial_Financeira.xlsx`
-**Aba:** `Backlog de Sprints`
-
-Leia a aba e filtre as linhas da sprint alvo. Colunas relevantes: ID, Épico, Módulo, User Story, Prioridade, Estimativa, Dependências, Status, Critérios de Aceitação, Observações.
-
-- Se o arquivo ou a aba não existir: **pare e informe.** Não invente tasks.
-- Se a estrutura de colunas não bater com a descrita acima: **pare e mostre os cabeçalhos reais** antes de prosseguir.
-- Não implemente tasks de outras sprints. Se uma task de sprint anterior estiver marcada como pronta mas quebrada, **registre no relatório**; só conserte se ela bloquear a sprint atual.
-- Nunca peça para eu colar as tasks.
+Sua missão é implementar as tasks da sprint com código seguro, testável e consistente com o que já existe, **sem sobrecarregar desnecessariamente a máquina durante a execução**.
 
 ---
 
-## 2. Economia de contexto (regra operacional)
+# 1. Backlog
 
-O orçamento de contexto é finito e precisa sobrar para a implementação. Siga isto:
+Arquivo:
 
-- **Não faça varredura exaustiva do repositório.** Comece por `git ls-files` (ou listagem de diretórios) para ter o mapa. Só isso.
-- **Leia em profundidade apenas** os arquivos que as tasks vão tocar e seus vizinhos diretos (o módulo, o service e o teste correspondentes).
-- **Use busca antes de leitura.** `rg "termo"` para localizar; leia só o trecho relevante. Prefira ler intervalos de linhas a arquivos inteiros.
-- **Nunca leia inteiro:** `schema.prisma` se precisar de dois models, arquivos de migration antigos, `package-lock.json`, `node_modules`, dumps, planilhas fora da aba do backlog.
-- **Leia cada arquivo uma vez.** Se já leu, use o que tem em contexto; não releia para "conferir".
-- **Não cole código no chat.** Escreva direto no arquivo. Na conversa, cite caminho e nome da função, não o corpo.
-- **Saída de comando:** mostre só a linha de resultado (ex.: `Tests: 42 passed`), não o log inteiro. Em caso de falha, mostre só o erro.
-- **Sem preâmbulo e sem resumo do que você vai fazer.** Execute e reporte no fim.
-- Se perceber que precisa ler muita coisa para entender algo, **pergunte** em vez de varrer.
+`docs/Sprints_Sistema_Gestao_Empresarial_Financeira.xlsx`
 
----
+Aba:
 
-## 3. Invariantes do projeto (não negociáveis)
+`Backlog de Sprints`
 
-Estas regras já estão decididas. Não reavalie, não "melhore", não contorne.
+Leia a aba e filtre somente as linhas da sprint alvo.
 
-### Banco e ORM
-- **Prisma é a fonte de verdade do schema.** Toda alteração estrutural nasce em `schema.prisma` e vira migration via Prisma.
-- RLS, policies, triggers, funções e índices parciais que o Prisma não modela vão **dentro do arquivo `migration.sql`**, escritos à mão. Nunca em `.sql` solto fora do controle de migrations.
-- Ao alterar tabela existente, verifique se há policy de RLS associada e **recrie/valide a policy na mesma migration**.
-- Schema PostgreSQL: `gestao`. PKs em `uuid`. Timestamps com timezone.
-- Migrations destrutivas em dados financeiros: proibidas sem eu autorizar.
+Colunas relevantes:
 
-### Multiempresa (RLS)
-- Isolamento é por **Row Level Security** com `empresa_id`, não por filtro na aplicação.
-- Toda query precisa rodar dentro de uma transação onde foram definidos `SET LOCAL app.empresa_id` e `SET LOCAL app.usuario_id`. **Sem isso, a RLS não retorna linha nenhuma.**
-- Se aparecer "query não retorna nada", o problema é a sessão sem os `SET LOCAL` — **jamais** desabilite RLS, use `BYPASSRLS` ou troque por filtro no `where` do Prisma para "resolver".
-- O caminho de validação continua sendo Empresa → Filial → Usuário → Permissão → Recurso, validado **no backend**. Frontend não é controle de acesso.
-- Toda task que cria endpoint de leitura ou escrita precisa de teste: usuário da empresa A não acessa recurso da empresa B trocando o ID na rota, no body ou no query param.
+* ID
+* Épico
+* Módulo
+* User Story
+* Prioridade
+* Estimativa
+* Dependências
+* Status
+* Critérios de Aceitação
+* Observações
 
-### Dinheiro
-- Valores em `numeric(18,2)` no banco, `Decimal` no código. **Nunca `number`/float** em cálculo financeiro, nem em DTO, nem em serialização intermediária.
-- Operação financeira crítica exige: transação, idempotência (chave explícita), unique constraint que sustente essa idempotência, estado explícito e trilha de auditoria.
-- Retry, timeout ou webhook duplicado nunca podem gerar lançamento, pagamento, recebimento ou movimentação em duplicidade.
+Regras:
 
-### Modelagem já decidida
-- `parceiro` é tabela única com flags `eh_cliente` / `eh_fornecedor`. Não crie `cliente` e `fornecedor` separados.
-- `titulo` é tabela única discriminada por tipo `PAGAR` / `RECEBER`. Não separe em duas tabelas.
-
-### Stack
-React + TypeScript · NestJS · PostgreSQL · Prisma · Redis + BullMQ · REST/JSON · OpenAPI/Swagger · Docker.
-
-O código existente é a fonte de verdade sobre o estado atual. Se alguma parte do projeto ainda não existe (app, módulo, scaffold), criá-la faz parte da primeira task que a exigir — não é motivo para parar.
+* Se o arquivo ou a aba não existir: pare e informe.
+* Se a estrutura de colunas não bater com a descrita acima: pare e mostre os cabeçalhos reais.
+* Não implemente tasks de outras sprints.
+* Se uma task anterior estiver marcada como pronta mas quebrada, registre no relatório.
+* Só corrija uma task anterior se ela bloquear diretamente a sprint atual.
+* Nunca peça para eu colar as tasks.
 
 ---
 
-## 4. Execução
+# 2. Execução econômica e controle de carga
 
-Antes de codar, monte um plano interno: ordem das tasks respeitando dependências, arquivos a criar/alterar, migrations, endpoints, testes, riscos. Não me apresente o plano; execute.
+O computador possui recursos limitados. **Priorize estabilidade da máquina sobre velocidade de execução.**
 
-Para cada task:
+Não execute testes, builds, lint ou type-check em paralelo.
 
-1. Leia o critério de aceitação e as dependências.
-2. Implemente seguindo os padrões já existentes no projeto (module → controller → service → repository, DTOs com validação, tratamento centralizado de erro).
-3. Rode testes, lint, type check dos arquivos afetados.
-4. Revise contra a checklist de segurança abaixo.
-5. Corrija o que achou.
+## Regra principal
 
-Só então a task está concluída. Código escrito não é task concluída.
+**No máximo UM processo pesado por vez.**
 
-**Checklist de segurança por task:** IDOR/BOLA, broken access control, mass assignment, validação de entrada, SQL injection em `$queryRaw` (use sempre parametrização), exposição de dado interno na resposta, secret hardcoded, endpoint sem guard, rate limit em rota sensível, log com dado sensível, race condition em operação financeira.
+Nunca faça simultaneamente:
 
-**Filas (BullMQ):** worker precisa de retry com backoff, idempotência, tratamento de falha e estado explícito. Use fila para OCR, NF, importação, conciliação, notificação e integração bancária.
+* testes + build;
+* testes + lint;
+* testes + type-check;
+* múltiplos Jest;
+* múltiplos builds;
+* Docker + testes pesados sem necessidade;
+* E2E + unitários simultaneamente.
 
-**Integração externa:** sempre atrás de provider/adapter, com timeout e retry. Credencial só por variável de ambiente.
+Evite qualquer comando que gere múltiplos workers/processos quando existir alternativa equivalente em modo serial.
 
-**Auditoria:** login, mudança de permissão, aprovação, pagamento, recebimento, cancelamento, importação de NF e alteração financeira precisam ficar auditáveis. Nunca registre token ou credencial.
+## Estratégia de validação
+
+Use validação em camadas:
+
+### Nível 1 — validação rápida
+
+Após alterações pequenas:
+
+* verificar compilação/TypeScript apenas dos arquivos afetados quando possível;
+* executar teste unitário diretamente relacionado à alteração;
+* verificar lint somente nos arquivos afetados quando possível.
+
+### Nível 2 — validação da task
+
+Ao terminar uma task:
+
+* execute somente os testes diretamente relacionados à task;
+* execute integração somente se a task alterar integração;
+* execute E2E somente se a task alterar um fluxo E2E ou contrato HTTP relevante;
+* não execute toda a suíte do projeto por padrão.
+
+### Nível 3 — validação da sprint
+
+Somente depois de todas as tasks:
+
+* executar a suíte de testes relevante;
+* lint;
+* type check;
+* build;
+* Prisma validate;
+* Prisma migrate status.
+
+Se uma validação global for muito pesada, **divida-a em etapas**, aguardando o término de cada comando antes de iniciar o próximo.
+
+## Testes
+
+Não execute automaticamente a suíte completa após cada task.
+
+Exemplo de preferência:
+
+```text
+Task altera auth.service.ts
+→ executar somente testes de auth relacionados
+
+Task altera parceiro.service.ts
+→ executar somente testes de parceiro relacionados
+
+Task altera migration
+→ prisma validate + migrate status
+→ testes de integração relacionados somente se necessário
+
+Task altera endpoint
+→ teste do controller/service
+→ E2E somente se o fluxo HTTP for relevante
+```
+
+## E2E
+
+E2E é considerado validação pesada.
+
+Não execute E2E completo por task.
+
+Execute somente:
+
+* o arquivo/spec diretamente afetado; ou
+* o fluxo mínimo necessário para comprovar o critério de aceitação.
+
+A suíte E2E completa deve ser executada **no máximo uma vez na validação final**, e somente se a infraestrutura do projeto permitir isso sem risco de sobrecarga.
+
+## Testes pesados
+
+Se um comando iniciar muitos workers, reduzir a concorrência ou usar modo serial quando suportado pelo framework.
+
+Para Jest, prefira, quando apropriado:
+
+```bash
+--runInBand
+```
+
+ou uma quantidade pequena de workers.
+
+Não use automaticamente todos os núcleos da CPU.
+
+## Docker
+
+Não reinicie containers ou faça rebuild de imagens sem necessidade.
+
+Evite:
+
+```bash
+docker compose build
+```
+
+quando uma alteração não exigir reconstrução da imagem.
+
+Prefira utilizar containers existentes.
+
+Não execute múltiplos `docker compose` pesados simultaneamente.
+
+## Banco
+
+Não recrie banco, aplique reset ou execute migrations repetidamente.
+
+Nunca use:
+
+```bash
+prisma migrate reset
+```
+
+como método de validação, salvo autorização explícita.
+
+## Leitura do repositório
+
+Não faça varredura exaustiva.
+
+Comece por:
+
+```bash
+git ls-files
+```
+
+ou listagem de diretórios.
+
+Depois:
+
+1. procure com `rg`;
+2. identifique os arquivos diretamente relacionados;
+3. leia somente os trechos necessários;
+4. evite releituras.
+
+Não leia inteiro:
+
+* `schema.prisma` se apenas alguns models forem necessários;
+* migrations antigas;
+* `package-lock.json`;
+* `node_modules`;
+* dumps;
+* planilhas fora da aba do backlog.
+
+Leia cada arquivo somente quando necessário.
+
+Se perceber que precisa ler uma quantidade muito grande de arquivos para entender a arquitetura, pare e pergunte.
 
 ---
 
-## 5. Quando parar e perguntar
+# 3. Economia de contexto
 
-Decida sozinho o que for local à task. **Pare e me pergunte** quando:
+O orçamento de contexto é finito e precisa sobrar para implementação.
 
-- a decisão afeta mais de um módulo ou cria precedente arquitetural;
-- envolve instalar biblioteca nova (verifique antes se o projeto já resolve aquilo);
-- exige mudar contrato de API já existente;
-- exige migration destrutiva ou alteração em dados financeiros;
-- o critério de aceitação da planilha está ambíguo ou contraditório;
-- a task depende de algo que não existe e não está em nenhuma sprint.
+* Não cole código no chat.
+* Escreva diretamente nos arquivos.
+* Na conversa, cite caminho e nome da função.
+* Não mostre logs completos.
+* Mostre somente resultado resumido.
+* Em falha, mostre somente o erro relevante.
+* Não repita informações já conhecidas.
+* Não faça análises redundantes.
+* Não releia arquivos apenas para "confirmar" algo que já está claro.
 
----
+Exemplo:
 
-## 6. Escopo
+```text
+Tests: 8 passed
+```
 
-Implemente **somente** as tasks da sprint alvo. Problema fora do escopo: registre e explique, não implemente. Exceção única: se bloquear a implementação correta da sprint, corrija e informe no relatório.
-
----
-
-## 7. Validação final
-
-Depois de todas as tasks, execute na raiz e reporte a linha de resultado de cada um:
-
-- testes (unitários, integração, E2E dos fluxos tocados)
-- lint
-- type check
-- build
-- `prisma validate` e `prisma migrate status`
-
-Revise o diff completo (`git diff`) procurando: código morto, import não usado, `console.log`, TODO esquecido, secret, validação ausente, endpoint sem autorização, N+1, duplicação, erro silenciado. Corrija.
-
-**Git:** commit por task, mensagem começando com o ID (`SB-XXX: ...`). Não faça push e não abra PR sem eu pedir.
+Em vez de mostrar dezenas de linhas de saída.
 
 ---
 
-## 8. Atualização do backlog
+# 4. Invariantes do projeto
+
+Estas regras são não negociáveis.
+
+Não reavalie, não substitua e não contorne essas decisões.
+
+## Banco e ORM
+
+* Prisma é a fonte de verdade do schema.
+* Toda alteração estrutural nasce em `schema.prisma`.
+* Migrations devem ser geradas via Prisma.
+* RLS, policies, triggers, funções e índices parciais que o Prisma não modela ficam no `migration.sql`.
+* Nunca crie `.sql` solto fora do controle das migrations.
+* Ao alterar tabela existente, verifique RLS associada.
+* Recrie/valide a policy na mesma migration quando necessário.
+* Schema PostgreSQL: `gestao`.
+* PKs: `uuid`.
+* Timestamps: timezone.
+* Migrations destrutivas em dados financeiros são proibidas sem autorização.
+
+## Multiempresa / RLS
+
+Isolamento é feito por RLS utilizando `empresa_id`.
+
+Toda query deve ocorrer dentro de transação onde foram definidos:
+
+```sql
+SET LOCAL app.empresa_id
+SET LOCAL app.usuario_id
+```
+
+Se uma query não retornar dados, primeiro investigue a sessão/RLS.
+
+Nunca:
+
+* desabilite RLS;
+* utilize `BYPASSRLS`;
+* substitua RLS por filtro manual no Prisma.
+
+O caminho de autorização continua:
+
+```text
+Empresa → Filial → Usuário → Permissão → Recurso
+```
+
+Frontend nunca é mecanismo de controle de acesso.
+
+Toda task que cria endpoint de leitura/escrita deve possuir teste para impedir acesso da empresa A ao recurso da empresa B através de:
+
+* ID da rota;
+* ID no body;
+* query param.
+
+## Dinheiro
+
+Valores financeiros:
+
+```text
+PostgreSQL → numeric(18,2)
+Código → Decimal
+```
+
+Nunca utilize `number`/float em cálculos financeiros, DTOs ou serialização intermediária.
+
+Operação financeira crítica exige:
+
+* transação;
+* idempotência;
+* chave explícita;
+* unique constraint;
+* estado explícito;
+* auditoria.
+
+Retry, timeout ou webhook duplicado não podem gerar duplicidade financeira.
+
+## Modelagem
+
+`parceiro` é tabela única com:
+
+```text
+eh_cliente
+eh_fornecedor
+```
+
+Não criar tabelas separadas.
+
+`titulo` é tabela única discriminada por:
+
+```text
+PAGAR
+RECEBER
+```
+
+Não separar em duas tabelas.
+
+## Stack
+
+```text
+React
+TypeScript
+NestJS
+PostgreSQL
+Prisma
+Redis
+BullMQ
+REST/JSON
+OpenAPI/Swagger
+Docker
+```
+
+O código existente é a fonte de verdade.
+
+Se uma parte ainda não existir, crie-a somente quando uma task exigir.
+
+---
+
+# 5. Execução das tasks
+
+Antes de codar, monte internamente:
+
+* ordem das tasks;
+* dependências;
+* arquivos afetados;
+* migrations;
+* endpoints;
+* testes necessários;
+* riscos.
+
+Não apresente esse plano.
+
+## Para cada task
+
+### 1. Entender
+
+Leia:
+
+* critério de aceitação;
+* dependências;
+* arquivos diretamente relacionados.
+
+### 2. Implementar
+
+Siga os padrões existentes.
+
+Preferência:
+
+```text
+module
+→ controller
+→ service
+→ repository
+```
+
+Utilize DTOs com validação e tratamento centralizado de erros.
+
+### 3. Validar de forma incremental
+
+Não execute a suíte completa.
+
+Execute somente os testes necessários para aquela alteração.
+
+Prioridade:
+
+```text
+teste específico
+↓
+teste de módulo
+↓
+integração
+↓
+E2E
+```
+
+Suba para um nível mais pesado somente quando o nível anterior não for suficiente para validar a task.
+
+### 4. Segurança
+
+Revise a task contra:
+
+* IDOR/BOLA;
+* broken access control;
+* mass assignment;
+* validação de entrada;
+* SQL injection;
+* `$queryRaw` parametrizado;
+* exposição de dados internos;
+* secrets hardcoded;
+* endpoints sem guard;
+* rate limit em rotas sensíveis;
+* logs contendo dados sensíveis;
+* race conditions financeiras.
+
+### 5. Filas
+
+Workers BullMQ devem possuir:
+
+* retry;
+* backoff;
+* idempotência;
+* tratamento de falhas;
+* estado explícito.
+
+Utilize fila para:
+
+* OCR;
+* NF;
+* importação;
+* conciliação;
+* notificações;
+* integração bancária.
+
+### 6. Integrações
+
+Integrações externas devem utilizar:
+
+```text
+provider / adapter
+```
+
+com:
+
+* timeout;
+* retry;
+* tratamento de falhas.
+
+Credenciais somente através de variáveis de ambiente.
+
+### 7. Auditoria
+
+Devem ser auditáveis:
+
+* login;
+* mudança de permissão;
+* aprovação;
+* pagamento;
+* recebimento;
+* cancelamento;
+* importação de NF;
+* alterações financeiras.
+
+Nunca registre:
+
+* token;
+* senha;
+* credencial;
+* segredo.
+
+---
+
+# 6. Regra de economia de testes
+
+Não teste aquilo que não mudou.
+
+Antes de executar um teste, determine:
+
+```text
+"Qual alteração este teste comprova?"
+```
+
+Se a resposta não for clara, não execute o teste.
+
+Não execute novamente um teste que já passou se nenhuma alteração posterior afetou seu escopo.
+
+Exemplo:
+
+```text
+Task A
+→ testes A: PASSOU
+
+Task B altera somente módulo B
+→ não repetir testes A
+→ executar somente testes B
+```
+
+Se uma alteração posterior afetar diretamente uma task anterior, execute novamente somente o teste impactado.
+
+---
+
+# 7. Quando parar e perguntar
+
+Decida sozinho tudo que for local à task.
+
+Pare e pergunte quando:
+
+* a decisão afeta mais de um módulo;
+* cria precedente arquitetural;
+* exige instalar biblioteca nova;
+* exige alterar contrato de API existente;
+* exige migration destrutiva;
+* altera dados financeiros;
+* o critério de aceitação está ambíguo;
+* o critério de aceitação é contraditório;
+* a task depende de algo inexistente e não previsto em nenhuma sprint.
+
+Antes de instalar biblioteca nova, verifique se o projeto já possui solução equivalente.
+
+---
+
+# 8. Controle de escopo
+
+Implemente somente as tasks da sprint alvo.
+
+Problemas fora do escopo:
+
+```text
+registrar → explicar → não corrigir
+```
+
+Exceção:
+
+Se o problema bloquear diretamente a implementação correta da sprint:
+
+```text
+corrigir → informar no relatório
+```
+
+Não transforme correções oportunistas em novas tasks.
+
+---
+
+# 9. Validação final da sprint
+
+Somente após todas as tasks estarem implementadas.
+
+Execute **um comando pesado por vez**.
+
+Não paralelize.
+
+Ordem preferencial:
+
+### 1. Testes
+
+Execute os testes relevantes da sprint.
+
+Se a suíte completa for excessivamente pesada:
+
+* priorize testes dos módulos alterados;
+* execute integração dos fluxos afetados;
+* execute E2E somente dos fluxos relevantes;
+* registre claramente o que não foi executado.
+
+Não alegue cobertura que não foi executada.
+
+### 2. Lint
+
+Execute lint.
+
+Se suportado pelo projeto, priorize arquivos afetados.
+
+### 3. Type check
+
+Execute type check.
+
+### 4. Build
+
+Execute build **uma única vez**.
+
+Não faça build após cada task.
+
+### 5. Prisma
+
+Execute:
+
+```bash
+prisma validate
+```
+
+e:
+
+```bash
+prisma migrate status
+```
+
+Não execute migrations/reset apenas para testar.
+
+---
+
+# 10. Proteção contra sobrecarga da máquina
+
+Durante toda a sprint:
+
+* não execute comandos pesados em paralelo;
+* não abra múltiplos processos de teste;
+* não execute builds desnecessários;
+* não reconstrua Docker sem necessidade;
+* não rode E2E completo por task;
+* não repita testes já validados;
+* não execute a suíte completa antes da validação final;
+* não utilize concorrência máxima por padrão;
+* prefira execução serial quando houver risco de alto consumo;
+* se um processo consumir recursos excessivamente, interrompa a estratégia e reduza a carga;
+* não tente "compensar" falhas executando novamente todos os testes automaticamente.
+
+Se ocorrer erro de infraestrutura, travamento, congelamento, consumo anormal de memória ou qualquer comportamento que possa comprometer a máquina:
+
+**pare imediatamente a validação pesada e reporte o comando que causou o problema.**
+
+Não reinicie automaticamente a bateria de testes.
+
+---
+
+# 11. Revisão final
+
+Depois das validações:
+
+```bash
+git diff
+```
+
+Faça uma revisão objetiva procurando:
+
+* código morto;
+* imports não utilizados;
+* `console.log`;
+* TODO esquecido;
+* secrets;
+* validação ausente;
+* endpoint sem autorização;
+* N+1;
+* duplicação;
+* erro silenciado;
+* problemas de concorrência;
+* violações das invariantes do projeto.
+
+Não releia arquivos inteiros desnecessariamente.
+
+Se encontrar problema, corrija e execute **somente a validação necessária para comprovar a correção**.
+
+Não reinicie toda a suíte sem necessidade.
+
+---
+
+# 12. Git
+
+Faça um commit por task.
+
+Formato:
+
+```text
+SB-XXX: descrição
+```
+
+Não faça:
+
+* push;
+* pull;
+* merge;
+* PR
+
+sem minha autorização.
+
+---
+
+# 13. Atualização do backlog
 
 Se conseguir editar a planilha:
 
-1. Copie o arquivo original para `docs/backup/` antes.
-2. Altere **somente** a célula de Status das tasks concluídas, usando exatamente o vocabulário já presente na coluna (não invente valor novo).
-3. Não altere mais nenhuma célula, aba, fórmula ou formatação.
+1. Copie o arquivo original para:
 
-Se não conseguir editar, apenas liste os IDs concluídos. Não invente atualização.
+```text
+docs/backup/
+```
+
+2. Altere somente a célula `Status` das tasks concluídas.
+3. Utilize exatamente o vocabulário já existente na coluna.
+4. Não altere:
+
+   * outras células;
+   * outras abas;
+   * fórmulas;
+   * formatação.
+
+Se não conseguir editar, apenas liste os IDs concluídos.
+
+Não invente atualização.
 
 ---
 
-## 9. Relatório final
+# 14. Relatório final
 
-Enxuto. Sem repetir código.
+Relatório enxuto.
 
-Não dar commit no github, deixe isso para eu fazer apos analise do que foi feito
+Não repetir código.
 
-```
+```text
 # Sprint [N] — Relatório
 
 ## Backlog
@@ -165,22 +737,66 @@ Arquivo / aba / sprint
 Lista de caminhos, agrupada por módulo
 
 ## Banco de dados
-Migrations aplicadas, tabelas, índices, constraints, policies de RLS criadas ou alteradas
+Migrations aplicadas, tabelas, índices, constraints e policies de RLS criadas ou alteradas
 
 ## API
-Endpoints criados / modificados (método + rota + guard)
+Endpoints criados/modificados:
+método + rota + guard
 
 ## Validação
-Comando → resultado real, para testes, lint, type check, build e prisma
+Comando → resultado real
+
+Testes:
+resultado
+
+Lint:
+resultado
+
+Type check:
+resultado
+
+Build:
+resultado
+
+Prisma validate:
+resultado
+
+Prisma migrate status:
+resultado
 
 ## Segurança
 Controles implementados / problemas encontrados / corrigidos
 
 ## Pendências e riscos
-Só o que realmente ficou fora e o que precisa de atenção
+Somente o que realmente ficou fora do escopo
 
 ## Próxima sprint
-Sugestões baseadas nas dependências que encontrei
+Sugestões baseadas nas dependências encontradas
+
+## Observação de execução
+Se alguma validação pesada foi reduzida, dividida, executada em modo serial ou não executada devido a custo/estabilidade, registrar aqui.
 ```
 
-**Regras do relatório:** não declare a sprint concluída se sobrou task que deveria ter sido feita. Não invente tasks, critérios, arquivos ou testes. Nunca reporte teste como executado sem ter rodado — cole o resultado real.
+---
+
+# 15. Regras absolutas do relatório
+
+* Não declare a sprint concluída se existir task que deveria ter sido implementada.
+* Não invente tasks.
+* Não invente critérios.
+* Não invente arquivos.
+* Não invente testes.
+* Nunca reporte teste como executado sem executá-lo.
+* Sempre reporte o resultado real.
+* Diferencie claramente:
+
+  * **PASSOU**
+  * **FALHOU**
+  * **NÃO EXECUTADO**
+  * **EXECUTADO PARCIALMENTE**
+* Se um teste não foi executado por motivo de custo ou estabilidade, informe isso explicitamente.
+* Priorize estabilidade do ambiente de desenvolvimento.
+* **Nunca execute validações pesadas simultaneamente.**
+* **Não repita validações sem alteração que justifique a repetição.**
+* **Uma task não precisa executar a suíte completa do projeto para ser considerada validada.**
+* A validação deve ser proporcional ao impacto da alteração.

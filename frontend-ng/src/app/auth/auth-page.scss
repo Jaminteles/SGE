@@ -1,0 +1,159 @@
+/* Telas fora da moldura autenticada: login, recuperação de senha e seleção de
+   empresa. Card centrado sobre o fundo do app. */
+
+.auth {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem 1rem;
+}
+
+.auth__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  width: 100%;
+  max-width: 30rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.brand__mark {
+  padding: 0.35rem 0.6rem;
+  border-radius: 9px;
+  background: var(--p-primary-color);
+  color: var(--p-primary-contrast-color);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.brand__name {
+  font-weight: 500;
+  font-size: 0.95rem;
+  color: var(--p-text-color);
+}
+
+.auth__card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  width: 100%;
+  padding: 2rem;
+}
+
+.auth__titulo h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--p-text-color);
+}
+
+.auth__titulo p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--p-text-muted-color);
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.campo__rotulo {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--p-text-muted-color);
+}
+
+.campo input {
+  width: 100%;
+}
+
+.auth__link {
+  align-self: center;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--p-primary-color);
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.auth__rodape {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--p-text-muted-color);
+}
+
+/* O `p-message` vem com fundo translúcido e sem borda — some sobre o carvão do
+   tema escuro. Ganha contorno e respiro para virar um aviso de fato. */
+:host ::ng-deep .auth__erro {
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--p-red-400) 45%, transparent);
+  border-radius: 8px;
+
+  .p-message-content {
+    padding: 0.65rem 0.85rem;
+  }
+
+  .p-message-text {
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
+}
+
+/* Lista de empresas na seleção (UI-003) */
+
+.empresa {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--p-content-border-color);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--p-text-color);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+
+  &:hover {
+    background: var(--p-content-hover-background);
+  }
+}
+
+.empresa--ativa {
+  border-color: var(--p-primary-color);
+  background: color-mix(in srgb, var(--p-primary-color) 10%, transparent);
+}
+
+.empresa__nome {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.empresa__dados {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  color: var(--p-text-muted-color);
+}
+
+.empresa__check {
+  margin-left: auto;
+  color: var(--p-primary-color);
+}

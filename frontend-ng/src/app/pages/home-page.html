@@ -1,0 +1,59 @@
+<p class="crumb">Início</p>
+
+<div class="pagehead">
+  <div>
+    <h1>Bom dia, {{ primeiroNome() }}</h1>
+    <p>Resumo de {{ nomeEmpresa() }} · setembro de 2026</p>
+  </div>
+  <div class="pagehead__actions">
+    <p-button label="Período: Set/2026" severity="secondary" [outlined]="true" />
+    <p-button label="Exportar" icon="pi pi-download" />
+  </div>
+</div>
+
+<section class="kpis">
+  @for (kpi of kpis(); track kpi.label) {
+    <article class="card kpi">
+      <span class="kpi__label">{{ kpi.label }}</span>
+      <strong class="kpi__value">{{ kpi.value }}</strong>
+      <span class="kpi__detail kpi__detail--{{ kpi.tone }}">{{ kpi.detail }}</span>
+    </article>
+  }
+</section>
+
+<section class="card table-card">
+  <header class="table-card__head">
+    <h2>Seus acessos nesta empresa</h2>
+    <span class="table-card__count">{{ liberados() }} de {{ acessos().length }} módulos</span>
+  </header>
+
+  <p-table [value]="acessos()" [tableStyle]="{ 'min-width': '100%' }">
+    <ng-template #header>
+      <tr>
+        <th style="width: 14rem">Módulo</th>
+        <th>Permissões exigidas</th>
+        <th style="width: 10rem">Situação</th>
+      </tr>
+    </ng-template>
+
+    <ng-template #body let-item>
+      <tr>
+        <td>
+          @if (item.liberado) {
+            <a [routerLink]="item.path">{{ item.label }}</a>
+          } @else {
+            {{ item.label }}
+          }
+        </td>
+        <td><code>{{ item.exigencia }}</code></td>
+        <td>
+          @if (item.liberado) {
+            <p-tag value="Liberado" severity="success" [rounded]="true" />
+          } @else {
+            <p-tag value="Sem permissão" severity="warn" [rounded]="true" />
+          }
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
+</section>

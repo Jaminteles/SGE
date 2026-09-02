@@ -4,6 +4,7 @@ import { AuditEvent } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AUDIT_ENTITY, AuditService } from '../../common/audit/audit.service';
+import { permissionCode } from '../../common/authorization/permission-catalog';
 import { PasswordService } from './password.service';
 import { IssuedTokens, TokenService } from './token.service';
 import { LoginDto } from './dto/login.dto';
@@ -172,7 +173,14 @@ export class AuthService {
     });
   }
 
-  /** Perfil do usuário autenticado com as empresas às quais tem acesso. */
+  /**
+   * Perfil do usuário autenticado com as empresas às quais tem acesso.
+   *
+   * Cada vínculo traz também os códigos de permissão do perfil naquela empresa
+   * (RF-011). A interface usa essa lista apenas para esconder o que o usuário
+   * não pode fazer (UI-004) — quem autoriza de fato continua sendo o
+   * PermissionsGuard somado à RLS, a cada requisição.
+   */
   async profile(userId: string) {
     const user = await this.prisma.db.user.findUniqueOrThrow({
       where: { id: userId },
@@ -188,13 +196,33 @@ export class AuthService {
             companyId: true,
             branchId: true,
             isDefault: true,
-            company: { select: { legalName: true, tradeName: true } },
-            role: { select: { id: true, name: true } },
+            company: {
+              select: { legalName: true, tradeName: true, taxId: true, isActive: true },
+            },
+            role: {
+              select: {
+                id: true,
+                name: true,
+                permissions: {
+                  select: { permission: { select: { resource: true, action: true } } },
+                },
+              },
+            },
           },
         },
       },
     });
-    return user;
+
+    return {
+      ...user,
+      memberships: user.memberships.map(({ role, ...membership }) => ({
+        ...membership,
+        role: { id: role.id, name: role.name },
+        permissions: role.permissions.map((rp) =>
+          permissionCode(rp.permission.resource, rp.permission.action),
+        ),
+      })),
+    };
   }
 
   private hashToken(token: string): string {

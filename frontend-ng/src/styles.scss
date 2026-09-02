@@ -1,0 +1,257 @@
+/* Estilos globais do SGE. As cores vêm dos tokens do preset (sge-preset.ts);
+   aqui ficam só a base do documento e utilitários de layout. */
+
+:root {
+  color-scheme: light;
+  --sge-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  /* Fundo do app, um degrau abaixo do fundo dos cards (surface.900),
+     para os painéis destacarem sem precisar de sombra. */
+  --sge-app-bg: #f1f5f9;
+}
+
+/* `color-scheme: dark` é o que faz a função light-dark() dos tokens do
+   PrimeNG resolver para o segundo valor. Sem isto o preset renderiza claro
+   mesmo com a classe presente. */
+.sge-dark {
+  color-scheme: dark;
+  --sge-app-bg: #0a0d14;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--sge-font);
+  font-size: 14px;
+  background: var(--sge-app-bg);
+  color: var(--p-text-color);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* O PrimeNG desenha o foco nos componentes dele; isto cobre o resto. */
+:focus-visible {
+  outline: 2px solid var(--p-primary-color);
+  outline-offset: 2px;
+}
+
+/* ---------- Primitivas de página ----------
+   Compartilhadas por todas as páginas dentro da moldura autenticada. Ficam no
+   global porque componentes com encapsulamento de estilo não as herdariam. */
+
+.crumb {
+  margin: 0 0 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--p-text-muted-color);
+}
+
+.pagehead {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.125rem;
+}
+
+.pagehead h1 {
+  margin: 0 0 0.2rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--p-text-color);
+}
+
+.pagehead p {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--p-text-muted-color);
+}
+
+.pagehead__actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-left: auto;
+}
+
+.card {
+  background: var(--p-content-background);
+  border: 1px solid var(--p-content-border-color);
+  border-radius: var(--p-content-border-radius);
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 1rem 1.125rem;
+}
+
+.kpi__label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--p-text-muted-color);
+}
+
+.kpi__value {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--p-text-color);
+}
+
+.kpi__detail {
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+/* Verde e vermelho ficam reservados para significado financeiro — por isso a
+   primária do tema é violeta e não entra aqui. O tom muda com o tema: o 400
+   tem contraste bom sobre carvão e some sobre branco. */
+.kpi__detail--good {
+  color: light-dark(var(--p-green-600), var(--p-green-400));
+}
+.kpi__detail--warn {
+  color: light-dark(var(--p-amber-600), var(--p-amber-400));
+}
+.kpi__detail--bad {
+  color: light-dark(var(--p-red-600), var(--p-red-400));
+}
+.kpi__detail--neutral {
+  color: var(--p-text-muted-color);
+}
+
+.table-card {
+  overflow: hidden;
+}
+
+.table-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.125rem;
+  border-bottom: 1px solid var(--p-content-border-color);
+}
+
+.table-card__head h2 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--p-text-color);
+}
+
+.table-card__count {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--p-text-muted-color);
+}
+
+/* ---------- Campos (UI-006) ---------- */
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.campo__rotulo {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--p-text-muted-color);
+}
+
+.campo__controle {
+  width: 100%;
+}
+
+/* Dinheiro alinhado à direita com dígitos de largura fixa: em coluna, os
+   valores ficam comparáveis a olho. */
+.campo__controle--numerico {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.campo__dica {
+  font-size: 0.7rem;
+  color: var(--p-text-muted-color);
+}
+
+.campo__erro {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: light-dark(var(--p-red-600), var(--p-red-400));
+}
+
+/* ---------- Alerta (UI-005) ---------- */
+
+.alerta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.8rem 1rem;
+  border-radius: 10px;
+  border: 1px solid;
+}
+
+.alerta--erro {
+  background: color-mix(in srgb, var(--p-red-400) 12%, transparent);
+  border-color: color-mix(in srgb, var(--p-red-400) 45%, transparent);
+}
+
+.alerta--aviso {
+  background: color-mix(in srgb, var(--p-amber-400) 12%, transparent);
+  border-color: color-mix(in srgb, var(--p-amber-400) 45%, transparent);
+}
+
+.alerta--info {
+  background: color-mix(in srgb, var(--p-primary-color) 12%, transparent);
+  border-color: color-mix(in srgb, var(--p-primary-color) 45%, transparent);
+}
+
+.alerta--sucesso {
+  background: color-mix(in srgb, var(--p-green-400) 12%, transparent);
+  border-color: color-mix(in srgb, var(--p-green-400) 45%, transparent);
+}
+
+.alerta__titulo {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--p-text-color);
+}
+
+.alerta--erro .alerta__titulo {
+  color: light-dark(var(--p-red-700), var(--p-red-300));
+}
+.alerta--aviso .alerta__titulo {
+  color: light-dark(var(--p-amber-700), var(--p-amber-300));
+}
+.alerta--sucesso .alerta__titulo {
+  color: light-dark(var(--p-green-700), var(--p-green-300));
+}
+
+.alerta__mensagem {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--p-text-color);
+}
+
+.alerta__detalhes {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--p-text-muted-color);
+}

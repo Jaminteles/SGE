@@ -2,7 +2,7 @@
 Sistema de Gestão Empresarial e Financeira
 
 Monorepo baseado na ERS v1.0 (`docs/`). Stack de referência: NestJS + TypeScript +
-PostgreSQL + Prisma (backend) e React + TypeScript (frontend).
+PostgreSQL + Prisma (backend) e Angular + PrimeNG (frontend).
 
 O planejamento tem **24 sprints**: as 17 primeiras entregam o backend módulo a
 módulo (RF-001 a RF-131) e as **Sprints 18 a 24 entregam a interface web** das
@@ -14,7 +14,19 @@ consumido pela API — Swagger em `/api/docs`.
 - [`bd/`](bd) — **modelo físico PostgreSQL** (schema `gestao`), fonte da verdade
   do banco: M01 a M18, RLS multiempresa, triggers de auditoria e regras de negócio.
 - [`backend/`](backend/README.md) — API REST (NestJS). Sprints 1 a 10 implementadas.
+- [`frontend-ng/`](frontend-ng/README.md) — interface web (Angular 21 + PrimeNG).
+  Fundação da Sprint 18 completa.
+- `frontend/` — **fundação anterior em React**, mantida até a conferência lado a
+  lado com o backend no ar. Será removida em seguida.
 - `docs/` — ERS e planejamento de sprints.
+
+## Telas Figma
+
+- **[SGE — Telas do sistema](https://www.figma.com/design/2fHfjDKNSzL2QJiM8jPkI5)** — as 74 telas
+  do sistema numa única página (`SGE — Todas as telas`), em 16 faixas por módulo, a 1440×900 e
+  com a paleta do tema. Cada frame leva o código `UI-xxx` da planilha.
+- [ERP — Telas](https://www.figma.com/design/PA06FnojAoWND0fa0uVeve/ERP-%E2%80%94-Telas?node-id=0-1)
+  — arquivo original com os rascunhos da Sprint 18.
 
 ## Banco de dados
 
@@ -144,7 +156,7 @@ integração externa (RF-043 a RF-050).
 
 ## Fase 9 — Interface Web (Sprints 18 a 24)
 
-O frontend (React + TypeScript) não tem requisito próprio na ERS: são as telas
+O frontend (Angular + PrimeNG) não tem requisito próprio na ERS: são as telas
 dos RF já entregues pelo backend, planejadas como itens `UI-001` a `UI-039`.
 
 | Sprint | Entrega |

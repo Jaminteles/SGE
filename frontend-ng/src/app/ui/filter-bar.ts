@@ -1,0 +1,124 @@
+import { Component, effect, input, output, signal, untracked } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { InputTextModule } from 'primeng/inputtext';
+import { SelectModule } from 'primeng/select';
+
+export interface OpcaoFiltro {
+  value: string;
+  label: string;
+}
+
+export interface DefinicaoFiltro {
+  name: string;
+  label: string;
+  options: OpcaoFiltro[];
+  placeholder?: string;
+}
+
+export type ValoresFiltro = Record<string, string> & { q: string };
+
+/**
+ * Barra de busca e filtros das listagens (UI-006).
+ *
+ * A filtragem é **server-side**: o componente só devolve os valores; quem
+ * consulta é a página. A busca sai com atraso para não disparar uma requisição
+ * por tecla digitada.
+ */
+@Component({
+  selector: 'sge-filter-bar',
+  imports: [FormsModule, InputTextModule, SelectModule],
+  template: `
+    <div class="barra-filtro">
+      <span class="barra-filtro__busca">
+        <i class="pi pi-search"></i>
+        <input
+          pInputText
+          type="search"
+          [placeholder]="placeholderBusca()"
+          [attr.aria-label]="placeholderBusca()"
+          [ngModel]="termo()"
+          (ngModelChange)="termo.set($event)"
+        />
+      </span>
+
+      @for (filtro of filtros(); track filtro.name) {
+        <p-select
+          [options]="filtro.options"
+          optionLabel="label"
+          optionValue="value"
+          [showClear]="true"
+          [placeholder]="filtro.placeholder ?? filtro.label"
+          [ariaLabel]="filtro.label"
+          [ngModel]="valores()[filtro.name] ?? ''"
+          (ngModelChange)="mudarFiltro(filtro.name, $event)"
+        />
+      }
+    </div>
+  `,
+  styles: `
+    .barra-filtro {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.75rem 0.875rem;
+      background: var(--p-content-background);
+      border: 1px solid var(--p-content-border-color);
+      border-radius: var(--p-content-border-radius);
+    }
+    .barra-filtro__busca {
+      position: relative;
+      flex: 1;
+      display: flex;
+      align-items: center;
+    }
+    .barra-filtro__busca i {
+      position: absolute;
+      left: 0.7rem;
+      font-size: 0.8rem;
+      color: var(--p-text-muted-color);
+      pointer-events: none;
+    }
+    .barra-filtro__busca input {
+      width: 100%;
+      padding-left: 2.1rem;
+    }
+  `,
+})
+export class FilterBar {
+  readonly valores = input.required<ValoresFiltro>();
+  readonly filtros = input<DefinicaoFiltro[]>([]);
+  readonly placeholderBusca = input('Buscar');
+  /** Atraso da busca, em ms. */
+  readonly atrasoMs = input(300);
+
+  readonly mudou = output<ValoresFiltro>();
+
+  protected readonly termo = signal('');
+
+  private temporizador: ReturnType<typeof setTimeout> | null = null;
+
+  constructor() {
+    // Mantém o campo em dia quando o filtro é limpo de fora (botão "limpar").
+    effect(() => {
+      const q = this.valores().q;
+      if (untracked(this.termo) !== q) this.termo.set(q);
+    });
+
+    // Debounce só da busca: os selects emitem na hora, porque a escolha já é
+    // deliberada e esperar 300 ms depois de um clique parece travamento.
+    effect(() => {
+      const termo = this.termo();
+      const valores = untracked(this.valores);
+      if (termo === valores.q) return;
+
+      if (this.temporizador) clearTimeout(this.temporizador);
+      this.temporizador = setTimeout(() => {
+        this.mudou.emit({ ...valores, q: termo });
+      }, untracked(this.atrasoMs));
+    });
+  }
+
+  protected mudarFiltro(nome: string, valor: string | null): void {
+    this.mudou.emit({ ...this.valores(), [nome]: valor ?? '' });
+  }
+}
