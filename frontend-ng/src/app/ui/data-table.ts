@@ -1,4 +1,5 @@
-import { Component, computed, input, output } from '@angular/core';
+import { Component, TemplateRef, computed, contentChild, input, output } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { TableModule, TableLazyLoadEvent } from 'primeng/table';
 
 /** Descrição de uma coluna. `campo` é a chave do objeto da linha. */
@@ -24,7 +25,7 @@ export interface PaginaSolicitada {
  */
 @Component({
   selector: 'sge-data-table',
-  imports: [TableModule],
+  imports: [NgTemplateOutlet, TableModule],
   template: `
     <p-table
       [value]="linhas()"
@@ -55,11 +56,15 @@ export interface PaginaSolicitada {
       </ng-template>
 
       <ng-template #body let-linha let-colunas="columns">
-        <tr>
-          @for (coluna of colunas; track coluna.campo) {
-            <td [class.coluna--numerica]="coluna.numerica">{{ linha[coluna.campo] }}</td>
-          }
-        </tr>
+        @if (modeloLinha(); as modelo) {
+          <ng-container *ngTemplateOutlet="modelo; context: { $implicit: linha }" />
+        } @else {
+          <tr>
+            @for (coluna of colunas; track coluna.campo) {
+              <td [class.coluna--numerica]="coluna.numerica">{{ linha[coluna.campo] }}</td>
+            }
+          </tr>
+        }
       </ng-template>
 
       <ng-template #emptymessage let-colunas>
@@ -94,10 +99,15 @@ export class DataTable {
 
   readonly paginaMudou = output<PaginaSolicitada>();
 
+  /**
+   * `<ng-template #linha let-item>` opcional para desenhar o `<tr>` — é o que
+   * permite etiquetas de situação e botões de ação na linha. Sem ele, cada
+   * coluna vira uma célula de texto.
+   */
+  protected readonly modeloLinha = contentChild<TemplateRef<unknown>>('linha');
+
   /** O PrimeNG conta registros a partir de 0; a aplicação conta páginas a partir de 1. */
-  protected readonly primeiroRegistro = computed(
-    () => (this.pagina() - 1) * this.tamanhoPagina(),
-  );
+  protected readonly primeiroRegistro = computed(() => (this.pagina() - 1) * this.tamanhoPagina());
 
   protected aoPedirPagina(evento: TableLazyLoadEvent): void {
     const tamanho = evento.rows ?? this.tamanhoPagina();

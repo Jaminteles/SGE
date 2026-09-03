@@ -80,3 +80,18 @@ export const permissaoGuard: CanActivateFn = async (rota) => {
     queryParams: { modulo: rota.routeConfig?.path ?? '' },
   });
 };
+
+/**
+ * Rotas de plataforma (cadastro de empresas e de usuários) — o backend as marca
+ * com `@RequireSuperAdmin()`. Também não é segurança: sem o token de um super
+ * admin a API recusa, esta guarda só evita abrir uma tela que não carregaria.
+ */
+export const superAdminGuard: CanActivateFn = async () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+
+  await auth.prontidao();
+
+  if (auth.superAdmin()) return true;
+  return router.createUrlTree(['/sem-permissao'], { queryParams: { modulo: 'plataforma' } });
+};

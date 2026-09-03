@@ -2,9 +2,10 @@
 
 Interface do Sistema de Gestão Empresarial e Financeira em **Angular 21 + PrimeNG**.
 
-> **Estado:** fundação da Sprint 18 **completa**, com 117 testes passando. A
-> fundação anterior em React foi removida no commit seguinte ao `483e777`; para
-> consultá-la, `git show 483e777:frontend/`.
+> **Estado:** fundação da Sprint 18 e telas de administração da Sprint 19
+> (UI-007 a UI-012) **completas**, com 141 testes passando. A fundação anterior
+> em React foi removida no commit seguinte ao `483e777`; para consultá-la,
+> `git show 483e777:frontend/`.
 
 ## Executar
 
@@ -317,6 +318,46 @@ Os campos das telas de autenticação são `signal`, não propriedades comuns. E
 modo zoneless, atribuir a uma propriedade dentro de um callback assíncrono não
 notifica o Angular — funcionaria só por carona numa outra escrita de signal
 próxima, o que é frágil demais para depender.
+
+## Administração (Sprint 19 — UI-007 a UI-012)
+
+As telas do módulo vivem em [`src/app/admin/`](src/app/admin), atrás da moldura
+de abas do [`AdminShell`](src/app/admin/admin-shell.ts); a trilha de auditoria
+fica em [`src/app/audit/`](src/app/audit), sob a rota `/auditoria` do menu.
+
+| Rota | Tela | Exigência |
+| --- | --- | --- |
+| `/administracao/empresa` | Cadastro da empresa ativa (UI-007) | `company:READ` |
+| `/administracao/empresas` | Empresas do grupo e ciclo de vida (UI-007) | super admin |
+| `/administracao/empresas/:id` | Cadastro de uma empresa, `nova` para criar | super admin |
+| `/administracao/filiais` | Filiais da empresa ativa (UI-007) | `branches:READ` |
+| `/administracao/configuracoes` | Categorias, centros de custo e parâmetros (UI-008) | `categories`/`cost-centers`/`settings:READ` |
+| `/administracao/usuarios` | Vínculos da empresa e, para o super admin, usuários (UI-009) | `memberships:READ` |
+| `/administracao/perfis` | Matriz de permissões por recurso (UI-010) | `roles:READ` |
+| `/administracao/alcadas` | Faixas de valor por processo e perfil (UI-011) | `approval-thresholds:READ` |
+| `/auditoria` | Trilha append-only com período e evento (UI-012) | `audit:READ` |
+
+Três decisões que o código repete e que valem registro:
+
+- **Dois níveis de autorização na mesma tela.** `/companies` e `/users` são
+  rotas de plataforma (`@RequireSuperAdmin()`) e saem com `semEmpresa()`, sem o
+  `x-company-id`; `/branches`, `/memberships`, `/roles` e
+  `/approval-thresholds` são da empresa ativa e levam o cabeçalho. Misturar os
+  dois numa listagem só produziria 403 — daí a aba de usuários da plataforma só
+  aparecer para o super admin.
+- **Filtro e paginação são do servidor.** O [`ListState`](src/app/core/lib/list-state.ts)
+  concentra o ciclo filtro → consulta → página → erro e descarta a resposta de
+  uma consulta já substituída. A única busca local é a da matriz de permissões:
+  o catálogo vem inteiro numa resposta, não é coleção paginada.
+- **Só se envia o que o DTO aceita.** O backend valida com
+  `forbidNonWhitelisted`, então campo em branco não vira `""` no corpo, o CNPJ
+  não vai no `PATCH` (o `UpdateCompanyDto` o omite) e a trilha não recebe `q`,
+  que o `QueryAuditDto` não declara.
+
+O que o Figma desenha e a API ainda não sustenta ficou de fora em vez de virar
+dado inventado: cidade/UF na listagem de filiais (o endereço não vem na lista —
+apareceria como um N+1), o filtro por regime tributário nas empresas e os KPIs
+de convites e 2FA da UI-009.
 
 ## Próximo passo
 

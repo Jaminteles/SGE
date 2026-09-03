@@ -15,7 +15,7 @@ consumido pela API — Swagger em `/api/docs`.
   do banco: M01 a M18, RLS multiempresa, triggers de auditoria e regras de negócio.
 - [`backend/`](backend/README.md) — API REST (NestJS). Sprints 1 a 10 implementadas.
 - [`frontend-ng/`](frontend-ng/README.md) — interface web (Angular 21 + PrimeNG).
-  Fundação da Sprint 18 completa.
+  Fundação da Sprint 18 e telas de administração da Sprint 19 completas.
 - `docs/` — ERS e planejamento de sprints.
 
 ## Telas Figma

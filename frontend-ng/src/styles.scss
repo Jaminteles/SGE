@@ -3,8 +3,9 @@
 
 :root {
   color-scheme: light;
-  --sge-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
-    Arial, sans-serif;
+  --sge-font:
+    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
   /* Fundo do app, um degrau abaixo do fundo dos cards (surface.900),
      para os painéis destacarem sem precisar de sombra. */
   --sge-app-bg: #f1f5f9;
@@ -253,5 +254,53 @@ body {
   padding-left: 1.1rem;
   font-size: 0.75rem;
   line-height: 1.5;
+  color: var(--p-text-muted-color);
+}
+
+/* ---------- Formulários e seções (UI-007 a UI-011) ----------
+   As telas de administração repetem a mesma anatomia do Figma: cartão com
+   título de seção e uma grade de campos que colapsa para uma coluna no
+   celular. Fica no global porque `.campo` também é global. */
+
+.espaco {
+  margin-top: 1rem;
+}
+
+.secao {
+  padding: 1.125rem;
+}
+
+.secao + .secao {
+  margin-top: 1rem;
+}
+
+.secao__titulo {
+  margin: 0 0 0.875rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--p-text-color);
+}
+
+.grade-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.875rem;
+}
+
+/* Coluna de ações das listagens: encostada à direita e sem quebra de linha. */
+.acoes {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.secundario {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--p-text-muted-color);
+}
+
+.nota {
+  margin: 0.875rem 0 0;
+  font-size: 0.72rem;
   color: var(--p-text-muted-color);
 }
