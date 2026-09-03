@@ -95,6 +95,89 @@ CREATE TABLE IF NOT EXISTS integracao (
     CONSTRAINT ck_integracao_parametros CHECK (jsonb_typeof(parametros) = 'object')
 );
 
+
+-- Reconciliacao com a versao de bd/03.
+--
+-- `integracao` nasce em 03_schema_contabil_governanca.sql com o desenho
+-- anterior do M18 (configuracao/url_base/contadores agregados). O
+-- CREATE TABLE IF NOT EXISTS acima nao faz nada quando a tabela ja existe --
+-- e era por isso que uma instalacao limpa parava aqui, no primeiro uso de
+-- `parametros`. As colunas do desenho definitivo entram por ALTER, de forma
+-- idempotente, e as colunas antigas ficam onde estao: derruba-las apagaria
+-- dado de quem ja instalou, e todas tem default ou aceitam nulo, entao nao
+-- atrapalham a escrita pela API.
+ALTER TABLE integracao
+    ADD COLUMN IF NOT EXISTS codigo              varchar(60),
+    ADD COLUMN IF NOT EXISTS ambiente            varchar(20) NOT NULL DEFAULT 'PRODUCAO',
+    ADD COLUMN IF NOT EXISTS parametros          jsonb NOT NULL DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS ativo               boolean NOT NULL DEFAULT true,
+    ADD COLUMN IF NOT EXISTS timeout_ms          integer NOT NULL DEFAULT 10000,
+    ADD COLUMN IF NOT EXISTS max_tentativas      smallint NOT NULL DEFAULT 5,
+    ADD COLUMN IF NOT EXISTS falhas_consecutivas smallint NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS limite_falhas       smallint NOT NULL DEFAULT 10,
+    ADD COLUMN IF NOT EXISTS ultima_execucao_em  timestamptz,
+    ADD COLUMN IF NOT EXISTS ultimo_sucesso_em   timestamptz,
+    ADD COLUMN IF NOT EXISTS motivo_suspensao    text,
+    ADD COLUMN IF NOT EXISTS observacao          text;
+
+-- `codigo` e NOT NULL no desenho definitivo. Linha herdada nao tem codigo:
+-- deriva-se do nome, com um sufixo do id para nao colidir no unico por empresa.
+UPDATE integracao
+   SET codigo = left(regexp_replace(upper(nome), '[^A-Z0-9]+', '_', 'g'), 50)
+                || '_' || left(id::text, 8)
+ WHERE codigo IS NULL;
+
+ALTER TABLE integracao ALTER COLUMN codigo SET NOT NULL;
+
+-- INATIVA e o default do desenho definitivo: uma integracao recem-criada nao
+-- comeca chamando provedor externo sem alguem ligar (RF-126).
+ALTER TABLE integracao ALTER COLUMN status SET DEFAULT 'INATIVA';
+
+-- A identidade da integracao passou a ser (empresa_id, codigo). A unica antiga
+-- por (empresa_id, provider_id, nome) recusaria dois cadastros legitimos do
+-- mesmo provedor com o mesmo nome em ambientes diferentes.
+ALTER TABLE integracao DROP CONSTRAINT IF EXISTS uq_integracao;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                    WHERE conname = 'ck_integracao_ambiente'
+                      AND conrelid = 'gestao.integracao'::regclass) THEN
+        ALTER TABLE integracao ADD CONSTRAINT ck_integracao_ambiente
+            CHECK (ambiente IN ('PRODUCAO','HOMOLOGACAO','SANDBOX'));
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                    WHERE conname = 'ck_integracao_timeout'
+                      AND conrelid = 'gestao.integracao'::regclass) THEN
+        ALTER TABLE integracao ADD CONSTRAINT ck_integracao_timeout
+            CHECK (timeout_ms BETWEEN 500 AND 120000);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                    WHERE conname = 'ck_integracao_tentativas'
+                      AND conrelid = 'gestao.integracao'::regclass) THEN
+        ALTER TABLE integracao ADD CONSTRAINT ck_integracao_tentativas
+            CHECK (max_tentativas BETWEEN 1 AND 20);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                    WHERE conname = 'ck_integracao_limite'
+                      AND conrelid = 'gestao.integracao'::regclass) THEN
+        ALTER TABLE integracao ADD CONSTRAINT ck_integracao_limite
+            CHECK (limite_falhas BETWEEN 1 AND 100);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                    WHERE conname = 'ck_integracao_falhas'
+                      AND conrelid = 'gestao.integracao'::regclass) THEN
+        ALTER TABLE integracao ADD CONSTRAINT ck_integracao_falhas
+            CHECK (falhas_consecutivas >= 0);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                    WHERE conname = 'ck_integracao_parametros'
+                      AND conrelid = 'gestao.integracao'::regclass) THEN
+        ALTER TABLE integracao ADD CONSTRAINT ck_integracao_parametros
+            CHECK (jsonb_typeof(parametros) = 'object');
+    END IF;
+END $$;
+
 COMMENT ON TABLE integracao IS
     'RF-126 - integracao externa configurada pela empresa: provedor, credencial, ambiente e parametros.';
 COMMENT ON COLUMN integracao.parametros IS

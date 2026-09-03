@@ -53,6 +53,8 @@ describe('rotas de Administração (UI-007)', () => {
             ativaId: () => membership.companyId,
             ativa: () => membership,
             permissoes: () => new Set(PERMISSOES),
+            prontidao: () => Promise.resolve(),
+            recarregarPlataforma: () => {},
             precisaSelecionar: () => false,
           },
         },

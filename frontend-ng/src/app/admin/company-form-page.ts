@@ -8,6 +8,7 @@ import { TagModule } from 'primeng/tag';
 import { CompaniesApiService } from '../core/api/companies-api.service';
 import type { Company, CompanyInput, TaxRegime } from '../core/api/types';
 import { PermissionsService } from '../core/authz/permissions.service';
+import { CompanyService } from '../core/company/company.service';
 import { formatCnpj } from '../core/lib/format';
 import { Alert } from '../ui/alert';
 import { ErrorAlert } from '../ui/error-alert';
@@ -214,6 +215,7 @@ const VAZIO: Formulario = {
           <sge-text-field
             rotulo="Logradouro"
             name="addressStreet"
+            dica="Logradouro, cidade e UF vão juntos"
             [ngModel]="form().addressStreet"
             (ngModelChange)="mudar('addressStreet', $event)"
           />
@@ -280,6 +282,7 @@ export class CompanyFormPage {
   private readonly rota = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly permissoes = inject(PermissionsService);
+  private readonly empresas = inject(CompanyService);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly regimes = REGIMES;
@@ -358,6 +361,14 @@ export class CompanyFormPage {
         this.salvo.set(true);
         this.aplicar(empresa);
         if (modo === 'novo') {
+          // "nova" e ":id" são a mesma configuração de rota: o Angular reusa o
+          // componente e o construtor não roda de novo. Sem virar edição aqui,
+          // um segundo Salvar mandaria outro POST e criaria empresa duplicada.
+          this.modo.set('edicao');
+          // A empresa recém-criada precisa entrar na lista de selecionáveis do
+          // super admin — senão ele acabou de cadastrá-la e continua sem
+          // nenhuma empresa ativa para operar.
+          this.empresas.recarregarPlataforma();
           void this.router.navigate(['/administracao/empresas', empresa.id]);
         }
       },

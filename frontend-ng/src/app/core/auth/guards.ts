@@ -38,15 +38,30 @@ export const areaAutenticadaGuard: CanActivateFn = async (rota, estado) => {
   const router = inject(Router);
 
   await auth.prontidao();
+  // A lista de empresas do super admin chega por rede: decidir antes dela
+  // desviaria para a selecao de empresa mesmo com a escolha guardada valida.
+  await empresa.prontidao();
 
   if (!auth.autenticado()) {
     return router.createUrlTree(['/login'], { queryParams: { origem: estado.url } });
   }
-  if (empresa.ativaId() === null) {
+  if (empresa.ativaId() === null && !rotaDePlataforma(estado.url, auth.superAdmin())) {
     return router.createUrlTree(['/selecionar-empresa']);
   }
   return true;
 };
+
+/**
+ * Cadastro de empresas: única área que o super admin abre sem empresa ativa.
+ *
+ * Numa instalação nova ele não tem vínculo nenhum e ainda não existe empresa
+ * para escolher — sem esta exceção, a tela que cadastra a primeira ficaria
+ * atrás de uma seleção impossível. As rotas de `/companies` não são escopadas
+ * por empresa no backend, então não falta cabeçalho nenhum aqui.
+ */
+function rotaDePlataforma(url: string, superAdmin: boolean): boolean {
+  return superAdmin && url.split('?')[0].startsWith('/administracao/empresas');
+}
 
 /** Mantém quem já está logado fora das telas de login e recuperação de senha. */
 export const apenasAnonimoGuard: CanActivateFn = async () => {

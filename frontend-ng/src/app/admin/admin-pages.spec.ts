@@ -1,7 +1,7 @@
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, provideRouter } from '@angular/router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { SGE_INTERCEPTORS } from '../core/api/interceptors';
@@ -11,6 +11,7 @@ import { CompanyService } from '../core/company/company.service';
 import { makeMembership, makeUser } from '../core/test/factories';
 import { AuditPage } from '../audit/audit-page';
 import { CompaniesPage } from './companies-page';
+import { CompanyFormPage } from './company-form-page';
 import { RolesPage } from './roles-page';
 import { consultaPadrao } from './filtros';
 
@@ -50,6 +51,8 @@ function prepararSessao(permissoes: string[], { superAdmin = false } = {}): void
           ativaId: () => membership.companyId,
           ativa: () => membership,
           permissoes: () => new Set(permissoes),
+          prontidao: () => Promise.resolve(),
+          recarregarPlataforma: () => {},
         },
       },
     ],
@@ -122,6 +125,52 @@ describe('CompaniesPage (UI-007)', () => {
     mock.expectOne(`${BASE}/companies/empresa-1/inactivate`).flush({});
     mock.expectOne((r) => r.url === `${BASE}/companies`).flush(paginado([]));
     mock.verify();
+  });
+});
+
+describe('CompanyFormPage (UI-007)', () => {
+  const NOVA = {
+    id: 'empresa-nova',
+    legalName: 'Empresa Fantasma Teste LTDA',
+    tradeName: null,
+    taxId: '11222333000181',
+    taxRegime: null,
+    isActive: true,
+    currency: 'BRL',
+  };
+
+  it('vira edição depois de criar — o segundo Salvar não pode duplicar a empresa', async () => {
+    prepararSessao([], { superAdmin: true });
+    // A rota diz qual dos tres destinos do formulario esta em uso.
+    TestBed.overrideProvider(ActivatedRoute, {
+      useValue: { snapshot: { paramMap: { get: () => 'nova' } } },
+    });
+    const mock = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(CompanyFormPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const pagina = fixture.componentInstance as unknown as {
+      mudar: (campo: 'legalName' | 'taxId', valor: string) => void;
+      salvar: () => void;
+    };
+
+    pagina.mudar('legalName', 'Empresa Fantasma Teste LTDA');
+    pagina.mudar('taxId', '11222333000181');
+    pagina.salvar();
+
+    const criacao = mock.expectOne(`${BASE}/companies`);
+    expect(criacao.request.method).toBe('POST');
+    criacao.flush(NOVA);
+    fixture.detectChanges();
+
+    // "nova" e ":id" sao a mesma rota: o componente e reusado.
+    pagina.salvar();
+
+    const segunda = mock.expectOne(`${BASE}/companies/empresa-nova`);
+    expect(segunda.request.method).toBe('PATCH');
+    segunda.flush(NOVA);
   });
 });
 

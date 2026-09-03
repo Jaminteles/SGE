@@ -199,6 +199,7 @@ const VAZIO: Formulario = {
         <sge-text-field
           rotulo="Logradouro"
           name="addressStreet"
+          dica="Logradouro, cidade e UF vão juntos"
           [ngModel]="form().addressStreet"
           (ngModelChange)="mudar('addressStreet', $event)"
         />

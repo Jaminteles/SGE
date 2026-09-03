@@ -73,6 +73,15 @@ describe('guardas de rota', () => {
       .flush({ accessToken: 'tok', refreshToken: 'ref', tokenType: 'Bearer', user: usuario });
     await entrando;
     TestBed.tick();
+
+    // O super admin escolhe entre todas as empresas: o servico busca a lista
+    // assim que a sessao existe, e as guardas esperam por ela.
+    if (usuario.isSuperAdmin) {
+      mock
+        .expectOne((r) => r.url === `${BASE}/companies`)
+        .flush({ data: [], total: 0, page: 1, pageSize: 100, totalPages: 1 });
+      TestBed.tick();
+    }
   }
 
   const comUmVinculo = () =>
@@ -91,6 +100,57 @@ describe('guardas de rota', () => {
     });
 
   describe('areaAutenticadaGuard', () => {
+    it('espera a lista do super admin antes de decidir (F5 numa rota interna)', async () => {
+      // Um F5: a escolha ja esta no storage quando os services nascem. O super
+      // admin nao tem vinculo, entao ela so volta a valer com a lista da
+      // plataforma -- e a guarda precisa esperar por ela.
+      TestBed.resetTestingModule();
+      activeCompanyStore.set(EMPRESA_A);
+      TestBed.configureTestingModule({
+        providers: [
+          provideHttpClient(withInterceptors(SGE_INTERCEPTORS)),
+          provideHttpClientTesting(),
+          provideRouter(rotas),
+        ],
+      });
+      router = TestBed.inject(Router);
+      mock = TestBed.inject(HttpTestingController);
+      TestBed.inject(PermissionsService);
+
+      const auth = TestBed.inject(AuthService);
+      const entrando = auth.login('admin@sge.local', 'senha');
+      mock.expectOne(`${BASE}/auth/login`).flush({
+        accessToken: 'tok',
+        refreshToken: 'ref',
+        tokenType: 'Bearer',
+        user: makeUser({ isSuperAdmin: true, memberships: [] }),
+      });
+      await entrando;
+      TestBed.tick();
+
+      const navegacao = router.navigateByUrl('/financeiro');
+      mock
+        .expectOne((r) => r.url === `${BASE}/companies`)
+        .flush({
+          data: [
+            {
+              id: EMPRESA_A,
+              legalName: 'Empresa Fantasma Teste LTDA',
+              tradeName: null,
+              taxId: null,
+              isActive: true,
+            },
+          ],
+          total: 1,
+          page: 1,
+          pageSize: 100,
+          totalPages: 1,
+        });
+      await navegacao;
+
+      expect(router.url).toBe('/financeiro');
+    });
+
     it('manda ao login quem não tem sessão, guardando a origem', async () => {
       await router.navigateByUrl('/financeiro');
       expect(router.url).toBe('/login?origem=%2Ffinanceiro');

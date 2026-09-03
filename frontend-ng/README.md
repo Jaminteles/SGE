@@ -349,6 +349,13 @@ Três decisões que o código repete e que valem registro:
   concentra o ciclo filtro → consulta → página → erro e descarta a resposta de
   uma consulta já substituída. A única busca local é a da matriz de permissões:
   o catálogo vem inteiro numa resposta, não é coleção paginada.
+- **O super admin escolhe entre todas as empresas.** O `PermissionsGuard`
+  aceita dele qualquer `x-company-id`, sem exigir vínculo, então o
+  `CompanyService` mescla os vínculos com `GET /companies`. Sem isso, uma
+  instalação nova ficava sem saída: o super admin nasce sem vínculo e a tela que
+  cadastra a primeira empresa é interna. Por isso também `/administracao/empresas`
+  é a única rota que abre sem empresa ativa, e as guardas esperam essa lista
+  antes de decidir — num F5 ela chega depois da navegação.
 - **Só se envia o que o DTO aceita.** O backend valida com
   `forbidNonWhitelisted`, então campo em branco não vira `""` no corpo, o CNPJ
   não vai no `PATCH` (o `UpdateCompanyDto` o omite) e a trilha não recebe `q`,

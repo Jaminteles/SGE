@@ -55,17 +55,32 @@ import { formatCnpj } from '../core/lib/format';
               }
             </button>
           } @empty {
-            <p class="auth__rodape">
-              Seu usuário não tem vínculo com nenhuma empresa ativa. Fale com o administrador.
-            </p>
+            @if (auth.superAdmin()) {
+              <p class="auth__rodape">
+                Nenhuma empresa cadastrada ainda. Comece cadastrando a primeira (RF-001).
+              </p>
+            } @else {
+              <p class="auth__rodape">
+                Seu usuário não tem vínculo com nenhuma empresa ativa. Fale com o administrador.
+              </p>
+            }
           }
 
-          <p-button
-            label="Continuar"
-            [fluid]="true"
-            [disabled]="empresa.ativaId() === null"
-            (onClick)="continuar()"
-          />
+          @if (auth.superAdmin() && empresa.empresas().length === 0) {
+            <p-button
+              label="Cadastrar empresa"
+              icon="pi pi-plus"
+              [fluid]="true"
+              (onClick)="cadastrarEmpresa()"
+            />
+          } @else {
+            <p-button
+              label="Continuar"
+              [fluid]="true"
+              [disabled]="empresa.ativaId() === null"
+              (onClick)="continuar()"
+            />
+          }
         </div>
 
         <p class="auth__rodape">O isolamento real é garantido pela RLS do PostgreSQL.</p>
@@ -88,5 +103,10 @@ export class CompanySelectPage {
 
   protected continuar(): void {
     void this.router.navigate(['/']);
+  }
+
+  /** Saída do ovo e da galinha: o super admin cadastra a primeira empresa. */
+  protected cadastrarEmpresa(): void {
+    void this.router.navigate(['/administracao/empresas/nova']);
   }
 }

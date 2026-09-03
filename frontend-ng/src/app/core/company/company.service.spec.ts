@@ -23,7 +23,10 @@ describe('CompanyService', () => {
     activeCompanyStore.set(null);
 
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(withInterceptors(SGE_INTERCEPTORS)), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(withInterceptors(SGE_INTERCEPTORS)),
+        provideHttpClientTesting(),
+      ],
     });
     mock = TestBed.inject(HttpTestingController);
   });
@@ -196,5 +199,49 @@ describe('CompanyService', () => {
     expect(empresa.ativaId()).toBe(EMPRESA_B);
     expect(empresa.ativa()?.companyId).toBe(EMPRESA_B);
     expect(activeCompanyStore.get()).toBe(EMPRESA_B);
+  });
+
+  describe('super admin da plataforma', () => {
+    /** Responde a busca que o serviço dispara para o super admin. */
+    function responderPlataforma(empresas: unknown[]): void {
+      mock
+        .expectOne((r) => r.url === `${BASE}/companies`)
+        .flush({ data: empresas, total: empresas.length, page: 1, pageSize: 100, totalPages: 1 });
+      TestBed.tick();
+    }
+
+    it('escolhe empresa sem vínculo — o backend aceita qualquer x-company-id dele', async () => {
+      const empresa = await autenticar(makeUser({ isSuperAdmin: true, memberships: [] }));
+
+      responderPlataforma([
+        {
+          id: EMPRESA_B,
+          legalName: 'Empresa Sem Vínculo LTDA',
+          tradeName: null,
+          taxId: null,
+          isActive: true,
+        },
+      ]);
+
+      expect(empresa.empresas().map((m) => m.companyId)).toEqual([EMPRESA_B]);
+      expect(empresa.ativaId()).toBe(EMPRESA_B);
+    });
+
+    it('não fica sem saída quando ainda não existe empresa nenhuma', async () => {
+      const empresa = await autenticar(makeUser({ isSuperAdmin: true, memberships: [] }));
+
+      responderPlataforma([]);
+
+      // Sem empresa para escolher, a tela de seleção oferece o cadastro da
+      // primeira — e a rota de empresas abre sem empresa ativa.
+      expect(empresa.empresas()).toEqual([]);
+      expect(empresa.precisaSelecionar()).toBe(true);
+    });
+
+    it('não busca a plataforma para quem não é super admin', async () => {
+      await autenticar(makeUser({ memberships: [makeMembership({ companyId: EMPRESA_A })] }));
+
+      mock.expectNone((r) => r.url === `${BASE}/companies`);
+    });
   });
 });
