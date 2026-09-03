@@ -326,5 +326,13 @@ permissões) ainda depende do backend NestJS no ar.
 
 As telas de referência estão no Figma:
 [SGE — Telas do sistema](https://www.figma.com/design/2fHfjDKNSzL2QJiM8jPkI5)
-(74 telas). Elas são agnósticas de framework — a troca para Angular não as
-invalida.
+(74 telas). A estrutura delas é agnóstica de framework — a troca para Angular
+não as invalida —, e desde a Sprint 18 a pintura acompanha o preset: as 74
+telas foram recoloridas para o tema escuro (primária violeta, superfície
+carvão azulado, campo com raio 8 e conteúdo com 12).
+
+O arquivo também tem a coleção de variáveis `SGE · Tokens (PrimeNG)`, com as
+primitivas `primary/*` e `surface/*` e os semânticos do Aura
+(`content-background`, `text-muted-color`, `form-field-border-color`…) nos
+modos **Claro** e **Escuro** — os mesmos dois lados que a função `light-dark()`
+resolve em [`sge-preset.ts`](src/app/theme/sge-preset.ts).

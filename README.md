@@ -22,7 +22,10 @@ consumido pela API — Swagger em `/api/docs`.
 
 - **[SGE — Telas do sistema](https://www.figma.com/design/2fHfjDKNSzL2QJiM8jPkI5)** — as 74 telas
   do sistema numa única página (`SGE — Todas as telas`), em 16 faixas por módulo, a 1440×900 e
-  com a paleta do tema. Cada frame leva o código `UI-xxx` da planilha.
+  com a paleta do tema. Cada frame leva o código `UI-xxx` da planilha. Desde a Sprint 18 as
+  telas estão no tema escuro do preset `sge-preset.ts` (primária violeta, superfície carvão
+  azulado), e o arquivo traz a coleção de variáveis `SGE · Tokens (PrimeNG)` com os modos
+  Claro e Escuro.
 - [ERP — Telas](https://www.figma.com/design/PA06FnojAoWND0fa0uVeve/ERP-%E2%80%94-Telas?node-id=0-1)
   — arquivo original com os rascunhos da Sprint 18.
 
