@@ -1331,6 +1331,8 @@ export interface FinancialEntry {
   paymentTermId: string | null;
   paymentTerm: CodedRef | null;
   origin: string | null;
+  /** Pedido de compra que originou o título (RF-041), quando houver. */
+  purchaseOrderId?: string | null;
   status: EntryStatus;
   approvalStatus: ApprovalStatus;
   canceledAt: string | null;
@@ -1608,4 +1610,289 @@ export interface CashAlertEvaluationSummary {
   evaluatedAt: string;
   breached: number;
   alerts: CashAlertEvaluation[];
+}
+
+/** Resultado de `GET /approval-thresholds/evaluate` (RF-012). */
+export interface ApprovalEvaluation {
+  operation: string;
+  amount: string;
+  requiresApproval: boolean;
+  authorizedRoles: { id: string; name: string }[];
+  matchedThresholds: ApprovalThreshold[];
+}
+
+// ---------------------------------------------------------------------------
+// Compras — pedidos, recebimento e histórico (RF-036 a RF-042 — UI-030 a UI-035)
+// ---------------------------------------------------------------------------
+
+export type PurchaseOrderStatus =
+  | 'RASCUNHO'
+  | 'AGUARDANDO_APROVACAO'
+  | 'APROVADO'
+  | 'REPROVADO'
+  | 'PARCIALMENTE_RECEBIDO'
+  | 'RECEBIDO'
+  | 'CANCELADO';
+
+/** Item negociado do pedido (RF-037). `lineAmount` é calculado pelo banco. */
+export interface PurchaseOrderItem {
+  id: string;
+  orderId: string;
+  sequence: number;
+  productId: string | null;
+  product: { id: string; code: string; description: string; tracksStock: boolean } | null;
+  description: string;
+  /** Quantidades e preço unitário com até 6 casas; valores com 2 (RN-012). */
+  quantity: string;
+  receivedQuantity: string;
+  unitPrice: string;
+  discountAmount: string;
+  /** Parcela do frete/seguro/despesas do pedido — rateio feito pelo banco. */
+  apportionedFreight: string;
+  lineAmount: string;
+  costCenterId: string | null;
+  costCenter: CodedRef | null;
+  locationId: string | null;
+  location: CodedRef | null;
+  note: string | null;
+}
+
+/** Entrega registrada para o pedido, como vem no detalhe dele. */
+export interface PurchaseOrderReceiptRef {
+  id: string;
+  number: string;
+  receivedAt: string;
+  hasDivergence: boolean;
+  generatedStock: boolean;
+  generatedPayable: boolean;
+}
+
+/** Pedido de compra (`gestao.pedido_compra`). Totais projetados pelo banco. */
+export interface PurchaseOrder {
+  id: string;
+  number: string;
+  partnerId: string;
+  partner: { id: string; legalName: string; tradeName: string | null } | null;
+  branchId: string | null;
+  branch: CodedRef | null;
+  /** Quem abriu o pedido — não pode aprová-lo (RN-003). */
+  requesterId: string | null;
+  requester: { id: string; name: string } | null;
+  buyerId: string | null;
+  buyer: { id: string; registration: string; name: string } | null;
+  orderDate: string;
+  expectedDate: string | null;
+  paymentTermId: string | null;
+  paymentTerm: CodedRef | null;
+  paymentMethodId: string | null;
+  paymentMethod: (CodedRef & { method: PaymentMethodType }) | null;
+  costCenterId: string | null;
+  costCenter: CodedRef | null;
+  categoryId: string | null;
+  category: (CodedRef & { type: EntryType }) | null;
+  productsAmount: string;
+  discountAmount: string;
+  freightAmount: string;
+  insuranceAmount: string;
+  otherExpenseAmount: string;
+  totalAmount: string;
+  status: PurchaseOrderStatus;
+  approvalStatus: ApprovalStatus;
+  approvedById: string | null;
+  approvedBy: { id: string; name: string } | null;
+  approvedAt: string | null;
+  note: string | null;
+  canceledAt: string | null;
+  cancelReason: string | null;
+  createdById: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items: PurchaseOrderItem[];
+  receipts: PurchaseOrderReceiptRef[];
+}
+
+export interface PurchaseOrderItemInput {
+  productId?: string;
+  description?: string;
+  quantity: string;
+  unitPrice: string;
+  discountAmount?: string;
+  costCenterId?: string;
+  locationId?: string;
+  note?: string;
+}
+
+/** `CreatePurchaseOrderDto` — não há total: ele é do banco. */
+export interface PurchaseOrderInput {
+  partnerId: string;
+  branchId?: string;
+  buyerId?: string;
+  orderDate?: string;
+  expectedDate?: string;
+  paymentTermId?: string;
+  paymentMethodId?: string;
+  costCenterId?: string;
+  categoryId?: string;
+  discountAmount?: string;
+  freightAmount?: string;
+  insuranceAmount?: string;
+  otherExpenseAmount?: string;
+  note?: string;
+  items: PurchaseOrderItemInput[];
+}
+
+/**
+ * `UpdatePurchaseOrderDto` — `items`, quando presente, substitui a lista.
+ * `null` num campo opcional o limpa (o backend distingue ausente de nulo).
+ */
+export type PurchaseOrderUpdateInput = {
+  [K in Exclude<keyof PurchaseOrderInput, 'items'>]?: PurchaseOrderInput[K] | null;
+} & { items?: PurchaseOrderItemInput[] };
+
+/** QUANTIDADE | PRECO | AMBOS | NENHUMA — apurado por trigger (bd/11). */
+export type DivergenceType = 'QUANTIDADE' | 'PRECO' | 'AMBOS' | 'NENHUMA';
+
+/** Linha conferida (`gestao.recebimento_item`). */
+export interface GoodsReceiptItem {
+  id: string;
+  receiptId: string;
+  orderItemId: string | null;
+  orderItem: { id: string; sequence: number; description: string } | null;
+  productId: string | null;
+  product: { id: string; code: string; description: string } | null;
+  orderedQuantity: string | null;
+  receivedQuantity: string;
+  orderedPrice: string | null;
+  documentPrice: string | null;
+  quantityDivergence: string | null;
+  divergenceType: DivergenceType | null;
+  accepted: boolean;
+  note: string | null;
+}
+
+/** Recebimento (`gestao.recebimento`) — append-only no banco. */
+export interface GoodsReceipt {
+  id: string;
+  orderId: string | null;
+  order: { id: string; number: string; status: PurchaseOrderStatus; partnerId: string } | null;
+  branchId: string | null;
+  branch: CodedRef | null;
+  fiscalDocumentId: string | null;
+  fiscalDocument: {
+    id: string;
+    number: string;
+    series: string | null;
+    accessKey: string | null;
+  } | null;
+  number: string;
+  receivedAt: string;
+  locationId: string | null;
+  location: CodedRef | null;
+  inspectorId: string | null;
+  inspector: { id: string; name: string } | null;
+  hasDivergence: boolean;
+  generatedStock: boolean;
+  generatedPayable: boolean;
+  note: string | null;
+  createdAt: string;
+  items: GoodsReceiptItem[];
+}
+
+export interface GoodsReceiptItemInput {
+  orderItemId: string;
+  receivedQuantity: string;
+  /** Ausente = igual ao preço do pedido. */
+  documentPrice?: string;
+  /** `false` recusa a linha: fica registrada, mas não abate o pedido. */
+  accepted?: boolean;
+  locationId?: string;
+  batch?: string;
+  note?: string;
+}
+
+/** Título a pagar da entrega (RF-041). Sem valor: ele é o que chegou. */
+export interface GoodsReceiptPayableInput {
+  categoryId?: string;
+  costCenterId?: string;
+  paymentMethodId?: string;
+  paymentTermId?: string;
+  firstDueDate?: string;
+  installmentCount?: number;
+  intervalDays?: number;
+  documentReference?: string;
+  dailyInterestRate?: string;
+  penaltyRate?: string;
+}
+
+export interface GoodsReceiptInput {
+  receivedAt?: string;
+  locationId?: string;
+  branchId?: string;
+  fiscalDocumentId?: string;
+  note?: string;
+  generatePayable?: boolean;
+  payable?: GoodsReceiptPayableInput;
+  items: GoodsReceiptItemInput[];
+}
+
+/** Linha de `vw_historico_compra` (RF-042). */
+export interface PurchaseHistoryLine {
+  orderItemId: string;
+  orderId: string;
+  number: string;
+  orderDate: string;
+  status: PurchaseOrderStatus;
+  partner: { id: string; legalName: string | null };
+  product: { id: string; code: string | null } | null;
+  description: string;
+  quantity: string;
+  receivedQuantity: string;
+  pendingQuantity: string;
+  unitPrice: string;
+  lineAmount: string;
+  landedUnitCost: string | null;
+}
+
+export interface PurchaseHistorySummary {
+  lines: number;
+  quantity: string;
+  amount: string;
+  /** Média ponderada pela quantidade — `null` sem quantidade. */
+  averagePrice: string | null;
+  minPrice: string | null;
+  maxPrice: string | null;
+  lastOrderDate: string | null;
+}
+
+export interface PurchaseHistoryResult extends PaginatedResult<PurchaseHistoryLine> {
+  summary: PurchaseHistorySummary;
+}
+
+// ---------------------------------------------------------------------------
+// Documentos fiscais — só o que o vínculo do pedido usa (RF-047)
+// ---------------------------------------------------------------------------
+
+export type FiscalDocumentStatus =
+  'RECEBIDO' | 'PROCESSANDO' | 'PROCESSADO' | 'ERRO' | 'DUPLICADO' | 'CANCELADO' | 'DENEGADO';
+
+export interface FiscalDocumentSummary {
+  id: string;
+  model: string;
+  accessKey: string | null;
+  number: string;
+  series: string | null;
+  issuedAt: string;
+  issuerName: string | null;
+  issuerPartner: { id: string; legalName: string; tradeName: string | null } | null;
+  totalAmount: string;
+  status: FiscalDocumentStatus;
+  purchaseOrderId: string | null;
+  receipts: { id: string; number: string; receivedAt: string; generatedStock: boolean }[];
+  financialEntries: {
+    id: string;
+    number: string;
+    type: EntryType;
+    netAmount: string;
+    status: EntryStatus;
+  }[];
 }
