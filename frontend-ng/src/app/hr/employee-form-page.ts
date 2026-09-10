@@ -3,7 +3,6 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
-import { CheckboxModule } from 'primeng/checkbox';
 import { DialogModule } from 'primeng/dialog';
 import { TagModule } from 'primeng/tag';
 
@@ -11,7 +10,7 @@ import { BranchesApiService } from '../core/api/branches-api.service';
 import { ConfigurationsApiService } from '../core/api/configurations-api.service';
 import { EmployeesApiService } from '../core/api/employees-api.service';
 import { HrStructureApiService } from '../core/api/hr-structure-api.service';
-import type { BankAccount, BankAccountInput, Employee, EmployeeInput } from '../core/api/types';
+import type { BankAccount, Employee, EmployeeInput } from '../core/api/types';
 import { PermissionsService } from '../core/authz/permissions.service';
 import { formatDate } from '../core/lib/format';
 import { Alert } from '../ui/alert';
@@ -20,7 +19,17 @@ import { ErrorAlert } from '../ui/error-alert';
 import type { OpcaoFiltro } from '../ui/filter-bar';
 import { SelectField } from '../ui/select-field';
 import { TextField } from '../ui/text-field';
-import { OPCOES_CHAVE_PIX, OPCOES_CONTRATO, OPCOES_TIPO_CONTA, ROTULO_STATUS } from './rotulos';
+import {
+  BankAccountFields,
+  CONTA_VAZIA,
+  type FormularioConta,
+  contaParaDto,
+  contaParaFormulario,
+  descricaoAgencia,
+  descricaoBanco,
+  descricaoConta,
+} from '../ui/bank-account-fields';
+import { OPCOES_CONTRATO, ROTULO_STATUS } from './rotulos';
 
 interface Formulario {
   registration: string;
@@ -60,36 +69,6 @@ const VAZIO: Formulario = {
   baseSalary: '',
 };
 
-interface FormularioConta {
-  bankCode: string;
-  bankName: string;
-  agency: string;
-  agencyDigit: string;
-  account: string;
-  accountDigit: string;
-  accountType: string;
-  holderName: string;
-  holderDocument: string;
-  pixKey: string;
-  pixKeyType: string;
-  isPrimary: boolean;
-}
-
-const CONTA_VAZIA: FormularioConta = {
-  bankCode: '',
-  bankName: '',
-  agency: '',
-  agencyDigit: '',
-  account: '',
-  accountDigit: '',
-  accountType: '',
-  holderName: '',
-  holderDocument: '',
-  pixKey: '',
-  pixKeyType: '',
-  isPrimary: false,
-};
-
 /**
  * Cadastro do funcionário com dados profissionais e bancários (RF-013 —
  * UI-013).
@@ -108,10 +87,10 @@ const CONTA_VAZIA: FormularioConta = {
     FormsModule,
     RouterLink,
     ButtonModule,
-    CheckboxModule,
     DialogModule,
     TagModule,
     Alert,
+    BankAccountFields,
     DecimalField,
     ErrorAlert,
     SelectField,
@@ -383,86 +362,8 @@ const CONTA_VAZIA: FormularioConta = {
         <sge-error-alert [erro]="falha" />
       }
 
-      <form class="grade-campos formulario" (ngSubmit)="salvarConta()">
-        <sge-text-field
-          rotulo="Código do banco"
-          name="bankCode"
-          dica="COMPE, 3 a 5 dígitos"
-          [ngModel]="formConta().bankCode"
-          (ngModelChange)="mudarConta('bankCode', $event)"
-        />
-        <sge-text-field
-          rotulo="Nome do banco"
-          name="bankName"
-          [ngModel]="formConta().bankName"
-          (ngModelChange)="mudarConta('bankName', $event)"
-        />
-        <sge-text-field
-          rotulo="Agência"
-          name="agency"
-          [ngModel]="formConta().agency"
-          (ngModelChange)="mudarConta('agency', $event)"
-        />
-        <sge-text-field
-          rotulo="Dígito da agência"
-          name="agencyDigit"
-          [ngModel]="formConta().agencyDigit"
-          (ngModelChange)="mudarConta('agencyDigit', $event)"
-        />
-        <sge-text-field
-          rotulo="Conta"
-          name="account"
-          [ngModel]="formConta().account"
-          (ngModelChange)="mudarConta('account', $event)"
-        />
-        <sge-text-field
-          rotulo="Dígito da conta"
-          name="accountDigit"
-          [ngModel]="formConta().accountDigit"
-          (ngModelChange)="mudarConta('accountDigit', $event)"
-        />
-        <sge-select-field
-          rotulo="Tipo de conta"
-          name="accountType"
-          [opcoes]="OPCOES_TIPO_CONTA"
-          [ngModel]="formConta().accountType"
-          (ngModelChange)="mudarConta('accountType', $event ?? '')"
-        />
-        <sge-text-field
-          rotulo="Titular"
-          name="holderName"
-          dica="Preencha quando diferente do funcionário"
-          [ngModel]="formConta().holderName"
-          (ngModelChange)="mudarConta('holderName', $event)"
-        />
-        <sge-text-field
-          rotulo="CPF/CNPJ do titular"
-          name="holderDocument"
-          [ngModel]="formConta().holderDocument"
-          (ngModelChange)="mudarConta('holderDocument', $event)"
-        />
-        <sge-text-field
-          rotulo="Chave PIX"
-          name="pixKey"
-          [ngModel]="formConta().pixKey"
-          (ngModelChange)="mudarConta('pixKey', $event)"
-        />
-        <sge-select-field
-          rotulo="Tipo da chave"
-          name="pixKeyType"
-          [opcoes]="OPCOES_CHAVE_PIX"
-          [ngModel]="formConta().pixKeyType"
-          (ngModelChange)="mudarConta('pixKeyType', $event ?? '')"
-        />
-        <label class="principal">
-          <p-checkbox
-            name="isPrimary"
-            [binary]="true"
-            [ngModel]="formConta().isPrimary"
-            (ngModelChange)="mudarConta('isPrimary', $event)"
-          />
-          <span>Conta principal para crédito</span>
-        </label>
+      <form class="formulario" (ngSubmit)="salvarConta()">
+        <sge-bank-account-fields [valor]="formConta()" (mudou)="formConta.set($event)" />
       </form>
 
       <ng-template #footer>
@@ -521,8 +422,6 @@ export class EmployeeFormPage {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly OPCOES_CONTRATO = OPCOES_CONTRATO;
-  protected readonly OPCOES_TIPO_CONTA = OPCOES_TIPO_CONTA;
-  protected readonly OPCOES_CHAVE_PIX = OPCOES_CHAVE_PIX;
 
   protected readonly novo = signal(false);
   protected readonly registro = signal<Employee | null>(null);
@@ -581,23 +480,9 @@ export class EmployeeFormPage {
     this.form.update((atual) => ({ ...atual, [campo]: valor }));
   }
 
-  protected mudarConta<K extends keyof FormularioConta>(campo: K, valor: FormularioConta[K]): void {
-    this.formConta.update((atual) => ({ ...atual, [campo]: valor }));
-  }
-
-  protected banco(conta: BankAccount): string {
-    return [conta.bankCode, conta.bankName].filter(Boolean).join(' — ') || '—';
-  }
-
-  protected agencia(conta: BankAccount): string {
-    if (!conta.agency) return '—';
-    return conta.agencyDigit ? `${conta.agency}-${conta.agencyDigit}` : conta.agency;
-  }
-
-  protected numeroConta(conta: BankAccount): string {
-    if (!conta.account) return '—';
-    return conta.accountDigit ? `${conta.account}-${conta.accountDigit}` : conta.account;
-  }
+  protected banco = descricaoBanco;
+  protected agencia = descricaoAgencia;
+  protected numeroConta = descricaoConta;
 
   protected salvar(): void {
     if (this.salvando()) return;
@@ -640,20 +525,7 @@ export class EmployeeFormPage {
   protected abrirEdicaoConta(conta: BankAccount): void {
     this.contaEmEdicao.set(conta);
     this.erroConta.set(null);
-    this.formConta.set({
-      bankCode: conta.bankCode ?? '',
-      bankName: conta.bankName ?? '',
-      agency: conta.agency ?? '',
-      agencyDigit: conta.agencyDigit ?? '',
-      account: conta.account ?? '',
-      accountDigit: conta.accountDigit ?? '',
-      accountType: conta.accountType ?? '',
-      holderName: conta.holderName ?? '',
-      holderDocument: conta.holderDocument ?? '',
-      pixKey: conta.pixKey ?? '',
-      pixKeyType: conta.pixKeyType ?? '',
-      isPrimary: conta.isPrimary,
-    });
+    this.formConta.set(contaParaFormulario(conta));
     this.contaAberta.set(true);
   }
 
@@ -664,7 +536,7 @@ export class EmployeeFormPage {
     this.erroConta.set(null);
 
     const alvo = this.contaEmEdicao();
-    const corpo = this.contaParaDto();
+    const corpo = contaParaDto(this.formConta());
     const requisicao = alvo
       ? this.api.updateBankAccount(funcionario.id, alvo.id, corpo)
       : this.api.createBankAccount(funcionario.id, corpo);
@@ -779,29 +651,6 @@ export class EmployeeFormPage {
     if (this.novo()) {
       dto.hireDate = form.hireDate;
       if (form.baseSalary.trim() !== '') dto.baseSalary = form.baseSalary;
-    }
-    return dto;
-  }
-
-  private contaParaDto(): BankAccountInput {
-    const form = this.formConta();
-    const dto: BankAccountInput = { isPrimary: form.isPrimary };
-    const opcionais: [keyof BankAccountInput, string][] = [
-      ['bankCode', form.bankCode.replace(/\D/g, '')],
-      ['bankName', form.bankName],
-      ['agency', form.agency.replace(/\D/g, '')],
-      ['agencyDigit', form.agencyDigit],
-      ['account', form.account.replace(/\D/g, '')],
-      ['accountDigit', form.accountDigit],
-      ['accountType', form.accountType],
-      ['holderName', form.holderName],
-      ['holderDocument', form.holderDocument.replace(/\D/g, '')],
-      ['pixKey', form.pixKey],
-      ['pixKeyType', form.pixKeyType],
-    ];
-    for (const [chave, valor] of opcionais) {
-      const limpo = valor.trim();
-      if (limpo !== '') Object.assign(dto, { [chave]: limpo });
     }
     return dto;
   }

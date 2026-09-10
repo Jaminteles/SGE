@@ -691,3 +691,543 @@ export interface ReimbursementInput {
   note?: string;
   items: ReimbursementItemInput[];
 }
+
+// ---------------------------------------------------------------------------
+// Cadastros e Estoque (Sprint 21 — UI-018 a UI-023)
+// ---------------------------------------------------------------------------
+
+export type PersonType = 'PF' | 'PJ' | 'ESTRANGEIRO';
+
+/** Papel exercido, usado como filtro da listagem (RF-022/RF-023). */
+export type PartnerRole = 'CLIENTE' | 'FORNECEDOR';
+
+export type PaymentMethodType =
+  | 'PIX'
+  | 'BOLETO'
+  | 'TED'
+  | 'DOC'
+  | 'TRANSFERENCIA_INTERNA'
+  | 'DEBITO_AUTOMATICO'
+  | 'CARTAO_CREDITO'
+  | 'CARTAO_DEBITO'
+  | 'DINHEIRO'
+  | 'CHEQUE'
+  | 'COMPENSACAO'
+  | 'OUTRO';
+
+export type ItemType = 'PRODUTO' | 'SERVICO' | 'MATERIA_PRIMA' | 'ATIVO_IMOBILIZADO';
+
+export type StockMovementType =
+  | 'ENTRADA'
+  | 'SAIDA'
+  | 'TRANSFERENCIA_ENTRADA'
+  | 'TRANSFERENCIA_SAIDA'
+  | 'AJUSTE_POSITIVO'
+  | 'AJUSTE_NEGATIVO'
+  | 'INVENTARIO';
+
+/** Tipos que o usuário pode lançar direto (`StockEntryType` do backend). */
+export type StockEntryType = 'ENTRADA' | 'SAIDA' | 'AJUSTE_POSITIVO' | 'AJUSTE_NEGATIVO';
+
+export type InventoryStatus = 'ABERTO' | 'EM_CONTAGEM' | 'CONCLUIDO' | 'CANCELADO';
+
+export type PartnerAddressType = 'PRINCIPAL' | 'COBRANCA' | 'ENTREGA' | 'CORRESPONDENCIA';
+
+/** Perfil do papel cliente (RF-022/RF-026) — `gestao.cliente`. */
+export interface CustomerProfile {
+  partnerId: string;
+  /** Decimal canônico em string (RN-012). */
+  creditLimit: string;
+  paymentTermId: string | null;
+  paymentMethodId: string | null;
+  salesRepId: string | null;
+  preferredDueDay: number | null;
+  isBlocked: boolean;
+  blockReason: string | null;
+}
+
+/** Perfil do papel fornecedor (RF-023/RF-026) — `gestao.fornecedor`. */
+export interface SupplierProfile {
+  partnerId: string;
+  paymentTermId: string | null;
+  paymentMethodId: string | null;
+  deliveryDays: number | null;
+  defaultCategoryId: string | null;
+  isApproved: boolean;
+  isBlocked: boolean;
+  blockReason: string | null;
+}
+
+/**
+ * Parceiro (RF-022 a RF-024) — `gestao.parceiro`.
+ *
+ * Tabela única com os dois papéis em flags: não existem "cliente" e
+ * "fornecedor" como cadastros separados, e o mesmo parceiro pode exercer os
+ * dois ao mesmo tempo.
+ */
+export interface Partner {
+  id: string;
+  companyId: string;
+  personType: PersonType;
+  code: string | null;
+  legalName: string;
+  tradeName: string | null;
+  cnpj: string | null;
+  cpf: string | null;
+  foreignDocument: string | null;
+  stateRegistration: string | null;
+  municipalRegistration: string | null;
+  icmsTaxpayer: boolean;
+  taxRegime: TaxRegime | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  isCustomer: boolean;
+  isSupplier: boolean;
+  note: string | null;
+  isActive: boolean;
+  customer: CustomerProfile | null;
+  supplier: SupplierProfile | null;
+}
+
+export interface CustomerProfileInput {
+  creditLimit?: string;
+  paymentTermId?: string;
+  paymentMethodId?: string;
+  salesRepId?: string;
+  preferredDueDay?: number;
+  isBlocked?: boolean;
+  blockReason?: string;
+}
+
+export interface SupplierProfileInput {
+  paymentTermId?: string;
+  paymentMethodId?: string;
+  deliveryDays?: number;
+  defaultCategoryId?: string;
+  isApproved?: boolean;
+  isBlocked?: boolean;
+  blockReason?: string;
+}
+
+export interface PartnerInput {
+  personType: PersonType;
+  code?: string;
+  legalName: string;
+  tradeName?: string;
+  cnpj?: string;
+  cpf?: string;
+  foreignDocument?: string;
+  stateRegistration?: string;
+  municipalRegistration?: string;
+  icmsTaxpayer?: boolean;
+  taxRegime?: TaxRegime;
+  email?: string;
+  phone?: string;
+  website?: string;
+  isCustomer?: boolean;
+  isSupplier?: boolean;
+  note?: string;
+  customer?: CustomerProfileInput;
+  supplier?: SupplierProfileInput;
+}
+
+/** Endereço do parceiro (RF-024) — `gestao.endereco`. */
+export interface PartnerAddress {
+  id: string;
+  type: PartnerAddressType;
+  street: string;
+  number: string | null;
+  complement: string | null;
+  district: string | null;
+  city: string;
+  state: string;
+  zipCode: string | null;
+  country: string;
+  ibgeCode: string | null;
+  isPrimary: boolean;
+}
+
+export interface PartnerAddressInput {
+  type?: PartnerAddressType;
+  street: string;
+  number?: string;
+  complement?: string;
+  district?: string;
+  city: string;
+  state: string;
+  zipCode?: string;
+  country?: string;
+  ibgeCode?: string;
+  isPrimary?: boolean;
+}
+
+/** Contato do parceiro (RF-024) — `gestao.contato`. */
+export interface PartnerContact {
+  id: string;
+  name: string;
+  role: string | null;
+  email: string | null;
+  phone: string | null;
+  mobile: string | null;
+  note: string | null;
+  isPrimary: boolean;
+}
+
+export interface PartnerContactInput {
+  name: string;
+  role?: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  note?: string;
+  isPrimary?: boolean;
+}
+
+/** Resumo por lado do financeiro no histórico do parceiro (RF-025). */
+export interface PartnerFinancialSide {
+  count: number;
+  netAmount: string;
+  settledAmount: string;
+  openBalance: string;
+}
+
+export interface PartnerHistory {
+  partner: {
+    id: string;
+    legalName: string;
+    isCustomer: boolean;
+    isSupplier: boolean;
+    isActive: boolean;
+    customerBlocked: boolean | null;
+    supplierBlocked: boolean | null;
+    creditLimit: string | null;
+    registeredAt: string;
+  };
+  period: { from: string | null; to: string | null };
+  financial: {
+    payable: PartnerFinancialSide;
+    receivable: PartnerFinancialSide;
+    /** O que ele nos deve menos o que devemos a ele. */
+    netExposure: string;
+  };
+  commercial: {
+    purchaseOrders: { count: number; totalAmount: string; lastOrderDate: string | null };
+    recentOrders: {
+      id: string;
+      number: string;
+      orderDate: string;
+      totalAmount: string;
+      status: string;
+    }[];
+  };
+  recentEntries: {
+    id: string;
+    type: EntryType;
+    number: string;
+    description: string;
+    issueDate: string;
+    netAmount: string;
+    settledAmount: string;
+    balance: string;
+    status: string;
+  }[];
+}
+
+/** Condição de pagamento (RF-026) — `gestao.condicao_pagamento`. */
+export interface PaymentTerm {
+  id: string;
+  code: string;
+  name: string;
+  installments: number;
+  intervalDays: number;
+  firstDueDays: number;
+  /** Percentual canônico em string. */
+  discountPercent: string;
+  isActive: boolean;
+}
+
+export interface PaymentTermInput {
+  code: string;
+  name: string;
+  installments?: number;
+  intervalDays?: number;
+  firstDueDays?: number;
+  discountPercent?: string;
+}
+
+/** Forma de pagamento (RF-026) — `gestao.forma_pagamento`. */
+export interface PaymentMethod {
+  id: string;
+  code: string;
+  name: string;
+  method: PaymentMethodType;
+  isActive: boolean;
+}
+
+export interface PaymentMethodInput {
+  code: string;
+  name: string;
+  method: PaymentMethodType;
+}
+
+/** Unidade de medida (RF-029) — `gestao.unidade_medida`. */
+export interface UnitOfMeasure {
+  id: string;
+  symbol: string;
+  description: string;
+  isActive: boolean;
+}
+
+export interface UnitOfMeasureInput {
+  symbol: string;
+  description: string;
+}
+
+/** Categoria do catálogo (RF-029) — `gestao.categoria_produto`. */
+export interface ProductCategory {
+  id: string;
+  parentId: string | null;
+  code: string;
+  name: string;
+  isActive: boolean;
+}
+
+export interface ProductCategoryInput {
+  code: string;
+  name: string;
+  parentId?: string;
+}
+
+/**
+ * Item do catálogo (RF-028 a RF-030) — `gestao.produto`.
+ *
+ * Quantidades e preços unitários chegam com até 6 casas decimais
+ * (`UNIT_VALUE_PATTERN`); dinheiro continua em 2.
+ */
+export interface Product {
+  id: string;
+  type: ItemType;
+  code: string;
+  barcode: string | null;
+  description: string;
+  extraDescription: string | null;
+  categoryId: string | null;
+  category: { id: string; code: string; name: string } | null;
+  unitId: string | null;
+  unit: { id: string; symbol: string; description: string } | null;
+  ncm: string | null;
+  cest: string | null;
+  defaultInboundCfop: string | null;
+  defaultOutboundCfop: string | null;
+  goodsOrigin: number | null;
+  serviceCodeLc116: string | null;
+  averageCost: string;
+  lastPurchaseCost: string | null;
+  lastPurchaseDate: string | null;
+  salePrice: string | null;
+  defaultMargin: string | null;
+  tracksStock: boolean;
+  minStock: string;
+  maxStock: string | null;
+  netWeight: string | null;
+  grossWeight: string | null;
+  isActive: boolean;
+}
+
+export interface ProductInput {
+  type?: ItemType;
+  code: string;
+  barcode?: string;
+  description: string;
+  extraDescription?: string;
+  categoryId?: string;
+  unitId?: string;
+  ncm?: string;
+  cest?: string;
+  defaultInboundCfop?: string;
+  defaultOutboundCfop?: string;
+  goodsOrigin?: number;
+  serviceCodeLc116?: string;
+  salePrice?: string;
+  defaultMargin?: string;
+  tracksStock?: boolean;
+  minStock?: string;
+  maxStock?: string;
+  netWeight?: string;
+  grossWeight?: string;
+}
+
+/** Fornecedor homologado do item (RF-030) — `gestao.produto_fornecedor`. */
+export interface ProductSupplier {
+  id: string;
+  productId: string;
+  partnerId: string;
+  partner: { id: string; legalName: string; tradeName: string | null } | null;
+  supplierCode: string | null;
+  referencePrice: string | null;
+  deliveryDays: number | null;
+  isPreferred: boolean;
+}
+
+export interface ProductSupplierInput {
+  partnerId: string;
+  supplierCode?: string;
+  referencePrice?: string;
+  deliveryDays?: number;
+  isPreferred?: boolean;
+}
+
+/** Local de estoque (RF-031) — `gestao.local_estoque`. */
+export interface StockLocation {
+  id: string;
+  branchId: string;
+  branch: { id: string; code: string; name: string } | null;
+  code: string;
+  name: string;
+  isDefault: boolean;
+  isActive: boolean;
+}
+
+export interface StockLocationInput {
+  branchId: string;
+  code: string;
+  name: string;
+  isDefault?: boolean;
+}
+
+/** Saldo por item e local (RF-031) — `gestao.saldo_estoque`. */
+export interface StockBalance {
+  id: string;
+  productId: string;
+  product: {
+    id: string;
+    code: string;
+    description: string;
+    minStock: string;
+    maxStock: string | null;
+  } | null;
+  locationId: string;
+  location: {
+    id: string;
+    code: string;
+    name: string;
+    branch: { id: string; code: string; name: string } | null;
+  } | null;
+  quantity: string;
+  reserved: string;
+  averageCost: string;
+  totalValue: string;
+}
+
+/** Item no ou abaixo do mínimo (RF-035). */
+export interface StockAlert {
+  productId: string;
+  code: string;
+  description: string;
+  locationId: string;
+  locationName: string;
+  quantity: string;
+  minStock: string;
+  quantityToReplenish: string;
+}
+
+/** Valorização a custo médio (RF-034). */
+export interface StockValuation {
+  totalValue: string;
+  locations: {
+    location: { id: string; code?: string; name?: string; branch?: { id: string; name: string } };
+    quantity: string;
+    totalValue: string;
+  }[];
+}
+
+/** Movimento do razão de estoque (RF-032) — append-only. */
+export interface StockMovement {
+  id: string;
+  productId: string;
+  product: { id: string; code: string; description: string } | null;
+  locationId: string;
+  location: { id: string; code: string; name: string } | null;
+  counterpartId: string | null;
+  counterpart: { id: string; code: string; name: string } | null;
+  type: StockMovementType;
+  movementDate: string;
+  quantity: string;
+  unitCost: string;
+  totalValue: string;
+  previousBalance: string | null;
+  newBalance: string | null;
+  origin: string | null;
+  originId: string | null;
+  batch: string | null;
+  note: string | null;
+  user: { id: string; name: string } | null;
+}
+
+export interface StockMovementInput {
+  type: StockEntryType;
+  productId: string;
+  locationId: string;
+  quantity: string;
+  unitCost?: string;
+  movementDate?: string;
+  batch?: string;
+  note?: string;
+}
+
+/** Transferência: uma operação com duas pernas, criadas juntas (RF-032). */
+export interface StockTransferInput {
+  productId: string;
+  fromLocationId: string;
+  toLocationId: string;
+  quantity: string;
+  movementDate?: string;
+  batch?: string;
+  note?: string;
+}
+
+/** Item contado do inventário (RF-033) — `gestao.inventario_item`. */
+export interface InventoryItem {
+  id: string;
+  productId: string;
+  product: { id: string; code: string; description: string } | null;
+  systemQuantity: string;
+  countedQuantity: string | null;
+  difference: string;
+  unitCost: string | null;
+  isAdjusted: boolean;
+  note: string | null;
+}
+
+/** Inventário (RF-033) — `gestao.inventario`. */
+export interface Inventory {
+  id: string;
+  locationId: string;
+  location: {
+    id: string;
+    code: string;
+    name: string;
+    branch: { id: string; code: string; name: string } | null;
+  } | null;
+  number: string;
+  description: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  status: InventoryStatus;
+  responsibleId: string | null;
+  responsible: { id: string; name: string } | null;
+  items: InventoryItem[];
+}
+
+export interface InventoryInput {
+  locationId: string;
+  description?: string;
+  responsibleId?: string;
+  /** Escopo da contagem; vazio = todos os itens com saldo no local. */
+  productIds?: string[];
+}
+
+export interface InventoryCountInput {
+  counts: { productId: string; countedQuantity: string; note?: string }[];
+}

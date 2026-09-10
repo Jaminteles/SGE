@@ -26,7 +26,10 @@ export function isCanonicalDecimal(value: string): boolean {
  * Converte o que o usuário digitou (pt-BR: "1.234,56") para o canônico
  * ("1234.56"). Não usa `parseFloat` em momento algum.
  */
-export function parseDecimalInput(input: string, { required = false } = {}): DecimalParseResult {
+export function parseDecimalInput(
+  input: string,
+  { required = false, casas = 2 } = {},
+): DecimalParseResult {
   const raw = input.trim();
   if (raw === '') {
     return { value: null, error: required ? 'Informe um valor.' : null };
@@ -51,8 +54,8 @@ export function parseDecimalInput(input: string, { required = false } = {}): Dec
   if (intPart === '' && fracPart === '') {
     return { value: null, error: 'Valor inválido.' };
   }
-  if (fracPart.length > 2) {
-    return { value: null, error: 'Use no máximo 2 casas decimais.' };
+  if (fracPart.length > casas) {
+    return { value: null, error: `Use no máximo ${casas} casas decimais.` };
   }
 
   const digits = `${intPart === '' ? '0' : intPart}.${fracPart.padEnd(2, '0')}`;
@@ -60,14 +63,22 @@ export function parseDecimalInput(input: string, { required = false } = {}): Dec
   return { value: normalized, error: null };
 }
 
-/** Exibe um decimal canônico em pt-BR ("1234.5" -> "1.234,50"). */
-export function formatDecimal(value: string | null | undefined): string {
+/**
+ * Exibe um decimal canônico em pt-BR ("1234.5" -> "1.234,50").
+ *
+ * `casas` é o **máximo** exibido, nunca o mínimo: sempre saem ao menos duas
+ * casas, e as demais só aparecem quando o valor as tem. Quantidade de estoque
+ * chega com até 6 (`UNIT_VALUE_PATTERN` do backend) e truncar em 2 esconderia
+ * fração de unidade real.
+ */
+export function formatDecimal(value: string | null | undefined, casas = 2): string {
   if (value === null || value === undefined || value === '') return '';
   const negative = value.startsWith('-');
   const unsigned = negative ? value.slice(1) : value;
   const [int = '0', frac = ''] = unsigned.split('.');
   const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return `${negative ? '-' : ''}${grouped},${frac.padEnd(2, '0').slice(0, 2)}`;
+  const decimais = frac.padEnd(2, '0').slice(0, Math.max(2, casas));
+  return `${negative ? '-' : ''}${grouped},${decimais}`;
 }
 
 /** Exibe um decimal canônico como moeda ("1234.5" -> "R$ 1.234,50"). */

@@ -63,6 +63,12 @@ export class DecimalField implements ControlValueAccessor {
   /** Erro vindo de fora (ex.: validação da API). */
   readonly erro = input<string | null>(null);
   readonly obrigatorio = input(false);
+  /**
+   * Casas decimais aceitas. Duas para dinheiro (`numeric(18,2)`); quantidade de
+   * estoque e preço unitário chegam a seis (`UNIT_VALUE_PATTERN` do backend), e
+   * recusá-las aqui rejeitaria valor que a API aceita.
+   */
+  readonly casas = input(2);
 
   protected readonly id = `sge-decimal-${++contador}`;
 
@@ -75,13 +81,16 @@ export class DecimalField implements ControlValueAccessor {
   protected readonly desabilitado = signal(false);
 
   protected readonly exibido = computed(
-    () => this.rascunho() ?? formatDecimal(this.canonico()),
+    () => this.rascunho() ?? formatDecimal(this.canonico(), this.casas()),
   );
 
   protected readonly erroExibido = computed(() => this.erro() ?? this.erroLocal());
 
   protected readonly descritoPor = computed(() => {
-    const partes = [this.dica() ? `${this.id}-dica` : null, this.erroExibido() ? `${this.id}-erro` : null];
+    const partes = [
+      this.dica() ? `${this.id}-dica` : null,
+      this.erroExibido() ? `${this.id}-erro` : null,
+    ];
     const juntas = partes.filter(Boolean).join(' ');
     return juntas === '' ? null : juntas;
   });
@@ -91,7 +100,10 @@ export class DecimalField implements ControlValueAccessor {
 
   protected aoDigitar(texto: string): void {
     this.rascunho.set(texto);
-    const analisado = parseDecimalInput(texto, { required: this.obrigatorio() });
+    const analisado = parseDecimalInput(texto, {
+      required: this.obrigatorio(),
+      casas: this.casas(),
+    });
     this.erroLocal.set(analisado.error);
     // Entrada inválida não propaga valor: o formulário fica com `null` em vez
     // de guardar algo que o backend recusaria.
@@ -102,6 +114,7 @@ export class DecimalField implements ControlValueAccessor {
     this.aoTocar();
     const analisado = parseDecimalInput(this.rascunho() ?? this.exibido(), {
       required: this.obrigatorio(),
+      casas: this.casas(),
     });
     this.erroLocal.set(analisado.error);
     if (analisado.error === null) {

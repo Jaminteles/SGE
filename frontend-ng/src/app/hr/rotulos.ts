@@ -184,21 +184,3 @@ export function consultaReembolso(filtros: ValoresFiltro): Consulta {
     status: filtros['status'] || undefined,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Dados bancários (RF-013)
-// ---------------------------------------------------------------------------
-
-export const OPCOES_TIPO_CONTA: OpcaoFiltro[] = [
-  { value: 'CORRENTE', label: 'Conta corrente' },
-  { value: 'POUPANCA', label: 'Poupança' },
-  { value: 'PAGAMENTO', label: 'Conta de pagamento' },
-];
-
-export const OPCOES_CHAVE_PIX: OpcaoFiltro[] = [
-  { value: 'CPF', label: 'CPF' },
-  { value: 'CNPJ', label: 'CNPJ' },
-  { value: 'EMAIL', label: 'E-mail' },
-  { value: 'TELEFONE', label: 'Telefone' },
-  { value: 'ALEATORIA', label: 'Aleatória' },
-];

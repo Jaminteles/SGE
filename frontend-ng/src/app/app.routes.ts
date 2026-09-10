@@ -29,10 +29,18 @@ const ROTAS_PRONTAS: Record<string, Route> = {
     loadComponent: () => import('./admin/admin-shell').then((m) => m.AdminShell),
     loadChildren: () => import('./admin/admin.routes').then((m) => m.ADMIN_ROUTES),
   },
+  cadastros: {
+    loadComponent: () => import('./cadastros/cadastros-shell').then((m) => m.CadastrosShell),
+    loadChildren: () => import('./cadastros/cadastros.routes').then((m) => m.CADASTROS_ROUTES),
+  },
   rh: {
     // Mesma moldura de abas da Administração; as telas ficam nas rotas filhas.
     loadComponent: () => import('./hr/hr-shell').then((m) => m.HrShell),
     loadChildren: () => import('./hr/hr.routes').then((m) => m.HR_ROUTES),
+  },
+  estoque: {
+    loadComponent: () => import('./estoque/estoque-shell').then((m) => m.EstoqueShell),
+    loadChildren: () => import('./estoque/estoque.routes').then((m) => m.ESTOQUE_ROUTES),
   },
   auditoria: {
     loadComponent: () => import('./audit/audit-page').then((m) => m.AuditPage),
