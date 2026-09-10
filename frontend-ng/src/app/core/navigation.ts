@@ -43,7 +43,7 @@ export const NAVIGATION: NavItem[] = [
     path: '/compras',
     label: 'Compras',
     icon: 'pi-shopping-cart',
-    permissions: { any: ['purchase-orders:READ', 'goods-receipts:READ'] },
+    permissions: { any: ['purchase-orders:READ', 'goods-receipts:READ', 'purchase-history:READ'] },
   },
   {
     path: '/estoque',

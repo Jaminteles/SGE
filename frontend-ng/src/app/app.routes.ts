@@ -38,6 +38,10 @@ const ROTAS_PRONTAS: Record<string, Route> = {
     loadComponent: () => import('./hr/hr-shell').then((m) => m.HrShell),
     loadChildren: () => import('./hr/hr.routes').then((m) => m.HR_ROUTES),
   },
+  compras: {
+    loadComponent: () => import('./compras/compras-shell').then((m) => m.ComprasShell),
+    loadChildren: () => import('./compras/compras.routes').then((m) => m.COMPRAS_ROUTES),
+  },
   estoque: {
     loadComponent: () => import('./estoque/estoque-shell').then((m) => m.EstoqueShell),
     loadChildren: () => import('./estoque/estoque.routes').then((m) => m.ESTOQUE_ROUTES),
