@@ -1231,3 +1231,381 @@ export interface InventoryInput {
 export interface InventoryCountInput {
   counts: { productId: string; countedQuantity: string; note?: string }[];
 }
+
+// ---------------------------------------------------------------------------
+// Financeiro — contas a pagar e receber (RF-051 a RF-058 — UI-024 a UI-028)
+// ---------------------------------------------------------------------------
+
+export type EntryStatus =
+  'ABERTO' | 'PARCIALMENTE_LIQUIDADO' | 'LIQUIDADO' | 'CANCELADO' | 'RENEGOCIADO';
+
+export type InstallmentStatus =
+  'ABERTA' | 'PARCIALMENTE_LIQUIDADA' | 'LIQUIDADA' | 'CANCELADA' | 'RENEGOCIADA';
+
+/** `NAO_REQUERIDA` = abaixo da alçada; `PENDENTE` bloqueia a baixa (RF-056). */
+export type ApprovalStatus = 'NAO_REQUERIDA' | 'PENDENTE' | 'APROVADO' | 'REPROVADO' | 'CANCELADO';
+
+export type AgingBucket = 'A_VENCER' | 'ATE_30' | 'DE_31_A_60' | 'DE_61_A_90' | 'ACIMA_DE_90';
+
+export interface CodedRef {
+  id: string;
+  code: string;
+  name: string;
+}
+
+/** Baixa da parcela (RF-057). Estorno é outra baixa, apontando para esta. */
+export interface Settlement {
+  id: string;
+  installmentId: string;
+  settlementDate: string;
+  principalAmount: string;
+  interestAmount: string;
+  penaltyAmount: string;
+  discountAmount: string;
+  totalAmount: string;
+  paymentMethodId: string | null;
+  paymentMethod: CodedRef | null;
+  method: PaymentMethodType | null;
+  isReversed: boolean;
+  reversalOfId: string | null;
+  reversedAt: string | null;
+  reversalReason: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface FinancialInstallment {
+  id: string;
+  entryId: string;
+  number: number;
+  totalInstallments: number;
+  dueDate: string;
+  /** Vencimento combinado antes da primeira prorrogação — preservado pelo banco. */
+  originalDueDate: string | null;
+  amount: string;
+  interestAmount: string;
+  penaltyAmount: string;
+  discountAmount: string;
+  settledAmount: string;
+  balance: string;
+  /** Percentuais canônicos em string (até 6 casas). */
+  dailyInterestRate: string;
+  penaltyRate: string;
+  settledAt: string | null;
+  status: InstallmentStatus;
+  barcode: string | null;
+  digitableLine: string | null;
+  bankIdentifier: string | null;
+  note: string | null;
+  settlements: Settlement[];
+}
+
+/** Título (`gestao.titulo`) — uma entidade só para as duas carteiras. */
+export interface FinancialEntry {
+  id: string;
+  type: EntryType;
+  number: string;
+  documentReference: string | null;
+  description: string;
+  partnerId: string | null;
+  partner: { id: string; legalName: string; tradeName: string | null } | null;
+  employeeId: string | null;
+  employee: { id: string; registration: string; name: string } | null;
+  branchId: string | null;
+  branch: CodedRef | null;
+  issueDate: string;
+  competenceDate: string;
+  grossAmount: string;
+  discountAmount: string;
+  netAmount: string;
+  settledAmount: string;
+  balance: string;
+  categoryId: string | null;
+  category: (CodedRef & { type: EntryType }) | null;
+  costCenterId: string | null;
+  costCenter: CodedRef | null;
+  /** Herdada da categoria (RF-054/RF-080) — não é digitada no título. */
+  ledgerAccountId: string | null;
+  paymentMethodId: string | null;
+  paymentMethod: (CodedRef & { method: PaymentMethodType }) | null;
+  paymentTermId: string | null;
+  paymentTerm: CodedRef | null;
+  origin: string | null;
+  status: EntryStatus;
+  approvalStatus: ApprovalStatus;
+  canceledAt: string | null;
+  cancelReason: string | null;
+  note: string | null;
+  createdById: string | null;
+  createdAt: string;
+  installments: FinancialInstallment[];
+}
+
+export interface FinancialInstallmentInput {
+  dueDate: string;
+  amount: string;
+  dailyInterestRate?: string;
+  penaltyRate?: string;
+  barcode?: string;
+  digitableLine?: string;
+  bankIdentifier?: string;
+  note?: string;
+}
+
+/**
+ * Criação do título (`CreateFinancialEntryDto`). As parcelas saem da lista
+ * explícita, da condição de pagamento ou do parcelamento simples — nessa ordem.
+ */
+export interface FinancialEntryInput {
+  type: EntryType;
+  description: string;
+  partnerId?: string;
+  employeeId?: string;
+  branchId?: string;
+  documentReference?: string;
+  issueDate?: string;
+  competenceDate?: string;
+  grossAmount: string;
+  discountAmount?: string;
+  categoryId?: string;
+  costCenterId?: string;
+  paymentMethodId?: string;
+  paymentTermId?: string;
+  installments?: FinancialInstallmentInput[];
+  installmentCount?: number;
+  firstDueDate?: string;
+  intervalDays?: number;
+  dailyInterestRate?: string;
+  penaltyRate?: string;
+  note?: string;
+}
+
+/** Edição (`UpdateFinancialEntryDto`): tipo, número e contraparte não mudam. */
+export interface FinancialEntryUpdateInput {
+  description?: string;
+  documentReference?: string;
+  competenceDate?: string;
+  grossAmount?: string;
+  discountAmount?: string;
+  branchId?: string;
+  categoryId?: string;
+  costCenterId?: string;
+  paymentMethodId?: string;
+  note?: string;
+}
+
+export interface InstallmentUpdateInput {
+  dueDate?: string;
+  dailyInterestRate?: string;
+  penaltyRate?: string;
+  barcode?: string;
+  digitableLine?: string;
+  bankIdentifier?: string;
+  note?: string;
+}
+
+/** Baixa (`CreateSettlementDto`): só o principal abate o saldo da parcela. */
+export interface SettlementInput {
+  principalAmount: string;
+  interestAmount?: string;
+  penaltyAmount?: string;
+  discountAmount?: string;
+  applyLateCharges?: boolean;
+  settlementDate?: string;
+  paymentMethodId?: string;
+  method?: PaymentMethodType;
+  note?: string;
+}
+
+/** Linha de `vw_parcela_posicao` (RF-055/RF-058). */
+export interface PortfolioInstallment {
+  installmentId: string;
+  entryId: string;
+  type: EntryType;
+  number: string;
+  description: string;
+  partner: { id: string; legalName: string | null } | null;
+  installmentNumber: number;
+  totalInstallments: number;
+  dueDate: string;
+  originalDueDate: string | null;
+  amount: string;
+  settledAmount: string;
+  balance: string;
+  status: InstallmentStatus;
+  daysOverdue: number;
+  lateCharges: string;
+  updatedBalance: string;
+  agingBucket: AgingBucket | string;
+}
+
+export interface DelinquencyBucket {
+  bucket: AgingBucket;
+  installments: number;
+  balance: string;
+  updatedBalance: string;
+}
+
+export interface DelinquencySummary {
+  aging: DelinquencyBucket[];
+  totals: { installments: number; balance: string; updatedBalance: string };
+  partners: {
+    partner: { id: string; legalName: string | null } | null;
+    installments: number;
+    balance: string;
+    updatedBalance: string;
+    maxDaysOverdue: number;
+  }[];
+}
+
+/** Origem financeira e a conta contábil dela (RF-080). */
+export interface CategoryClassification {
+  id: string;
+  code: string;
+  name: string;
+  ledgerAccountId: string | null;
+  ledgerAccountCode: string | null;
+  ledgerAccountName: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Fluxo de caixa (RF-101 a RF-105 — UI-029)
+// ---------------------------------------------------------------------------
+
+export type CashSituation = 'REALIZADO' | 'VENCIDO' | 'PREVISTO';
+
+export type CashFlowGranularity = 'DIA' | 'SEMANA' | 'MES';
+
+export interface CashFlowSummary {
+  period: { from: string; to: string };
+  bySituation: {
+    situation: CashSituation;
+    inflow: string;
+    outflow: string;
+    net: string;
+    movements: number;
+  }[];
+  totals: { inflow: string; outflow: string; net: string };
+  byCategory: {
+    category: CodedRef | null;
+    inflow: string;
+    outflow: string;
+    net: string;
+  }[];
+}
+
+export interface CashFlowSide {
+  realized: string;
+  expected: string;
+  overdue: string;
+  total: string;
+}
+
+export interface CashFlowPeriod {
+  periodStart: string;
+  inflow: CashFlowSide;
+  outflow: CashFlowSide;
+  net: string;
+  closingBalance: string;
+}
+
+export interface ScenarioAssumptions {
+  /** Percentuais de -100 a 100 — número, como o backend valida (`IsNumber`). */
+  entradas_percentual?: number;
+  saidas_percentual?: number;
+}
+
+export interface CashFlowProjection {
+  period: { from: string; to: string };
+  granularity: CashFlowGranularity;
+  scenario: { id: string; name: string; assumptions: ScenarioAssumptions | null } | null;
+  openingBalance: string;
+  closingBalance: string;
+  periods: CashFlowPeriod[];
+}
+
+export interface CashScenario {
+  id: string;
+  name: string;
+  description: string | null;
+  startDate: string;
+  endDate: string;
+  openingBalance: string | null;
+  assumptions: ScenarioAssumptions | null;
+  isBaseline: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CashScenarioInput {
+  name: string;
+  description?: string;
+  startDate: string;
+  endDate: string;
+  openingBalance?: string;
+  assumptions?: ScenarioAssumptions;
+  isBaseline?: boolean;
+}
+
+/** Movimento manual do cenário: sempre PREVISTO; a direção vem do tipo. */
+export interface CashProjection {
+  id: string;
+  scenarioId: string;
+  referenceDate: string;
+  type: EntryType;
+  amount: string;
+  description: string | null;
+  category: CodedRef | null;
+  costCenter: CodedRef | null;
+}
+
+export interface CashProjectionInput {
+  referenceDate: string;
+  type: EntryType;
+  amount: string;
+  description?: string;
+  categoryId?: string;
+  costCenterId?: string;
+}
+
+export interface CashAlert {
+  id: string;
+  name: string;
+  bankAccountId: string | null;
+  minimumBalance: string;
+  daysAhead: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CashAlertInput {
+  name: string;
+  bankAccountId?: string;
+  minimumBalance: string;
+  daysAhead?: number;
+  isActive?: boolean;
+}
+
+export interface CashAlertEvaluation {
+  alert: {
+    id: string;
+    name: string;
+    bankAccountId: string | null;
+    minimumBalance: string;
+    daysAhead: number;
+  };
+  horizon: { from: string; to: string };
+  openingBalance: string;
+  closingBalance: string;
+  lowestBalance: string;
+  lowestBalanceDate: string | null;
+  breached: boolean;
+  breachDate: string | null;
+}
+
+export interface CashAlertEvaluationSummary {
+  evaluatedAt: string;
+  breached: number;
+  alerts: CashAlertEvaluation[];
+}

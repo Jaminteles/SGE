@@ -55,7 +55,16 @@ export const NAVIGATION: NavItem[] = [
     path: '/financeiro',
     label: 'Financeiro',
     icon: 'pi-wallet',
-    permissions: { any: ['financial-entries:READ', 'settlements:READ', 'cash-flow:READ'] },
+    permissions: {
+      any: [
+        'financial-entries:READ',
+        'settlements:READ',
+        'delinquency:READ',
+        'cash-flow:READ',
+        'cash-flow-scenarios:READ',
+        'cash-alerts:READ',
+      ],
+    },
   },
   {
     path: '/bancos',
