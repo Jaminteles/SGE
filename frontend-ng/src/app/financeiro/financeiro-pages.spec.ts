@@ -299,6 +299,7 @@ describe('EntryDetailPage (UI-026)', () => {
 
     const baixa = mock.expectOne(`${BASE}/financial-entries/tit-1/installments/parc-1/settlements`);
     expect(baixa.request.body.principalAmount).toBe('400.00');
+    expect(baixa.request.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
     // Parcela vencida: a tela pede o cálculo ao servidor, não inventa juros.
     expect(baixa.request.body.applyLateCharges).toBe(true);
     expect(baixa.request.body.interestAmount).toBeUndefined();
@@ -306,6 +307,39 @@ describe('EntryDetailPage (UI-026)', () => {
 
     // Saldo e situação voltam do servidor, não de conta local.
     mock.expectOne(`${BASE}/financial-entries/tit-1`).flush(titulo({ status: 'LIQUIDADO' }));
+  });
+
+  it('reusa a mesma chave de idempotência no retry da mesma baixa (RN-004)', async () => {
+    const { mock } = prepararSessao(
+      ['financial-entries:READ', 'settlements:CREATE'],
+      [rota('tit-1')],
+    );
+    const fixture = TestBed.createComponent(EntryDetailPage);
+    fixture.detectChanges();
+    mock.expectOne(`${BASE}/financial-entries/tit-1`).flush(titulo());
+    await fixture.whenStable();
+
+    const pagina = fixture.componentInstance as unknown as Detalhe;
+    const url = `${BASE}/financial-entries/tit-1/installments/parc-1/settlements`;
+
+    pagina.abrirBaixa(parcela());
+    pagina.registrarBaixa();
+    const primeira = mock.expectOne(url);
+    const chave = primeira.request.headers.get('Idempotency-Key');
+    expect(chave).toBeTruthy();
+    // Queda de rede: o servidor pode ou não ter gravado — só a chave resolve.
+    primeira.error(new ProgressEvent('error'));
+
+    pagina.registrarBaixa();
+    const segunda = mock.expectOne(url);
+    expect(segunda.request.headers.get('Idempotency-Key')).toBe(chave);
+    segunda.flush({ id: 'bx-1' });
+    mock.expectOne(`${BASE}/financial-entries/tit-1`).flush(titulo());
+
+    // Outra baixa, outra chave.
+    pagina.abrirBaixa(parcela());
+    pagina.registrarBaixa();
+    expect(mock.expectOne(url).request.headers.get('Idempotency-Key')).not.toBe(chave);
   });
 
   it('exige motivo para estornar a baixa', async () => {

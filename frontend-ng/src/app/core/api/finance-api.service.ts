@@ -108,10 +108,20 @@ export class FinanceApiService {
     );
   }
 
-  settle(entryId: string, installmentId: string, body: SettlementInput): Observable<unknown> {
+  /**
+   * `idempotencyKey` identifica **esta** baixa: o retry da mesma tentativa
+   * reusa a chave e recebe a baixa já registrada, em vez de uma segunda (RN-004).
+   */
+  settle(
+    entryId: string,
+    installmentId: string,
+    body: SettlementInput,
+    idempotencyKey: string,
+  ): Observable<unknown> {
     return this.http.post(
       `financial-entries/${entryId}/installments/${installmentId}/settlements`,
       body,
+      { headers: { 'Idempotency-Key': idempotencyKey } },
     );
   }
 

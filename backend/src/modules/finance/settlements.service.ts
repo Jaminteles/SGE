@@ -7,6 +7,10 @@ import {
 import { AuditEvent, EntryType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService, AUDIT_ENTITY } from '../../common/audit/audit.service';
+import {
+  IDEMPOTENCY_SCOPE,
+  IdempotencyService,
+} from '../../common/idempotency/idempotency.service';
 import { ReferencesService } from '../../common/references/references.service';
 import { toDateOnly } from '../../common/utils/date-only';
 import { CreateSettlementDto, ReverseSettlementDto } from './dto/create-settlement.dto';
@@ -41,9 +45,53 @@ export class SettlementsService {
     private readonly installments: InstallmentsService,
     private readonly references: ReferencesService,
     private readonly audit: AuditService,
+    private readonly idempotency: IdempotencyService,
   ) {}
 
+  /**
+   * Registra pagamento ou recebimento (RF-057) uma vez só por chave (RN-004).
+   *
+   * A `Idempotency-Key` é conferida **antes** das validações: no retry de uma
+   * baixa que já quitou a parcela, validar primeiro responderia 409 "parcela
+   * liquidada" a quem só quer saber se a primeira tentativa deu certo. O caminho
+   * entra no hash junto com o corpo — a mesma chave em outra parcela é reuso
+   * indevido (409), nunca a baixa de uma parcela devolvida como se fosse outra.
+   *
+   * O escopo é o de pagamento: a baixa é o registro de um pagamento ou
+   * recebimento, e o CHECK de `gestao.idempotencia.escopo` (bd/13) não tem
+   * escopo próprio para ela. A reserva da chave roda na transação da requisição
+   * — se a baixa falhar, a chave volta a ficar livre.
+   */
   async create(
+    companyId: string,
+    entryId: string,
+    installmentId: string,
+    dto: CreateSettlementDto,
+    userId: string,
+    idempotencyKey: string,
+  ) {
+    const run = await this.idempotency.run({
+      companyId,
+      scope: IDEMPOTENCY_SCOPE.PAYMENT,
+      key: idempotencyKey,
+      request: { entryId, installmentId, settlement: dto },
+      userId,
+      execute: async () => {
+        const { settlementId, installment } = await this.register(
+          companyId,
+          entryId,
+          installmentId,
+          dto,
+          userId,
+        );
+        return { resourceId: settlementId, resourceType: 'titulo_baixa', response: installment };
+      },
+    });
+
+    return run.response;
+  }
+
+  private async register(
     companyId: string,
     entryId: string,
     installmentId: string,
@@ -76,7 +124,7 @@ export class SettlementsService {
     }
 
     return this.prisma.transaction(async () => {
-      await this.prisma.db.settlement.create({
+      const created = await this.prisma.db.settlement.create({
         data: {
           companyId,
           installmentId,
@@ -107,7 +155,10 @@ export class SettlementsService {
         note: `Título ${installment.entry.number}, parcela ${installment.number}/${installment.totalInstallments}: principal ${principal.toFixed(2)}.`,
       });
 
-      return this.installments.findOne(companyId, entryId, installmentId);
+      return {
+        settlementId: created.id,
+        installment: await this.installments.findOne(companyId, entryId, installmentId),
+      };
     });
   }
 

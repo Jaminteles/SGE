@@ -23,6 +23,7 @@ import type {
 import { PermissionsService } from '../core/authz/permissions.service';
 import { formatCurrency, formatDecimal } from '../core/lib/decimal';
 import { formatDate, formatDateTime } from '../core/lib/format';
+import { novaChaveIdempotencia } from '../core/lib/idempotency';
 import { Alert } from '../ui/alert';
 import { DecimalField } from '../ui/decimal-field';
 import { ErrorAlert } from '../ui/error-alert';
@@ -978,7 +979,15 @@ export class EntryDetailPage {
     this.formProrrogacao.update((atual) => ({ ...atual, [campo]: valor }));
   }
 
+  /**
+   * Uma chave por baixa aberta (RN-004): o retry da mesma tentativa — queda de
+   * rede, timeout — reusa a chave e o servidor devolve a baixa já gravada.
+   * Abrir outra baixa gera outra chave.
+   */
+  private chaveBaixa = '';
+
   protected abrirBaixa(parcela: FinancialInstallment): void {
+    this.chaveBaixa = novaChaveIdempotencia();
     this.parcelaEmBaixa.set(parcela);
     this.formBaixa.set({
       ...this.baixaVazia(),
@@ -1011,7 +1020,7 @@ export class EntryDetailPage {
     if (form.note.trim() !== '') dto.note = form.note.trim();
 
     this.executarNoDialogo(
-      () => this.api.settle(this.entryId, parcela.id, dto),
+      () => this.api.settle(this.entryId, parcela.id, dto, this.chaveBaixa),
       () => this.baixaAberta.set(false),
       this.titulo()?.type === 'RECEBER' ? 'Recebimento registrado.' : 'Pagamento registrado.',
     );

@@ -5,7 +5,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { InstallmentsService } from './installments.service';
 import { ReferencesService } from '../../common/references/references.service';
 import { AuditService } from '../../common/audit/audit.service';
+import { IdempotencyService } from '../../common/idempotency/idempotency.service';
 import { CreateSettlementDto } from './dto/create-settlement.dto';
+
+const KEY = 'chave-baixa-0001';
 
 const SETTLEMENT = {
   id: 'baixa-1',
@@ -67,10 +70,31 @@ function buildService(
 
   const audit = { record: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService;
 
+  // Como na primeira chamada de uma chave: executa e devolve o resultado.
+  const outcomes: unknown[] = [];
+  const idempotency = {
+    run: jest
+      .fn()
+      .mockImplementation(async (params: { execute: () => Promise<{ response: unknown }> }) => {
+        const outcome = await params.execute();
+        outcomes.push(outcome);
+        return { replayed: false, response: outcome.response };
+      }),
+  };
+
   return {
-    service: new SettlementsService(prisma, installments, references, audit),
+    service: new SettlementsService(
+      prisma,
+      installments,
+      references,
+      audit,
+      idempotency as unknown as IdempotencyService,
+    ),
     settlementDelegate,
     audit,
+    installments,
+    idempotency,
+    outcomes,
   };
 }
 
@@ -91,6 +115,7 @@ describe('SettlementsService', () => {
         'parcela-1',
         settlementDto({ principalAmount: '400.01' }),
         'user-1',
+        KEY,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -104,6 +129,7 @@ describe('SettlementsService', () => {
       'parcela-1',
       settlementDto({ principalAmount: '400.00' }),
       'user-1',
+      KEY,
     );
 
     expect(settlementDelegate.create).toHaveBeenCalledWith(
@@ -125,6 +151,7 @@ describe('SettlementsService', () => {
         'parcela-1',
         settlementDto({ principalAmount: '0' }),
         'user-1',
+        KEY,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -138,7 +165,7 @@ describe('SettlementsService', () => {
     });
 
     await expect(
-      service.create('empresa-1', 'titulo-1', 'parcela-1', settlementDto(), 'user-1'),
+      service.create('empresa-1', 'titulo-1', 'parcela-1', settlementDto(), 'user-1', KEY),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -152,6 +179,7 @@ describe('SettlementsService', () => {
         'parcela-1',
         settlementDto({ principalAmount: '100.00', discountAmount: '150.00' }),
         'user-1',
+        KEY,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -161,7 +189,7 @@ describe('SettlementsService', () => {
   it('registra pagamento na trilha quando o título é a pagar', async () => {
     const { service, audit } = buildService();
 
-    await service.create('empresa-1', 'titulo-1', 'parcela-1', settlementDto(), 'user-1');
+    await service.create('empresa-1', 'titulo-1', 'parcela-1', settlementDto(), 'user-1', KEY);
 
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ event: AuditEvent.PAGAMENTO }),
@@ -180,7 +208,7 @@ describe('SettlementsService', () => {
       }),
     });
 
-    await service.create('empresa-1', 'titulo-1', 'parcela-1', settlementDto(), 'user-1');
+    await service.create('empresa-1', 'titulo-1', 'parcela-1', settlementDto(), 'user-1', KEY);
 
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ event: AuditEvent.RECEBIMENTO }),
@@ -204,6 +232,7 @@ describe('SettlementsService', () => {
       'parcela-1',
       settlementDto({ principalAmount: '400.00', applyLateCharges: true }),
       'user-1',
+      KEY,
     );
 
     const { data } = settlementDelegate.create.mock.calls[0][0];
@@ -220,6 +249,7 @@ describe('SettlementsService', () => {
       'parcela-1',
       settlementDto({ applyLateCharges: true }),
       'user-1',
+      KEY,
     );
 
     const { data } = settlementDelegate.create.mock.calls[0][0];
@@ -242,11 +272,60 @@ describe('SettlementsService', () => {
       'parcela-1',
       settlementDto({ applyLateCharges: true, interestAmount: '1.00', penaltyAmount: '2.00' }),
       'user-1',
+      KEY,
     );
 
     const { data } = settlementDelegate.create.mock.calls[0][0];
     expect(data.interestAmount.toFixed(2)).toBe('1.00');
     expect(data.penaltyAmount.toFixed(2)).toBe('2.00');
+  });
+
+  // RN-004: retry, timeout ou clique duplo não podem gerar segunda baixa.
+  it('amarra a chave à parcela e ao corpo, e grava a baixa criada', async () => {
+    const { service, idempotency, outcomes } = buildService();
+    const dto = settlementDto({ principalAmount: '400.00' });
+
+    await service.create('empresa-1', 'titulo-1', 'parcela-1', dto, 'user-1', KEY);
+
+    expect(idempotency.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        companyId: 'empresa-1',
+        scope: 'PAGAMENTO',
+        key: KEY,
+        userId: 'user-1',
+        request: { entryId: 'titulo-1', installmentId: 'parcela-1', settlement: dto },
+      }),
+    );
+    expect(outcomes[0]).toEqual(
+      expect.objectContaining({ resourceId: 'baixa-nova', resourceType: 'titulo_baixa' }),
+    );
+  });
+
+  it('devolve a baixa já registrada no retry, sem validar nem lançar de novo', async () => {
+    // A parcela já foi quitada pela primeira tentativa: validar antes da chave
+    // responderia 409 a um retry legítimo.
+    const { service, idempotency, settlementDelegate, installments, audit } = buildService({
+      installment: buildInstallment({
+        status: InstallmentStatus.LIQUIDADA,
+        balance: new Prisma.Decimal('0'),
+      }),
+    });
+    const anterior = { id: 'parcela-1', status: 'LIQUIDADA' };
+    idempotency.run.mockResolvedValueOnce({ replayed: true, response: anterior });
+
+    await expect(
+      service.create(
+        'empresa-1',
+        'titulo-1',
+        'parcela-1',
+        settlementDto({ principalAmount: '400.00' }),
+        'user-1',
+        KEY,
+      ),
+    ).resolves.toBe(anterior);
+    expect(settlementDelegate.create).not.toHaveBeenCalled();
+    expect(installments.findOne).not.toHaveBeenCalled();
+    expect(audit.record).not.toHaveBeenCalled();
   });
 
   describe('estorno (RF-057)', () => {

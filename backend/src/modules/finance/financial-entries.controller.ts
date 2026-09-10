@@ -1,5 +1,19 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  IDEMPOTENCY_HEADER,
+  requireIdempotencyKey,
+} from '../../common/idempotency/idempotency-key';
 import { RequirePermissions } from '../../common/decorators/require-permissions.decorator';
 import { ActiveCompanyId } from '../../common/decorators/active-company.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -128,6 +142,12 @@ export class FinancialEntriesController {
 
   @Post(':id/installments/:installmentId/settlements')
   @RequirePermissions(PERMISSIONS.SETTLEMENTS_CREATE)
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: true,
+    description:
+      'Chave única da baixa, escolhida pelo cliente. Repetir a chave com o mesmo corpo devolve a baixa já registrada (RN-004).',
+  })
   @ApiOperation({ summary: 'Registrar pagamento ou recebimento, total ou parcial (RF-057)' })
   settle(
     @ActiveCompanyId() companyId: string,
@@ -135,8 +155,16 @@ export class FinancialEntriesController {
     @Param('installmentId', ParseUUIDPipe) installmentId: string,
     @Body() dto: CreateSettlementDto,
     @CurrentUser() user: AuthenticatedUser,
+    @Headers(IDEMPOTENCY_HEADER) idempotencyKey?: string,
   ) {
-    return this.settlements.create(companyId, id, installmentId, dto, user.id);
+    return this.settlements.create(
+      companyId,
+      id,
+      installmentId,
+      dto,
+      user.id,
+      requireIdempotencyKey(idempotencyKey, 'no registro de baixas'),
+    );
   }
 
   @Post(':id/installments/:installmentId/settlements/:settlementId/reverse')
