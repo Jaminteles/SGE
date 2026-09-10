@@ -4,7 +4,12 @@ import { Observable } from 'rxjs';
 
 import { toHttpParams } from './params';
 import type { ListQuery } from './query';
-import type { ApprovalThreshold, ApprovalThresholdInput, PaginatedResult } from './types';
+import type {
+  ApprovalEvaluation,
+  ApprovalThreshold,
+  ApprovalThresholdInput,
+  PaginatedResult,
+} from './types';
 
 /**
  * Alçadas de aprovação (RF-012 — UI-011).
@@ -33,5 +38,12 @@ export class ApprovalsApiService {
 
   remove(id: string): Observable<void> {
     return this.http.delete<void>(`approval-thresholds/${id}`);
+  }
+
+  /** Se a operação, por esse valor, exige aprovação — e de quais perfis. */
+  evaluate(operation: string, amount: string): Observable<ApprovalEvaluation> {
+    return this.http.get<ApprovalEvaluation>('approval-thresholds/evaluate', {
+      params: toHttpParams({ operation, amount }),
+    });
   }
 }
