@@ -5,6 +5,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { TagModule } from 'primeng/tag';
+import { map } from 'rxjs/operators';
 
 import { BranchesApiService } from '../core/api/branches-api.service';
 import { ConfigurationsApiService } from '../core/api/configurations-api.service';
@@ -17,6 +18,7 @@ import { Alert } from '../ui/alert';
 import { DecimalField } from '../ui/decimal-field';
 import { ErrorAlert } from '../ui/error-alert';
 import type { OpcaoFiltro } from '../ui/filter-bar';
+import { LIMITE_BUSCA, SearchSelect } from '../ui/search-select';
 import { SelectField } from '../ui/select-field';
 import { TextField } from '../ui/text-field';
 import {
@@ -93,6 +95,7 @@ const VAZIO: Formulario = {
     BankAccountFields,
     DecimalField,
     ErrorAlert,
+    SearchSelect,
     SelectField,
     TextField,
   ],
@@ -217,10 +220,11 @@ const VAZIO: Formulario = {
           [ngModel]="form().departmentId"
           (ngModelChange)="mudar('departmentId', $event ?? '')"
         />
-        <sge-select-field
+        <sge-search-select
           rotulo="Gestor imediato"
           name="managerId"
-          [opcoes]="opcoesGestor()"
+          [buscar]="buscarGestor"
+          [resolver]="resolverGestor"
           [ngModel]="form().managerId"
           (ngModelChange)="mudar('managerId', $event ?? '')"
         />
@@ -441,7 +445,16 @@ export class EmployeeFormPage {
   protected readonly opcoesDepartamento = signal<OpcaoFiltro[]>([]);
   protected readonly opcoesCentroCusto = signal<OpcaoFiltro[]>([]);
   protected readonly opcoesFilial = signal<OpcaoFiltro[]>([]);
-  protected readonly opcoesGestor = signal<OpcaoFiltro[]>([]);
+  /** Gestor: busca no quadro ativo inteiro, nunca "os primeiros 100". */
+  protected readonly buscarGestor = (termo: string) =>
+    this.api
+      .list({ q: termo, status: 'ATIVO', pageSize: LIMITE_BUSCA })
+      .pipe(
+        map((r) => r.data.map((e) => ({ value: e.id, label: `${e.registration} — ${e.name}` }))),
+      );
+
+  protected readonly resolverGestor = (id: string) =>
+    this.api.get(id).pipe(map((e) => ({ value: e.id, label: `${e.registration} — ${e.name}` })));
 
   protected readonly titulo = computed(() => this.registro()?.name ?? 'Novo funcionário');
 
@@ -711,16 +724,5 @@ export class EmployeeFormPage {
           error: () => this.opcoesFilial.set([]),
         });
     }
-
-    this.api
-      .list({ pageSize: 100, status: 'ATIVO' })
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (r) =>
-          this.opcoesGestor.set(
-            r.data.map((e) => ({ value: e.id, label: `${e.registration} — ${e.name}` })),
-          ),
-        error: () => this.opcoesGestor.set([]),
-      });
   }
 }

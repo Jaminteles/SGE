@@ -275,3 +275,50 @@ describe('InventoryDetailPage (UI-023)', () => {
     expect(texto).not.toContain('Concluir inventário');
   });
 });
+
+describe('pendências de UI-022', () => {
+  it('manda o período escolhido como from/to', async () => {
+    prepararSessao(['stock-movements:READ']);
+    const mock = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(StockMovementsPage);
+    fixture.detectChanges();
+    mock.expectOne((r) => r.url === `${BASE}/stock/movements`).flush(paginado([]));
+    await fixture.whenStable();
+
+    const pagina = fixture.componentInstance as unknown as {
+      lista: { aplicarFiltros: (v: Record<string, string>) => void };
+    };
+    pagina.lista.aplicarFiltros({ q: '', from: '2026-09-01', to: '2026-09-30' });
+
+    const consulta = mock.expectOne((r) => r.url === `${BASE}/stock/movements`);
+    expect(consulta.request.params.get('from')).toBe('2026-09-01');
+    expect(consulta.request.params.get('to')).toBe('2026-09-30');
+    consulta.flush(paginado([]));
+  });
+
+  it('busca o item no catálogo inteiro pelo termo, e não nos primeiros 100', async () => {
+    prepararSessao(['stock-movements:READ', 'stock-movements:CREATE', 'products:READ']);
+    const mock = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(StockMovementsPage);
+    fixture.detectChanges();
+    mock.expectOne((r) => r.url === `${BASE}/stock/movements`).flush(paginado([]));
+    // Nada de catálogo pré-carregado: a lista só vem quando o usuário busca.
+    mock.verify();
+
+    const pagina = fixture.componentInstance as unknown as {
+      buscarProduto: (termo: string) => { subscribe: (fn: (r: unknown) => void) => void };
+    };
+    let resultado: unknown = null;
+    pagina.buscarProduto('vergal').subscribe((r) => (resultado = r));
+
+    const busca = mock.expectOne((r) => r.url === `${BASE}/products`);
+    expect(busca.request.params.get('q')).toBe('vergal');
+    expect(busca.request.params.get('pageSize')).toBe('20');
+    busca.flush(
+      paginado([{ id: 'prod-1', code: 'PRD-0148', description: 'Vergalhão CA-50 10mm' }]),
+    );
+    expect(resultado).toEqual([{ value: 'prod-1', label: 'PRD-0148 — Vergalhão CA-50 10mm' }]);
+  });
+});

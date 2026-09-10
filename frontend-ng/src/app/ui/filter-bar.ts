@@ -53,6 +53,26 @@ export type ValoresFiltro = Record<string, string> & { q: string };
           (ngModelChange)="mudarFiltro(filtro.name, $event)"
         />
       }
+
+      @if (periodo()) {
+        <span class="barra-filtro__periodo">
+          <input
+            pInputText
+            type="date"
+            aria-label="Período — a partir de"
+            [ngModel]="valor('from')"
+            (ngModelChange)="mudarFiltro('from', $event)"
+          />
+          <span aria-hidden="true">a</span>
+          <input
+            pInputText
+            type="date"
+            aria-label="Período — até"
+            [ngModel]="valor('to')"
+            (ngModelChange)="mudarFiltro('to', $event)"
+          />
+        </span>
+      }
     </div>
   `,
   styles: `
@@ -82,12 +102,24 @@ export type ValoresFiltro = Record<string, string> & { q: string };
       width: 100%;
       padding-left: 2.1rem;
     }
+    .barra-filtro__periodo {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      color: var(--p-text-muted-color);
+    }
   `,
 })
 export class FilterBar {
   readonly valores = input.required<ValoresFiltro>();
   readonly filtros = input<DefinicaoFiltro[]>([]);
   readonly placeholderBusca = input('Buscar');
+  /**
+   * Mostra o recorte por período (`from`/`to`, `YYYY-MM-DD`). Data é escolha
+   * deliberada, como os selects: sai na hora, sem o atraso da busca.
+   */
+  readonly periodo = input(false);
   /** Atraso da busca, em ms. */
   readonly atrasoMs = input(300);
 
@@ -116,6 +148,11 @@ export class FilterBar {
         this.mudou.emit({ ...valores, q: termo });
       }, untracked(this.atrasoMs));
     });
+  }
+
+  /** Valor de um filtro livre (fora de `filtros`), vazio quando ausente. */
+  protected valor(nome: string): string {
+    return this.valores()[nome] || '';
   }
 
   protected mudarFiltro(nome: string, valor: string | null): void {

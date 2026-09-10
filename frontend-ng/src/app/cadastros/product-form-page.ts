@@ -6,6 +6,7 @@ import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
 import { DialogModule } from 'primeng/dialog';
 import { TagModule } from 'primeng/tag';
+import { map } from 'rxjs/operators';
 
 import { CatalogApiService } from '../core/api/catalog-api.service';
 import { PartnersApiService } from '../core/api/partners-api.service';
@@ -22,6 +23,7 @@ import { Alert } from '../ui/alert';
 import { DecimalField } from '../ui/decimal-field';
 import { ErrorAlert } from '../ui/error-alert';
 import type { OpcaoFiltro } from '../ui/filter-bar';
+import { LIMITE_BUSCA, SearchSelect } from '../ui/search-select';
 import { SelectField } from '../ui/select-field';
 import { TextField } from '../ui/text-field';
 import { OPCOES_ITEM, OPCOES_ORIGEM, ROTULO_ITEM } from './rotulos';
@@ -45,6 +47,8 @@ interface Formulario {
   tracksStock: boolean;
   minStock: string;
   maxStock: string;
+  netWeight: string;
+  grossWeight: string;
 }
 
 const VAZIO: Formulario = {
@@ -66,6 +70,8 @@ const VAZIO: Formulario = {
   tracksStock: true,
   minStock: '',
   maxStock: '',
+  netWeight: '',
+  grossWeight: '',
 };
 
 interface FormularioFornecedor {
@@ -106,6 +112,7 @@ const FORNECEDOR_VAZIO: FormularioFornecedor = {
     Alert,
     DecimalField,
     ErrorAlert,
+    SearchSelect,
     SelectField,
     TextField,
   ],
@@ -255,7 +262,7 @@ const FORNECEDOR_VAZIO: FormularioFornecedor = {
     </section>
 
     <section class="card secao">
-      <h2 class="secao__titulo">Preço e estoque</h2>
+      <h2 class="secao__titulo">Preço, estoque e peso</h2>
       <div class="grade-campos">
         <sge-decimal-field
           rotulo="Preço de venda"
@@ -296,6 +303,20 @@ const FORNECEDOR_VAZIO: FormularioFornecedor = {
             (ngModelChange)="mudar('maxStock', $event ?? '')"
           />
         }
+        <sge-decimal-field
+          rotulo="Peso líquido"
+          name="netWeight"
+          [casas]="6"
+          [ngModel]="form().netWeight"
+          (ngModelChange)="mudar('netWeight', $event ?? '')"
+        />
+        <sge-decimal-field
+          rotulo="Peso bruto"
+          name="grossWeight"
+          [casas]="6"
+          [ngModel]="form().grossWeight"
+          (ngModelChange)="mudar('grossWeight', $event ?? '')"
+        />
       </div>
       @if (registro(); as item) {
         <p class="nota">
@@ -353,6 +374,15 @@ const FORNECEDOR_VAZIO: FormularioFornecedor = {
                     />
                   </td>
                   <td class="acoes">
+                    @if (podeEditarFornecedor()) {
+                      <p-button
+                        label="Editar"
+                        severity="secondary"
+                        [text]="true"
+                        size="small"
+                        (onClick)="abrirEdicaoFornecedor(fornecedor)"
+                      />
+                    }
                     @if (podeRemoverFornecedor()) {
                       <p-button
                         label="Remover"
@@ -376,21 +406,31 @@ const FORNECEDOR_VAZIO: FormularioFornecedor = {
       (visibleChange)="fornecedorAberto.set($event)"
       [modal]="true"
       [style]="{ width: '40rem' }"
-      header="Novo fornecedor homologado"
+      [header]="fornecedorEmEdicao() ? 'Editar homologação' : 'Novo fornecedor homologado'"
     >
       @if (erroFornecedor(); as falha) {
         <sge-error-alert [erro]="falha" />
       }
 
       <form class="grade-campos formulario" (ngSubmit)="salvarFornecedor()">
-        <sge-select-field
-          rotulo="Fornecedor"
-          name="partnerId"
-          [opcoes]="opcoesFornecedor()"
-          [obrigatorio]="true"
-          [ngModel]="formFornecedor().partnerId"
-          (ngModelChange)="mudarFornecedor('partnerId', $event ?? '')"
-        />
+        @if (fornecedorEmEdicao(); as atual) {
+          <sge-text-field
+            rotulo="Fornecedor"
+            name="partnerNome"
+            dica="A homologação é do par item × fornecedor: para trocar, remova e homologue outro"
+            [ngModel]="atual.partner?.legalName ?? atual.partnerId"
+            [disabled]="true"
+          />
+        } @else {
+          <sge-search-select
+            rotulo="Fornecedor"
+            name="partnerId"
+            [buscar]="buscarFornecedor"
+            [obrigatorio]="true"
+            [ngModel]="formFornecedor().partnerId"
+            (ngModelChange)="mudarFornecedor('partnerId', $event ?? '')"
+          />
+        }
         <sge-text-field
           rotulo="Código no fornecedor"
           name="supplierCode"
@@ -431,7 +471,7 @@ const FORNECEDOR_VAZIO: FormularioFornecedor = {
           (onClick)="fornecedorAberto.set(false)"
         />
         <p-button
-          label="Homologar"
+          [label]="fornecedorEmEdicao() ? 'Salvar' : 'Homologar'"
           icon="pi pi-check"
           [loading]="salvandoFornecedor()"
           [disabled]="salvandoFornecedor()"
@@ -492,13 +532,18 @@ export class ProductFormPage {
 
   protected readonly fornecedores = signal<ProductSupplier[]>([]);
   protected readonly fornecedorAberto = signal(false);
+  protected readonly fornecedorEmEdicao = signal<ProductSupplier | null>(null);
   protected readonly formFornecedor = signal<FormularioFornecedor>({ ...FORNECEDOR_VAZIO });
   protected readonly salvandoFornecedor = signal(false);
   protected readonly erroFornecedor = signal<unknown>(null);
 
   protected readonly opcoesCategoria = signal<OpcaoFiltro[]>([]);
   protected readonly opcoesUnidade = signal<OpcaoFiltro[]>([]);
-  protected readonly opcoesFornecedor = signal<OpcaoFiltro[]>([]);
+  /** Só fornecedores ativos: homologar um cliente puro seria erro de cadastro. */
+  protected readonly buscarFornecedor = (termo: string) =>
+    this.parceiros
+      .list({ q: termo, role: 'FORNECEDOR', isActive: true, pageSize: LIMITE_BUSCA })
+      .pipe(map((r) => r.data.map((p) => ({ value: p.id, label: p.tradeName ?? p.legalName }))));
 
   protected readonly titulo = computed(() => this.registro()?.description ?? 'Novo item');
 
@@ -520,6 +565,7 @@ export class ProductFormPage {
     this.novo() ? this.permissoes.pode('products:CREATE') : this.permissoes.pode('products:UPDATE');
   protected readonly podeVerFornecedores = () => this.permissoes.pode('product-suppliers:READ');
   protected readonly podeCriarFornecedor = () => this.permissoes.pode('product-suppliers:CREATE');
+  protected readonly podeEditarFornecedor = () => this.permissoes.pode('product-suppliers:UPDATE');
   protected readonly podeRemoverFornecedor = () => this.permissoes.pode('product-suppliers:DELETE');
 
   constructor() {
@@ -582,7 +628,21 @@ export class ProductFormPage {
   }
 
   protected abrirNovoFornecedor(): void {
+    this.fornecedorEmEdicao.set(null);
     this.formFornecedor.set({ ...FORNECEDOR_VAZIO });
+    this.erroFornecedor.set(null);
+    this.fornecedorAberto.set(true);
+  }
+
+  protected abrirEdicaoFornecedor(fornecedor: ProductSupplier): void {
+    this.fornecedorEmEdicao.set(fornecedor);
+    this.formFornecedor.set({
+      partnerId: fornecedor.partnerId,
+      supplierCode: fornecedor.supplierCode ?? '',
+      referencePrice: fornecedor.referencePrice ?? '',
+      deliveryDays: fornecedor.deliveryDays != null ? String(fornecedor.deliveryDays) : '',
+      isPreferred: fornecedor.isPreferred,
+    });
     this.erroFornecedor.set(null);
     this.fornecedorAberto.set(true);
   }
@@ -603,21 +663,29 @@ export class ProductFormPage {
     const prazo = form.deliveryDays.trim();
     if (prazo !== '' && /^\d+$/.test(prazo)) corpo.deliveryDays = Number(prazo);
 
-    this.api
-      .createSupplier(item.id, corpo)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: () => {
-          this.salvandoFornecedor.set(false);
-          this.fornecedorAberto.set(false);
-          this.aviso.set('Fornecedor homologado.');
-          this.carregarFornecedores(item.id);
-        },
-        error: (falha: unknown) => {
-          this.salvandoFornecedor.set(false);
-          this.erroFornecedor.set(falha);
-        },
-      });
+    // Na edição o fornecedor fica de fora: o backend não aceita trocá-lo.
+    const alvo = this.fornecedorEmEdicao();
+    const requisicao = alvo
+      ? this.api.updateSupplier(item.id, alvo.id, {
+          supplierCode: corpo.supplierCode,
+          referencePrice: corpo.referencePrice,
+          deliveryDays: corpo.deliveryDays,
+          isPreferred: corpo.isPreferred,
+        })
+      : this.api.createSupplier(item.id, corpo);
+
+    requisicao.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: () => {
+        this.salvandoFornecedor.set(false);
+        this.fornecedorAberto.set(false);
+        this.aviso.set(alvo ? 'Homologação atualizada.' : 'Fornecedor homologado.');
+        this.carregarFornecedores(item.id);
+      },
+      error: (falha: unknown) => {
+        this.salvandoFornecedor.set(false);
+        this.erroFornecedor.set(falha);
+      },
+    });
   }
 
   protected removerFornecedor(fornecedor: ProductSupplier): void {
@@ -681,6 +749,8 @@ export class ProductFormPage {
       tracksStock: item.tracksStock,
       minStock: item.minStock,
       maxStock: item.maxStock ?? '',
+      netWeight: item.netWeight ?? '',
+      grossWeight: item.grossWeight ?? '',
     });
   }
 
@@ -707,6 +777,8 @@ export class ProductFormPage {
       ['unitId', form.unitId],
       ['salePrice', form.salePrice],
       ['defaultMargin', form.defaultMargin],
+      ['netWeight', form.netWeight],
+      ['grossWeight', form.grossWeight],
       ...(this.mercadoria()
         ? ([
             ['ncm', form.ncm.replace(/\D/g, '')],
@@ -758,20 +830,6 @@ export class ProductFormPage {
               r.data.map((u) => ({ value: u.id, label: `${u.symbol} — ${u.description}` })),
             ),
           error: () => this.opcoesUnidade.set([]),
-        });
-    }
-
-    if (this.permissoes.pode('partners:READ')) {
-      // Só fornecedores: homologar um cliente puro seria erro de cadastro.
-      this.parceiros
-        .list({ pageSize: 100, isActive: true, role: 'FORNECEDOR' })
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe({
-          next: (r) =>
-            this.opcoesFornecedor.set(
-              r.data.map((p) => ({ value: p.id, label: p.tradeName ?? p.legalName })),
-            ),
-          error: () => this.opcoesFornecedor.set([]),
         });
     }
   }

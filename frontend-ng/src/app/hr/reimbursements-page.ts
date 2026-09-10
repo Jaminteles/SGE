@@ -24,7 +24,8 @@ import { Alert } from '../ui/alert';
 import { DataTable, type Coluna } from '../ui/data-table';
 import { DecimalField } from '../ui/decimal-field';
 import { ErrorAlert } from '../ui/error-alert';
-import { FilterBar, type OpcaoFiltro } from '../ui/filter-bar';
+import { FilterBar } from '../ui/filter-bar';
+import { LIMITE_BUSCA, SearchSelect } from '../ui/search-select';
 import { SelectField } from '../ui/select-field';
 import { TextField } from '../ui/text-field';
 import {
@@ -92,6 +93,7 @@ const TIPOS_COMPROVANTE = 'application/pdf,image/jpeg,image/png';
     DecimalField,
     ErrorAlert,
     FilterBar,
+    SearchSelect,
     SelectField,
     TextField,
   ],
@@ -335,10 +337,10 @@ const TIPOS_COMPROVANTE = 'application/pdf,image/jpeg,image/png';
       }
 
       <form class="grade-campos formulario" (ngSubmit)="salvar()">
-        <sge-select-field
+        <sge-search-select
           rotulo="Solicitante"
           name="employeeId"
-          [opcoes]="opcoesFuncionario()"
+          [buscar]="buscarFuncionario"
           [obrigatorio]="true"
           [ngModel]="form().employeeId"
           (ngModelChange)="mudar('employeeId', $event ?? '')"
@@ -506,7 +508,13 @@ export class ReimbursementsPage {
   );
 
   protected readonly contadores = signal<{ rotulo: string; total: number }[]>([]);
-  protected readonly opcoesFuncionario = signal<OpcaoFiltro[]>([]);
+  /** Solicitante: busca no quadro ativo inteiro, nunca "os primeiros 100". */
+  protected readonly buscarFuncionario = (termo: string) =>
+    this.employees
+      .list({ q: termo, status: 'ATIVO', pageSize: LIMITE_BUSCA })
+      .pipe(
+        map((r) => r.data.map((e) => ({ value: e.id, label: `${e.registration} — ${e.name}` }))),
+      );
   protected readonly aviso = signal<string | null>(null);
 
   protected readonly detalheAberto = signal(false);
@@ -559,7 +567,6 @@ export class ReimbursementsPage {
   constructor() {
     this.lista.carregar();
     this.carregarContadores();
-    this.carregarFuncionarios();
   }
 
   protected moeda(valor: string): string {
@@ -769,19 +776,5 @@ export class ReimbursementsPage {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((linhas) => this.contadores.set(linhas));
-  }
-
-  private carregarFuncionarios(): void {
-    if (!this.permissoes.pode('employees:READ')) return;
-    this.employees
-      .list({ pageSize: 100, status: 'ATIVO' })
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (r) =>
-          this.opcoesFuncionario.set(
-            r.data.map((e) => ({ value: e.id, label: `${e.registration} — ${e.name}` })),
-          ),
-        error: () => this.opcoesFuncionario.set([]),
-      });
   }
 }

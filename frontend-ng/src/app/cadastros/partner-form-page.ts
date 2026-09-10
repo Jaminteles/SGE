@@ -6,8 +6,10 @@ import { ButtonModule } from 'primeng/button';
 import { CheckboxModule } from 'primeng/checkbox';
 import { DialogModule } from 'primeng/dialog';
 import { TagModule } from 'primeng/tag';
+import { map } from 'rxjs/operators';
 
 import { ConfigurationsApiService } from '../core/api/configurations-api.service';
+import { EmployeesApiService } from '../core/api/employees-api.service';
 import { PartnersApiService } from '../core/api/partners-api.service';
 import { PaymentConditionsApiService } from '../core/api/payment-conditions-api.service';
 import type {
@@ -40,6 +42,7 @@ import {
 import { DecimalField } from '../ui/decimal-field';
 import { ErrorAlert } from '../ui/error-alert';
 import type { OpcaoFiltro } from '../ui/filter-bar';
+import { LIMITE_BUSCA, SearchSelect } from '../ui/search-select';
 import { SelectField } from '../ui/select-field';
 import { TextField } from '../ui/text-field';
 import { OPCOES_ENDERECO, OPCOES_PESSOA, ROTULO_ENDERECO, rotuloPapel } from './rotulos';
@@ -70,6 +73,13 @@ interface Formulario {
   supplierPaymentMethodId: string;
   supplierDefaultCategoryId: string;
   supplierDeliveryDays: string;
+  customerSalesRepId: string;
+  customerPreferredDueDay: string;
+  customerIsBlocked: boolean;
+  customerBlockReason: string;
+  supplierIsApproved: boolean;
+  supplierIsBlocked: boolean;
+  supplierBlockReason: string;
 }
 
 const VAZIO: Formulario = {
@@ -96,6 +106,13 @@ const VAZIO: Formulario = {
   supplierPaymentMethodId: '',
   supplierDefaultCategoryId: '',
   supplierDeliveryDays: '',
+  customerSalesRepId: '',
+  customerPreferredDueDay: '',
+  customerIsBlocked: false,
+  customerBlockReason: '',
+  supplierIsApproved: false,
+  supplierIsBlocked: false,
+  supplierBlockReason: '',
 };
 
 interface FormularioEndereco {
@@ -165,6 +182,7 @@ const CONTATO_VAZIO: FormularioContato = {
     BankAccountFields,
     DecimalField,
     ErrorAlert,
+    SearchSelect,
     SelectField,
     TextField,
   ],
@@ -188,7 +206,7 @@ const CONTATO_VAZIO: FormularioContato = {
             label="Salvar"
             icon="pi pi-check"
             [loading]="salvando()"
-            [disabled]="salvando()"
+            [disabled]="salvando() || bloqueioSemMotivo()"
             (onClick)="salvar()"
           />
         }
@@ -369,14 +387,44 @@ const CONTATO_VAZIO: FormularioContato = {
               [ngModel]="form().customerPaymentMethodId"
               (ngModelChange)="mudar('customerPaymentMethodId', $event ?? '')"
             />
-          </div>
-          @if (registro()?.customer?.isBlocked) {
-            <sge-alert
-              tom="aviso"
-              titulo="Cliente bloqueado"
-              [mensagem]="registro()?.customer?.blockReason ?? 'Sem motivo registrado.'"
+            @if (podeVerFuncionarios()) {
+              <sge-search-select
+                rotulo="Vendedor responsável"
+                name="customerSalesRepId"
+                [buscar]="buscarFuncionario"
+                [resolver]="resolverFuncionario"
+                [ngModel]="form().customerSalesRepId"
+                (ngModelChange)="mudar('customerSalesRepId', $event ?? '')"
+              />
+            }
+            <sge-text-field
+              rotulo="Dia de vencimento preferencial"
+              name="customerPreferredDueDay"
+              tipo="number"
+              dica="De 1 a 31"
+              [ngModel]="form().customerPreferredDueDay"
+              (ngModelChange)="mudar('customerPreferredDueDay', $event)"
             />
-          }
+            <label class="marcador">
+              <p-checkbox
+                name="customerIsBlocked"
+                [binary]="true"
+                [ngModel]="form().customerIsBlocked"
+                (ngModelChange)="mudar('customerIsBlocked', $event)"
+              />
+              <span>Bloquear novas operações com o cliente</span>
+            </label>
+            @if (form().customerIsBlocked) {
+              <sge-text-field
+                rotulo="Motivo do bloqueio"
+                name="customerBlockReason"
+                [obrigatorio]="true"
+                [erro]="motivoCurto(form().customerBlockReason)"
+                [ngModel]="form().customerBlockReason"
+                (ngModelChange)="mudar('customerBlockReason', $event)"
+              />
+            }
+          </div>
         </section>
       }
 
@@ -413,14 +461,35 @@ const CONTATO_VAZIO: FormularioContato = {
               [ngModel]="form().supplierDeliveryDays"
               (ngModelChange)="mudar('supplierDeliveryDays', $event)"
             />
+            <label class="marcador">
+              <p-checkbox
+                name="supplierIsApproved"
+                [binary]="true"
+                [ngModel]="form().supplierIsApproved"
+                (ngModelChange)="mudar('supplierIsApproved', $event)"
+              />
+              <span>Fornecedor homologado</span>
+            </label>
+            <label class="marcador">
+              <p-checkbox
+                name="supplierIsBlocked"
+                [binary]="true"
+                [ngModel]="form().supplierIsBlocked"
+                (ngModelChange)="mudar('supplierIsBlocked', $event)"
+              />
+              <span>Bloquear novas compras do fornecedor</span>
+            </label>
+            @if (form().supplierIsBlocked) {
+              <sge-text-field
+                rotulo="Motivo do bloqueio"
+                name="supplierBlockReason"
+                [obrigatorio]="true"
+                [erro]="motivoCurto(form().supplierBlockReason)"
+                [ngModel]="form().supplierBlockReason"
+                (ngModelChange)="mudar('supplierBlockReason', $event)"
+              />
+            }
           </div>
-          @if (registro()?.supplier?.isBlocked) {
-            <sge-alert
-              tom="aviso"
-              titulo="Fornecedor bloqueado"
-              [mensagem]="registro()?.supplier?.blockReason ?? 'Sem motivo registrado.'"
-            />
-          }
         </section>
       }
     }
@@ -949,6 +1018,7 @@ export class PartnerFormPage {
   private readonly api = inject(PartnersApiService);
   private readonly condicoes = inject(PaymentConditionsApiService);
   private readonly configuracoes = inject(ConfigurationsApiService);
+  private readonly funcionarios = inject(EmployeesApiService);
   private readonly permissoes = inject(PermissionsService);
   private readonly rota = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -992,6 +1062,34 @@ export class PartnerFormPage {
   protected readonly opcoesCondicao = signal<OpcaoFiltro[]>([]);
   protected readonly opcoesForma = signal<OpcaoFiltro[]>([]);
   protected readonly opcoesCategoria = signal<OpcaoFiltro[]>([]);
+
+  /** Vendedor responsável: busca no quadro ativo, nunca "os primeiros 100". */
+  protected readonly buscarFuncionario = (termo: string) =>
+    this.funcionarios
+      .list({ q: termo, status: 'ATIVO', pageSize: LIMITE_BUSCA })
+      .pipe(
+        map((r) => r.data.map((e) => ({ value: e.id, label: `${e.registration} — ${e.name}` }))),
+      );
+
+  protected readonly resolverFuncionario = (id: string) =>
+    this.funcionarios
+      .get(id)
+      .pipe(map((e) => ({ value: e.id, label: `${e.registration} — ${e.name}` })));
+
+  protected readonly podeVerFuncionarios = () => this.permissoes.pode('employees:READ');
+
+  /**
+   * O backend exige motivo ao bloquear (vai para a trilha): sem ele a tela nem
+   * envia, em vez de colher um 400 depois do clique.
+   */
+  protected readonly bloqueioSemMotivo = computed(() => {
+    const form = this.form();
+    const curto = (motivo: string) => motivo.trim().length < 3;
+    return (
+      (form.isCustomer && form.customerIsBlocked && curto(form.customerBlockReason)) ||
+      (form.isSupplier && form.supplierIsBlocked && curto(form.supplierBlockReason))
+    );
+  });
 
   protected readonly titulo = computed(() => this.registro()?.legalName ?? 'Novo parceiro');
 
@@ -1037,6 +1135,10 @@ export class PartnerFormPage {
       this.carregar(id);
     }
     this.carregarReferencias();
+  }
+
+  protected motivoCurto(motivo: string): string | null {
+    return motivo.trim().length < 3 ? 'Informe o motivo (mínimo de 3 caracteres).' : null;
   }
 
   protected moeda(valor: string): string {
@@ -1087,7 +1189,7 @@ export class PartnerFormPage {
   }
 
   protected salvar(): void {
-    if (this.salvando()) return;
+    if (this.salvando() || this.bloqueioSemMotivo()) return;
     this.salvando.set(true);
     this.erro.set(null);
     this.aviso.set(null);
@@ -1407,6 +1509,14 @@ export class PartnerFormPage {
       supplierDefaultCategoryId: parceiro.supplier?.defaultCategoryId ?? '',
       supplierDeliveryDays:
         parceiro.supplier?.deliveryDays != null ? String(parceiro.supplier.deliveryDays) : '',
+      customerSalesRepId: parceiro.customer?.salesRepId ?? '',
+      customerPreferredDueDay:
+        parceiro.customer?.preferredDueDay != null ? String(parceiro.customer.preferredDueDay) : '',
+      customerIsBlocked: parceiro.customer?.isBlocked ?? false,
+      customerBlockReason: parceiro.customer?.blockReason ?? '',
+      supplierIsApproved: parceiro.supplier?.isApproved ?? false,
+      supplierIsBlocked: parceiro.supplier?.isBlocked ?? false,
+      supplierBlockReason: parceiro.supplier?.blockReason ?? '',
     });
   }
 
@@ -1452,7 +1562,13 @@ export class PartnerFormPage {
       if (form.customerPaymentMethodId !== '') {
         cliente.paymentMethodId = form.customerPaymentMethodId;
       }
-      if (Object.keys(cliente).length > 0) dto.customer = cliente;
+      if (form.customerSalesRepId !== '') cliente.salesRepId = form.customerSalesRepId;
+      const dia = form.customerPreferredDueDay.trim();
+      if (/^\d{1,2}$/.test(dia)) cliente.preferredDueDay = Number(dia);
+      // O bloqueio vai sempre: desmarcar precisa chegar ao backend para desbloquear.
+      cliente.isBlocked = form.customerIsBlocked;
+      if (form.customerIsBlocked) cliente.blockReason = form.customerBlockReason.trim();
+      dto.customer = cliente;
     }
 
     if (form.isSupplier) {
@@ -1466,7 +1582,10 @@ export class PartnerFormPage {
       }
       const prazo = form.supplierDeliveryDays.trim();
       if (prazo !== '' && /^\d+$/.test(prazo)) fornecedor.deliveryDays = Number(prazo);
-      if (Object.keys(fornecedor).length > 0) dto.supplier = fornecedor;
+      fornecedor.isApproved = form.supplierIsApproved;
+      fornecedor.isBlocked = form.supplierIsBlocked;
+      if (form.supplierIsBlocked) fornecedor.blockReason = form.supplierBlockReason.trim();
+      dto.supplier = fornecedor;
     }
 
     return dto;

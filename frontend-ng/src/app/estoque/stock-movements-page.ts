@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { TagModule } from 'primeng/tag';
+import { map } from 'rxjs/operators';
 
 import { CatalogApiService } from '../core/api/catalog-api.service';
 import { StockApiService } from '../core/api/stock-api.service';
@@ -23,6 +24,7 @@ import { DataTable, type Coluna } from '../ui/data-table';
 import { DecimalField } from '../ui/decimal-field';
 import { ErrorAlert } from '../ui/error-alert';
 import { FilterBar, type OpcaoFiltro } from '../ui/filter-bar';
+import { LIMITE_BUSCA, SearchSelect } from '../ui/search-select';
 import { SelectField } from '../ui/select-field';
 import { TextField } from '../ui/text-field';
 import {
@@ -97,6 +99,7 @@ const TRANSFERENCIA_VAZIA: FormularioTransferencia = {
     DecimalField,
     ErrorAlert,
     FilterBar,
+    SearchSelect,
     SelectField,
     TextField,
   ],
@@ -125,6 +128,7 @@ const TRANSFERENCIA_VAZIA: FormularioTransferencia = {
       placeholderBusca="Buscar item ou documento"
       [valores]="lista.filtros()"
       [filtros]="[FILTRO_TIPO_MOVIMENTO, filtroLocal()]"
+      [periodo]="true"
       (mudou)="lista.aplicarFiltros($event)"
     />
 
@@ -190,10 +194,10 @@ const TRANSFERENCIA_VAZIA: FormularioTransferencia = {
           [ngModel]="formMovimento().type"
           (ngModelChange)="mudarMovimento('type', $event ?? '')"
         />
-        <sge-select-field
+        <sge-search-select
           rotulo="Item"
           name="productId"
-          [opcoes]="opcoesProduto()"
+          [buscar]="buscarProduto"
           [obrigatorio]="true"
           [ngModel]="formMovimento().productId"
           (ngModelChange)="mudarMovimento('productId', $event ?? '')"
@@ -279,10 +283,10 @@ const TRANSFERENCIA_VAZIA: FormularioTransferencia = {
       }
 
       <form class="grade-campos formulario" (ngSubmit)="salvarTransferencia()">
-        <sge-select-field
+        <sge-search-select
           rotulo="Item"
           name="transferProductId"
-          [opcoes]="opcoesProduto()"
+          [buscar]="buscarProduto"
           [obrigatorio]="true"
           [ngModel]="formTransferencia().productId"
           (ngModelChange)="mudarTransferencia('productId', $event ?? '')"
@@ -383,7 +387,13 @@ export class StockMovementsPage {
 
   protected readonly aviso = signal<string | null>(null);
   protected readonly opcoesLocal = signal<OpcaoFiltro[]>([]);
-  protected readonly opcoesProduto = signal<OpcaoFiltro[]>([]);
+  /** Busca no catálogo inteiro pelo termo — nunca "os primeiros 100". */
+  protected readonly buscarProduto = (termo: string) =>
+    this.catalogo
+      .list({ q: termo, pageSize: LIMITE_BUSCA, isActive: true })
+      .pipe(
+        map((r) => r.data.map((p) => ({ value: p.id, label: `${p.code} — ${p.description}` }))),
+      );
 
   protected readonly movimentoAberto = signal(false);
   protected readonly formMovimento = signal<FormularioMovimento>({ ...MOVIMENTO_VAZIO });
@@ -581,19 +591,6 @@ export class StockMovementsPage {
               r.data.map((l) => ({ value: l.id, label: `${l.code} — ${l.name}` })),
             ),
           error: () => this.opcoesLocal.set([]),
-        });
-    }
-
-    if (this.permissoes.pode('products:READ')) {
-      this.catalogo
-        .list({ pageSize: 100, isActive: true })
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe({
-          next: (r) =>
-            this.opcoesProduto.set(
-              r.data.map((p) => ({ value: p.id, label: `${p.code} — ${p.description}` })),
-            ),
-          error: () => this.opcoesProduto.set([]),
         });
     }
   }

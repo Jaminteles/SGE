@@ -343,3 +343,81 @@ describe('ProductsPage e ProductFormPage (UI-020)', () => {
     expect(criacao.request.body.salePrice).toBe('380.00');
   });
 });
+
+describe('pendências de UI-018 e UI-020', () => {
+  it('não envia bloqueio sem motivo e manda o motivo quando informado', async () => {
+    prepararSessao(['partners:READ', 'partners:UPDATE']);
+    TestBed.overrideProvider(ActivatedRoute, {
+      useValue: { snapshot: { paramMap: { get: () => 'parc-1' } } },
+    });
+    const mock = TestBed.inject(HttpTestingController);
+
+    const fixture = TestBed.createComponent(PartnerFormPage);
+    fixture.detectChanges();
+    mock.expectOne(`${BASE}/partners/parc-1`).flush(PARCEIRO);
+    await fixture.whenStable();
+
+    const pagina = fixture.componentInstance as unknown as {
+      mudar: (campo: string, valor: unknown) => void;
+      salvar: () => void;
+    };
+    pagina.mudar('supplierIsBlocked', true);
+    pagina.salvar();
+    // O backend exige o motivo: sem ele, nada sai da tela.
+    mock.verify();
+
+    pagina.mudar('supplierBlockReason', 'Atrasos recorrentes na entrega');
+    pagina.salvar();
+
+    const patch = mock.expectOne(`${BASE}/partners/parc-1`);
+    expect(patch.request.body.supplier.isBlocked).toBe(true);
+    expect(patch.request.body.supplier.blockReason).toBe('Atrasos recorrentes na entrega');
+    patch.flush(PARCEIRO);
+  });
+
+  it('edita a homologação sem mandar o fornecedor', async () => {
+    prepararSessao([
+      'products:READ',
+      'products:UPDATE',
+      'product-suppliers:READ',
+      'product-suppliers:UPDATE',
+    ]);
+    TestBed.overrideProvider(ActivatedRoute, {
+      useValue: { snapshot: { paramMap: { get: () => 'prod-1' } } },
+    });
+    const mock = TestBed.inject(HttpTestingController);
+    const HOMOLOGACAO = {
+      id: 'sup-1',
+      productId: 'prod-1',
+      partnerId: 'parc-1',
+      partner: { id: 'parc-1', legalName: 'Ferragens Bahia Distribuidora LTDA', tradeName: null },
+      supplierCode: 'FB-778',
+      referencePrice: '39.900000',
+      deliveryDays: 5,
+      isPreferred: true,
+    };
+
+    const fixture = TestBed.createComponent(ProductFormPage);
+    fixture.detectChanges();
+    mock.expectOne(`${BASE}/products/prod-1`).flush(PRODUTO);
+    mock.expectOne(`${BASE}/products/prod-1/suppliers`).flush([HOMOLOGACAO]);
+    await fixture.whenStable();
+
+    const pagina = fixture.componentInstance as unknown as {
+      abrirEdicaoFornecedor: (f: unknown) => void;
+      mudarFornecedor: (campo: string, valor: string) => void;
+      salvarFornecedor: () => void;
+    };
+    pagina.abrirEdicaoFornecedor(HOMOLOGACAO);
+    pagina.mudarFornecedor('referencePrice', '40.50');
+    pagina.salvarFornecedor();
+
+    const patch = mock.expectOne(`${BASE}/products/prod-1/suppliers/sup-1`);
+    expect(patch.request.method).toBe('PATCH');
+    // A homologação é do par item × fornecedor: trocar o fornecedor é outra.
+    expect(patch.request.body.partnerId).toBeUndefined();
+    expect(patch.request.body.referencePrice).toBe('40.50');
+    patch.flush(HOMOLOGACAO);
+    mock.expectOne(`${BASE}/products/prod-1/suppliers`).flush([HOMOLOGACAO]);
+  });
+});
