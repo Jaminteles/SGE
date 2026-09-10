@@ -671,7 +671,7 @@ Não reinicie toda a suíte sem necessidade.
 
 # 12. Git
 
-Faça um commit por task.
+Me mande o codigo de commit por task, para que eu commite quando terminar de verificar o que foi feito.
 
 Formato:
 
@@ -681,6 +681,7 @@ SB-XXX: descrição
 
 Não faça:
 
+* commit;
 * push;
 * pull;
 * merge;
