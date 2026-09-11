@@ -49,7 +49,7 @@ export type ValoresFiltro = Record<string, string> & { q: string };
           [showClear]="true"
           [placeholder]="filtro.placeholder ?? filtro.label"
           [ariaLabel]="filtro.label"
-          [ngModel]="valores()[filtro.name] ?? ''"
+          [ngModel]="valor(filtro.name)"
           (ngModelChange)="mudarFiltro(filtro.name, $event)"
         />
       }

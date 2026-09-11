@@ -26,7 +26,6 @@ import { DecimalField } from '../ui/decimal-field';
 import { ErrorAlert } from '../ui/error-alert';
 import { FilterBar } from '../ui/filter-bar';
 import { LIMITE_BUSCA, SearchSelect } from '../ui/search-select';
-import { SelectField } from '../ui/select-field';
 import { TextField } from '../ui/text-field';
 import {
   FILTRO_STATUS_REEMBOLSO,
@@ -94,7 +93,6 @@ const TIPOS_COMPROVANTE = 'application/pdf,image/jpeg,image/png';
     ErrorAlert,
     FilterBar,
     SearchSelect,
-    SelectField,
     TextField,
   ],
   template: `
