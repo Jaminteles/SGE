@@ -304,3 +304,24 @@ body {
   font-size: 0.72rem;
   color: var(--p-text-muted-color);
 }
+
+/*
+ * Impressão do comprovante da ordem (UI-045): só o bloco `.comprovante` sai no
+ * papel, sem a moldura da aplicação. A classe no `body` existe apenas durante
+ * o `window.print()`, então a impressão das outras telas não muda.
+ */
+@media print {
+  body.imprimindo-comprovante * {
+    visibility: hidden;
+  }
+  body.imprimindo-comprovante .comprovante,
+  body.imprimindo-comprovante .comprovante * {
+    visibility: visible;
+  }
+  body.imprimindo-comprovante .comprovante {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+}

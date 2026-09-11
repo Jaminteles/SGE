@@ -2043,3 +2043,271 @@ export interface FiscalDocumentSummary {
     status: EntryStatus;
   }[];
 }
+
+// ---------------------------------------------------------------------------
+// Bancos (RF-059 a RF-071 — UI-042 a UI-047)
+// ---------------------------------------------------------------------------
+
+export type CompanyAccountType = 'CORRENTE' | 'POUPANCA' | 'PAGAMENTO';
+
+/** Conta bancária da empresa (`gestao.conta_bancaria`) — de onde o dinheiro sai. */
+export interface CompanyBankAccount {
+  id: string;
+  description: string;
+  bankCode: string;
+  bankName: string | null;
+  agency: string;
+  agencyDigit: string | null;
+  account: string;
+  accountDigit: string | null;
+  accountType: CompanyAccountType;
+  pixKey: string | null;
+  branchId: string | null;
+  providerId: string | null;
+  credentialId: string | null;
+  openingBalance: string;
+  /** Saldo informado pelo banco no último extrato — nunca digitado (RF-060). */
+  currentBalance: string;
+  balanceDate: string | null;
+  allowsPayment: boolean;
+  allowsReceipt: boolean;
+  isDefault: boolean;
+  isActive: boolean;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CompanyBankAccountInput {
+  description: string;
+  bankCode: string;
+  bankName?: string;
+  agency: string;
+  agencyDigit?: string;
+  account: string;
+  accountDigit?: string;
+  accountType?: CompanyAccountType;
+  pixKey?: string;
+  branchId?: string;
+  providerId?: string;
+  credentialId?: string;
+  openingBalance?: string;
+  allowsPayment?: boolean;
+  allowsReceipt?: boolean;
+  isDefault?: boolean;
+  note?: string;
+}
+
+/** Banco, agência e conta são a identidade da conta: não se alteram. */
+export type CompanyBankAccountUpdateInput = Partial<
+  Omit<CompanyBankAccountInput, 'bankCode' | 'agency' | 'account'>
+> & { isActive?: boolean };
+
+/** O que o provedor sabe fazer (`provider.capacidades`). */
+export interface ProviderCapabilities {
+  pix?: boolean;
+  boleto?: boolean;
+  ted?: boolean;
+  doc?: boolean;
+  transferencia_interna?: boolean;
+  cancelamento?: boolean;
+  webhook?: boolean;
+  consulta?: boolean;
+}
+
+export interface BankProvider {
+  id: string;
+  code: string;
+  name: string;
+  category: string;
+  capabilities: ProviderCapabilities;
+}
+
+/** Credencial sem o segredo — nenhuma rota o devolve (RNF-003). */
+export interface IntegrationCredential {
+  id: string;
+  name: string;
+  environment: string;
+  isActive: boolean;
+  provider: BankProvider;
+}
+
+export type TransactionDirection = 'DEBITO' | 'CREDITO';
+
+export type PaymentTransactionStatus =
+  | 'CRIADA'
+  | 'AGENDADA'
+  | 'ENFILEIRADA'
+  | 'ENVIADA'
+  | 'PROCESSANDO'
+  | 'CONFIRMADA'
+  | 'FALHA'
+  | 'CANCELADA'
+  | 'ESTORNADA'
+  | 'EXPIRADA';
+
+/** Ordem de pagamento ou recebimento (`DETAIL_FIELDS` do backend). */
+export interface PaymentTransaction {
+  id: string;
+  companyId: string;
+  bankAccountId: string;
+  providerId: string;
+  installmentId: string | null;
+  direction: TransactionDirection;
+  method: PaymentMethodType;
+  status: PaymentTransactionStatus;
+  amount: string;
+  description: string | null;
+  scheduledFor: string | null;
+  executedAt: string | null;
+  confirmedAt: string | null;
+  payeeName: string | null;
+  payeeDocument: string | null;
+  payeeBankCode: string | null;
+  payeeAgency: string | null;
+  payeeAccount: string | null;
+  pixKey: string | null;
+  barcode: string | null;
+  idempotencyKey: string;
+  /** Identificador da operação no provedor (RF-068). */
+  externalId: string | null;
+  endToEndId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  attempts: number;
+  maxAttempts: number;
+  /** O provedor aceita cancelar depois do envio (RF-065). */
+  cancellable: boolean;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Só no detalhe. */
+  bankAccount?: { id: string; description: string; bankCode: string; account: string };
+  settlements?: { id: string; settlementDate: string; totalAmount: string }[];
+}
+
+export interface PaymentInput {
+  bankAccountId: string;
+  direction?: TransactionDirection;
+  method: PaymentMethodType;
+  amount: string;
+  description?: string;
+  scheduledFor?: string;
+  installmentId?: string;
+  payeeName?: string;
+  payeeDocument?: string;
+  payeeBankCode?: string;
+  payeeAgency?: string;
+  payeeAccount?: string;
+  pixKey?: string;
+  barcode?: string;
+}
+
+export interface ConfirmPaymentInput {
+  externalId?: string;
+  confirmedAt?: string;
+  note?: string;
+}
+
+export type StatementFormat = 'OFX' | 'CSV' | 'CNAB240';
+
+export interface BankStatementImport {
+  id: string;
+  bankAccountId: string;
+  format: StatementFormat;
+  fileName: string | null;
+  fileHash: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  openingBalance: string | null;
+  closingBalance: string | null;
+  totalCount: number;
+  importedCount: number;
+  duplicateCount: number;
+  status: string;
+  error: string | null;
+  createdAt: string;
+}
+
+export type ReconciliationStatus =
+  | 'NAO_CONCILIADO'
+  | 'SUGERIDO'
+  | 'CONCILIADO'
+  | 'DIVERGENTE'
+  | 'IGNORADO';
+
+export interface BankTransaction {
+  id: string;
+  bankAccountId: string;
+  statementImportId: string | null;
+  movementDate: string;
+  postedDate: string | null;
+  direction: TransactionDirection;
+  amount: string;
+  balanceAfter: string | null;
+  description: string | null;
+  document: string | null;
+  externalId: string | null;
+  counterpartName: string | null;
+  counterpartDocument: string | null;
+  reconciliationStatus: ReconciliationStatus;
+  createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Fila e reprocessamento (RF-069/RF-070, RF-128/RF-130)
+// ---------------------------------------------------------------------------
+
+export type JobStatus = 'PENDENTE' | 'PROCESSANDO' | 'CONCLUIDO' | 'FALHA' | 'CANCELADO' | 'AGENDADO';
+
+/** Contagem por situação dos últimos 7 dias. */
+export interface QueueSummary {
+  window: string;
+  byStatus: Record<string, number>;
+  pending: number;
+  failed: number;
+}
+
+export interface IntegrationHealth {
+  totals: { total: number; active: number; suspended: number; degraded: number; errors24h: number };
+  queue: QueueSummary;
+  webhooks: QueueSummary;
+}
+
+export interface FailedJob {
+  id: string;
+  queue: string;
+  name: string;
+  status: JobStatus;
+  attempts: number;
+  maxAttempts: number;
+  error: string | null;
+  lastErrorAt: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+  correlationId: string | null;
+}
+
+export interface FailedWebhook {
+  id: string;
+  providerId: string | null;
+  eventType: string;
+  externalId: string | null;
+  signatureValid: boolean | null;
+  status: string;
+  attempts: number;
+  error: string | null;
+  receivedAt: string;
+  processedAt: string | null;
+}
+
+export type ReprocessTarget = 'JOB' | 'WEBHOOK';
+
+export interface ReprocessResult {
+  target: ReprocessTarget;
+  sourceId: string;
+  /** `null` quando já havia um reprocessamento pendente para o mesmo alvo. */
+  jobId: string | null;
+  queue: string;
+}
