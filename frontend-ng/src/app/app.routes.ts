@@ -50,6 +50,10 @@ const ROTAS_PRONTAS: Record<string, Route> = {
     loadComponent: () => import('./financeiro/financeiro-shell').then((m) => m.FinanceiroShell),
     loadChildren: () => import('./financeiro/financeiro.routes').then((m) => m.FINANCEIRO_ROUTES),
   },
+  fiscal: {
+    loadComponent: () => import('./fiscal/fiscal-shell').then((m) => m.FiscalShell),
+    loadChildren: () => import('./fiscal/fiscal.routes').then((m) => m.FISCAL_ROUTES),
+  },
   auditoria: {
     loadComponent: () => import('./audit/audit-page').then((m) => m.AuditPage),
   },

@@ -1869,11 +1869,158 @@ export interface PurchaseHistoryResult extends PaginatedResult<PurchaseHistoryLi
 }
 
 // ---------------------------------------------------------------------------
-// Documentos fiscais — só o que o vínculo do pedido usa (RF-047)
+// Documentos fiscais (RF-043 a RF-050)
 // ---------------------------------------------------------------------------
 
 export type FiscalDocumentStatus =
   'RECEBIDO' | 'PROCESSANDO' | 'PROCESSADO' | 'ERRO' | 'DUPLICADO' | 'CANCELADO' | 'DENEGADO';
+
+export type FiscalDocumentModel =
+  | 'NFE'
+  | 'NFCE'
+  | 'NFSE'
+  | 'CTE'
+  | 'CTE_OS'
+  | 'MDFE'
+  | 'NFAVULSA'
+  | 'RECIBO'
+  | 'OUTRO';
+
+export type FiscalDocumentOrigin = 'UPLOAD_MANUAL' | 'COLETA_AUTOMATICA' | 'API' | 'EMAIL' | 'WEBHOOK';
+
+/** Linha da nota com tributos (`documento_fiscal_item`). Valores em string decimal. */
+export interface FiscalDocumentItem {
+  id: string;
+  sequence: number;
+  productId: string | null;
+  product: { id: string; code: string; description: string; tracksStock: boolean } | null;
+  supplierCode: string | null;
+  description: string;
+  ncm: string | null;
+  cest: string | null;
+  cfop: string | null;
+  unit: string | null;
+  quantity: string;
+  unitPrice: string;
+  discountAmount: string;
+  freightAmount: string;
+  lineAmount: string;
+  icmsCst: string | null;
+  icmsBase: string;
+  icmsRate: string;
+  icmsAmount: string;
+  icmsStAmount: string;
+  ipiAmount: string;
+  pisAmount: string;
+  cofinsAmount: string;
+}
+
+/** Documento completo (`FiscalDocumentRow` — o XML fica fora, pede-se por `/:id/xml`). */
+export interface FiscalDocument extends FiscalDocumentSummary {
+  model: FiscalDocumentModel;
+  branchId: string | null;
+  branch: CodedRef | null;
+  operationType: string | null;
+  operationNature: string | null;
+  movedAt: string | null;
+  issuerPartnerId: string | null;
+  issuerTaxId: string | null;
+  issuerPartner: {
+    id: string;
+    legalName: string;
+    tradeName: string | null;
+    cnpj: string | null;
+    cpf: string | null;
+  } | null;
+  recipientPartnerId: string | null;
+  recipientPartner: { id: string; legalName: string; tradeName: string | null } | null;
+  recipientTaxId: string | null;
+  recipientName: string | null;
+  productsAmount: string;
+  discountAmount: string;
+  freightAmount: string;
+  insuranceAmount: string;
+  otherExpenseAmount: string;
+  icmsAmount: string;
+  icmsStAmount: string;
+  ipiAmount: string;
+  pisAmount: string;
+  cofinsAmount: string;
+  issAmount: string;
+  origin: FiscalDocumentOrigin;
+  originReference: string | null;
+  collectedAt: string | null;
+  xmlHash: string | null;
+  attempts: number;
+  processingError: string | null;
+  processedAt: string | null;
+  duplicateOfId: string | null;
+  duplicateOf: {
+    id: string;
+    number: string;
+    accessKey: string | null;
+    status: FiscalDocumentStatus;
+  } | null;
+  purchaseOrder: { id: string; number: string; status: PurchaseOrderStatus; partnerId: string } | null;
+  generatedStock: boolean;
+  generatedPayable: boolean;
+  metadata: Record<string, unknown>;
+  createdById: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items: FiscalDocumentItem[];
+}
+
+/** O que aconteceu com um XML entregue à importação (`ImportOutcome`). */
+export type FiscalImportOutcome = 'IMPORTADO' | 'JA_IMPORTADO' | 'DUPLICADO' | 'ERRO';
+
+export interface FiscalImportResult {
+  outcome: FiscalImportOutcome;
+  document: FiscalDocument;
+  /** Por que o documento ficou em ERRO ou foi marcado como duplicata. */
+  reason?: string;
+}
+
+/** Vínculos (`LinkFiscalDocumentDto`): ausente = não mexer; `null` desfaz. */
+export interface FiscalDocumentLinkInput {
+  issuerPartnerId?: string | null;
+  purchaseOrderId?: string | null;
+  branchId?: string | null;
+  items?: { itemId: string; productId: string | null }[];
+}
+
+/** Título a pagar gerado pela nota (`FiscalDocumentPayableDto`). */
+export interface FiscalDocumentPayableInput {
+  categoryId?: string;
+  costCenterId?: string;
+  paymentMethodId?: string;
+  paymentTermId?: string;
+  firstDueDate?: string;
+  installmentCount?: number;
+  intervalDays?: number;
+  note?: string;
+}
+
+/** Efeitos pedidos explicitamente (`PostFiscalDocumentDto`). */
+export interface FiscalDocumentPostingInput {
+  generateStock: boolean;
+  generatePayable: boolean;
+  locationId?: string;
+  payable?: FiscalDocumentPayableInput;
+}
+
+export type FiscalAttachmentCategory = 'DANFE' | 'ANEXO';
+
+/** Anexo do documento (`AttachmentResponse`). */
+export interface FiscalAttachment {
+  id: string;
+  fileName: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  sha256: string | null;
+  category: string | null;
+  createdAt: string;
+}
 
 export interface FiscalDocumentSummary {
   id: string;
