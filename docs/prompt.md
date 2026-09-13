@@ -671,7 +671,7 @@ Não reinicie toda a suíte sem necessidade.
 
 # 12. Git
 
-Me mande o codigo de commit por task, para que eu commite quando terminar de verificar o que foi feito.
+IMPORTANTE: Sempre me mande o codigo de commit por task, para que eu commite por comando quando terminar de verificar o que foi feito.
 
 Formato:
 
