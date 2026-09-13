@@ -76,7 +76,7 @@ export const NAVIGATION: NavItem[] = [
     path: '/conciliacao',
     label: 'Conciliação',
     icon: 'pi-sync',
-    permissions: { any: ['bank-statements:READ', 'reconciliations:READ'] },
+    permissions: { any: ['reconciliation:READ', 'reconciliation-rules:READ'] },
   },
   {
     path: '/fiscal',

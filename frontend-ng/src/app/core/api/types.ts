@@ -2256,6 +2256,266 @@ export interface BankTransaction {
 }
 
 // ---------------------------------------------------------------------------
+// Conciliação bancária (RF-071 a RF-077)
+// ---------------------------------------------------------------------------
+
+/** Natureza reconhecida no histórico do extrato (`BankTransactionKind`). */
+export type BankTransactionKind =
+  | 'PIX'
+  | 'TED'
+  | 'DOC'
+  | 'BOLETO'
+  | 'TARIFA'
+  | 'RENDIMENTO'
+  | 'IMPOSTO'
+  | 'ESTORNO'
+  | 'TRANSFERENCIA_INTERNA'
+  | 'OUTRO';
+
+/** Identificação gravada em `metadados.identification` (RF-072). */
+export interface BankTransactionIdentification {
+  kind: BankTransactionKind;
+  document?: string;
+  reference?: string;
+  counterpartName?: string;
+  partnerId?: string;
+  partnerName?: string;
+  internalAccountId?: string;
+  identifiedAt: string;
+}
+
+/** Nota da última decisão sobre o movimento (ignorar/reabrir). */
+export interface BankTransactionDecisionNote {
+  ignoredBy?: string;
+  ignoredAt?: string;
+  reason?: string;
+  reopenedBy?: string;
+  reopenedAt?: string;
+}
+
+export interface BankTransactionMetadata {
+  identification?: BankTransactionIdentification;
+  reconciliation?: BankTransactionDecisionNote;
+  [chave: string]: unknown;
+}
+
+/** Linha de `GET /reconciliation/pending`. */
+export interface PendingBankTransaction {
+  id: string;
+  bankAccountId: string;
+  movementDate: string;
+  direction: TransactionDirection;
+  amount: string;
+  description: string | null;
+  document: string | null;
+  counterpartName: string | null;
+  reconciliationStatus: ReconciliationStatus;
+  metadata: BankTransactionMetadata | null;
+}
+
+/** Resposta de `POST /reconciliation/bank-transactions/:id/ignore|reopen`. */
+export interface ReconciliationMovement {
+  id: string;
+  bankAccountId: string;
+  movementDate: string;
+  direction: TransactionDirection;
+  amount: string;
+  description: string | null;
+  reconciliationStatus: ReconciliationStatus;
+  metadata: BankTransactionMetadata | null;
+}
+
+/** Parcela candidata, com score e motivos (`MatchCandidate`). */
+export interface MatchCandidate {
+  installmentId: string;
+  entryId: string;
+  entryNumber: string;
+  entryType: EntryType;
+  partnerId: string | null;
+  partnerName: string | null;
+  description: string;
+  installmentNumber: number;
+  totalInstallments: number;
+  dueDate: string;
+  balance: string;
+  /** Dias entre o vencimento e o movimento. Negativo = antecipado. */
+  dayGap: number;
+  /** Movimento (restante) menos saldo da parcela. */
+  difference: string;
+  /** Decimal de 0 a 100. */
+  score: string;
+  reasons: string[];
+}
+
+/** Resposta de `GET /reconciliation/bank-transactions/:id/suggestions`. */
+export interface ReconciliationSuggestions {
+  bankTransactionId: string;
+  movementDate: string;
+  direction: TransactionDirection;
+  amount: string;
+  reconciliationStatus: ReconciliationStatus;
+  identification: Omit<BankTransactionIdentification, 'identifiedAt'> & { identifiedAt?: string };
+  candidates: MatchCandidate[];
+}
+
+export type ReconciliationOrigin =
+  | 'MANUAL'
+  | 'AUTOMATICA_REGRA'
+  | 'AUTOMATICA_EXATA'
+  | 'IMPORTACAO';
+
+export interface Reconciliation {
+  id: string;
+  bankTransactionId: string;
+  installmentId: string | null;
+  settlementId: string | null;
+  paymentTransactionId: string | null;
+  ruleId: string | null;
+  origin: ReconciliationOrigin;
+  score: string | null;
+  reconciledAmount: string;
+  difference: string;
+  hasDivergence: boolean;
+  justification: string | null;
+  confirmed: boolean;
+  confirmedById: string | null;
+  confirmedAt: string | null;
+  undoneAt: string | null;
+  undoneById: string | null;
+  undoReason: string | null;
+  createdAt: string;
+}
+
+/** Linha do histórico (`GET /reconciliation`), com o movimento resumido. */
+export interface ReconciliationListItem extends Reconciliation {
+  bankTransaction: {
+    bankAccountId: string;
+    movementDate: string;
+    direction: TransactionDirection;
+    amount: string;
+    description: string | null;
+    reconciliationStatus: ReconciliationStatus;
+  };
+}
+
+/** Corpo de `POST /reconciliation` — ao menos um alvo. */
+export interface ReconciliationInput {
+  bankTransactionId: string;
+  installmentId?: string;
+  settlementId?: string;
+  paymentTransactionId?: string;
+  amount: string;
+  justification?: string;
+}
+
+/** Resposta de `POST /reconciliation/run`. */
+export interface AutoReconciliationJob {
+  jobId: string;
+  bankAccountId: string;
+  from: string;
+  to: string;
+  status: string;
+}
+
+export interface ReconciliationRuleConditions {
+  direction?: TransactionDirection;
+  descriptionContains?: string;
+  documentEquals?: string;
+  counterpartDocument?: string;
+  minAmount?: string;
+  maxAmount?: string;
+  bankAccountId?: string;
+}
+
+export interface ReconciliationRuleActions {
+  autoReconcile?: boolean;
+  minScore?: string;
+  markIgnored?: boolean;
+}
+
+export interface ReconciliationRule {
+  id: string;
+  name: string;
+  priority: number;
+  conditions: ReconciliationRuleConditions;
+  actions: ReconciliationRuleActions;
+  valueTolerance: string;
+  dayTolerance: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReconciliationRuleInput {
+  name: string;
+  priority: number;
+  conditions: ReconciliationRuleConditions;
+  actions: ReconciliationRuleActions;
+  valueTolerance: string;
+  dayTolerance: number;
+  isActive: boolean;
+}
+
+/** Movimento da amostra do painel de divergências. */
+export interface DivergenceMovement {
+  id: string;
+  bankAccountId: string;
+  movementDate: string;
+  direction: TransactionDirection;
+  amount: string;
+  description: string | null;
+  reconciliationStatus: ReconciliationStatus;
+}
+
+export interface DivergenceMovementSummary {
+  count: number;
+  debitTotal: string;
+  creditTotal: string;
+  sample: DivergenceMovement[];
+}
+
+export interface DivergentLink extends Reconciliation {
+  bankTransaction: {
+    movementDate: string;
+    direction: TransactionDirection;
+    amount: string;
+    description: string | null;
+  };
+}
+
+export interface SettlementWithoutMovement {
+  id: string;
+  settlementDate: string;
+  totalAmount: string;
+  bankAccountId: string | null;
+  installmentId: string;
+  transactionId: string | null;
+}
+
+export interface DivergenceAccount {
+  id: string;
+  description: string;
+  bankCode: string;
+  agency: string;
+  account: string;
+  currentBalance: string;
+  balanceDate: string | null;
+  pendingCount: number;
+  pendingAmount: string;
+}
+
+/** Resposta de `GET /reconciliation/divergences` (RF-076). */
+export interface ReconciliationDivergences {
+  period: { from: string | null; to: string | null };
+  bankAccountId: string | null;
+  unreconciled: DivergenceMovementSummary;
+  partiallyReconciled: DivergenceMovementSummary;
+  divergentLinks: { count: number; sample: DivergentLink[] };
+  settlementsWithoutMovement: { count: number; sample: SettlementWithoutMovement[] };
+  accounts: DivergenceAccount[];
+}
+
+// ---------------------------------------------------------------------------
 // Fila e reprocessamento (RF-069/RF-070, RF-128/RF-130)
 // ---------------------------------------------------------------------------
 

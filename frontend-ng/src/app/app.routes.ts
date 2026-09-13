@@ -54,6 +54,11 @@ const ROTAS_PRONTAS: Record<string, Route> = {
     loadComponent: () => import('./bancos/bancos-shell').then((m) => m.BancosShell),
     loadChildren: () => import('./bancos/bancos.routes').then((m) => m.BANCOS_ROUTES),
   },
+  conciliacao: {
+    loadComponent: () => import('./conciliacao/conciliacao-shell').then((m) => m.ConciliacaoShell),
+    loadChildren: () =>
+      import('./conciliacao/conciliacao.routes').then((m) => m.CONCILIACAO_ROUTES),
+  },
   fiscal: {
     loadComponent: () => import('./fiscal/fiscal-shell').then((m) => m.FiscalShell),
     loadChildren: () => import('./fiscal/fiscal.routes').then((m) => m.FISCAL_ROUTES),
