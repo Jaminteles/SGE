@@ -29,17 +29,19 @@ export type ValoresFiltro = Record<string, string> & { q: string };
   imports: [FormsModule, InputTextModule, SelectModule],
   template: `
     <div class="barra-filtro">
-      <span class="barra-filtro__busca">
-        <i class="pi pi-search"></i>
-        <input
-          pInputText
-          type="search"
-          [placeholder]="placeholderBusca()"
-          [attr.aria-label]="placeholderBusca()"
-          [ngModel]="termo()"
-          (ngModelChange)="termo.set($event)"
-        />
-      </span>
+      @if (busca()) {
+        <span class="barra-filtro__busca">
+          <i class="pi pi-search"></i>
+          <input
+            pInputText
+            type="search"
+            [placeholder]="placeholderBusca()"
+            [attr.aria-label]="placeholderBusca()"
+            [ngModel]="termo()"
+            (ngModelChange)="termo.set($event)"
+          />
+        </span>
+      }
 
       @for (filtro of filtros(); track filtro.name) {
         <p-select
@@ -115,6 +117,8 @@ export class FilterBar {
   readonly valores = input.required<ValoresFiltro>();
   readonly filtros = input<DefinicaoFiltro[]>([]);
   readonly placeholderBusca = input('Buscar');
+  /** Esconde a busca textual onde o endpoint não tem `q` (ex.: histórico de conciliação). */
+  readonly busca = input(true);
   /**
    * Mostra o recorte por período (`from`/`to`, `YYYY-MM-DD`). Data é escolha
    * deliberada, como os selects: sai na hora, sem o atraso da busca.
