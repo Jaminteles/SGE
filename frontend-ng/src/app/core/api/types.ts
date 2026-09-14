@@ -2571,3 +2571,236 @@ export interface ReprocessResult {
   jobId: string | null;
   queue: string;
 }
+
+// ---------------------------------------------------------------------------
+// Contabilidade — M11 (RF-078 a RF-087 — UI-054 a UI-060)
+// ---------------------------------------------------------------------------
+
+export type LedgerAccountType =
+  | 'ATIVO'
+  | 'PASSIVO'
+  | 'PATRIMONIO_LIQUIDO'
+  | 'RECEITA'
+  | 'DESPESA'
+  | 'CUSTO'
+  | 'COMPENSACAO';
+
+export type AccountNature = 'DEVEDORA' | 'CREDORA';
+
+/** Conta do plano de contas (`accountSelect` do backend). */
+export interface LedgerAccount {
+  id: string;
+  parentId: string | null;
+  code: string;
+  shortCode: string | null;
+  name: string;
+  type: LedgerAccountType;
+  nature: AccountNature;
+  level: number;
+  /** Analítica: recebe partida. Sintética (com filhas) não recebe. */
+  acceptsEntry: boolean;
+  spedReferenceCode: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LedgerAccountNode extends LedgerAccount {
+  children: LedgerAccountNode[];
+}
+
+/** `CreateLedgerAccountDto`. A natureza só é informada em compensação (RF-079). */
+export interface LedgerAccountInput {
+  code: string;
+  shortCode?: string;
+  name: string;
+  type: LedgerAccountType;
+  nature?: AccountNature;
+  parentId?: string;
+  acceptsEntry?: boolean;
+  spedReferenceCode?: string;
+}
+
+/** `UpdateLedgerAccountDto`: código e tipo ficam de fora de propósito. */
+export interface LedgerAccountUpdate {
+  name?: string;
+  shortCode?: string;
+  spedReferenceCode?: string;
+  acceptsEntry?: boolean;
+  isActive?: boolean;
+}
+
+export type ClassifiableSource = 'categories' | 'payroll-items' | 'bank-accounts';
+
+/** Uma origem financeira e a conta contábil dela (RF-080). */
+export interface AccountClassification {
+  id: string;
+  code: string;
+  name: string;
+  ledgerAccountId: string | null;
+  ledgerAccountCode: string | null;
+  ledgerAccountName: string | null;
+}
+
+export type JournalLineType = 'DEBITO' | 'CREDITO';
+
+export interface JournalEntryLine {
+  id: string;
+  sequence: number;
+  accountId: string;
+  accountCode: string;
+  accountName: string;
+  accountType: LedgerAccountType;
+  type: JournalLineType;
+  /** Decimal textual — nunca `number` (RN-012). */
+  amount: string;
+  costCenterId: string | null;
+  extraHistory: string | null;
+}
+
+export interface JournalEntry {
+  id: string;
+  number: number;
+  branchId: string | null;
+  periodId: string | null;
+  entryDate: string;
+  competenceDate: string;
+  history: string;
+  totalAmount: string;
+  /** MANUAL, TITULO_BAIXA, DOCUMENTO_FISCAL, ESTOQUE, ESTORNO. */
+  origin: string | null;
+  originId: string | null;
+  settlementId: string | null;
+  fiscalDocumentId: string | null;
+  batch: string | null;
+  reversalOfId: string | null;
+  isReversed: boolean;
+  exported: boolean;
+  exportedAt: string | null;
+  createdAt: string;
+  lines: JournalEntryLine[];
+}
+
+export interface JournalEntryLineInput {
+  accountId: string;
+  type: JournalLineType;
+  amount: string;
+  costCenterId?: string;
+  extraHistory?: string;
+}
+
+/** `CreateJournalEntryDto`. Não existe alteração: corrigir é estornar (RF-082). */
+export interface JournalEntryInput {
+  entryDate: string;
+  competenceDate?: string;
+  history: string;
+  lines: JournalEntryLineInput[];
+  branchId?: string;
+  batch?: string;
+}
+
+export type AccountingPeriodStatus = 'ABERTO' | 'EM_FECHAMENTO' | 'FECHADO' | 'REABERTO';
+
+export interface AccountingPeriod {
+  id: string;
+  year: number;
+  month: number;
+  startDate: string;
+  endDate: string;
+  status: AccountingPeriodStatus;
+  closedAt: string | null;
+  closedById: string | null;
+  reopenedAt: string | null;
+  reopenedById: string | null;
+  reopenReason: string | null;
+}
+
+export interface ReportRange {
+  from: string;
+  to: string;
+}
+
+export interface LedgerReportRow {
+  entryId: string;
+  entryNumber: number;
+  competenceDate: string;
+  history: string;
+  extraHistory: string | null;
+  origin: string | null;
+  debit: string;
+  credit: string;
+  balance: string;
+}
+
+export interface LedgerReport {
+  account: Pick<LedgerAccount, 'id' | 'code' | 'name' | 'type' | 'nature'>;
+  range: ReportRange;
+  costCenterId: string | null;
+  openingBalance: string;
+  totalDebit: string;
+  totalCredit: string;
+  closingBalance: string;
+  rows: LedgerReportRow[];
+}
+
+export interface TrialBalanceRow {
+  accountId: string;
+  code: string;
+  name: string;
+  type: LedgerAccountType;
+  nature: AccountNature;
+  openingBalance: string;
+  debit: string;
+  credit: string;
+  closingBalance: string;
+}
+
+export interface TrialBalance {
+  range: ReportRange;
+  costCenterId: string | null;
+  totalDebit: string;
+  totalCredit: string;
+  balanced: boolean;
+  rows: TrialBalanceRow[];
+}
+
+export interface IncomeStatementLine {
+  accountId: string;
+  code: string;
+  name: string;
+  type: LedgerAccountType;
+  amount: string;
+}
+
+export interface IncomeStatementGroup {
+  total: string;
+  lines: IncomeStatementLine[];
+}
+
+export interface IncomeStatement {
+  range: ReportRange;
+  revenue: IncomeStatementGroup;
+  cost: IncomeStatementGroup;
+  expense: IncomeStatementGroup;
+  grossResult: string;
+  netResult: string;
+}
+
+export type AccountingExportFormat = 'csv' | 'json';
+
+/** `ExportAccountingDto`. */
+export interface AccountingExportInput {
+  from: string;
+  to: string;
+  format?: AccountingExportFormat;
+  markExported?: boolean;
+  pendingOnly?: boolean;
+}
+
+/** O arquivo gerado e a contagem que o servidor põe nos cabeçalhos. */
+export interface AccountingExportFile {
+  content: Blob;
+  filename: string;
+  entries: number | null;
+  lines: number | null;
+}
