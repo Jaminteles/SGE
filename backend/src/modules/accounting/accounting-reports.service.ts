@@ -91,14 +91,16 @@ export class AccountingReportsService {
     if (!account) {
       throw new NotFoundException('Conta contábil não encontrada.');
     }
+    const costCenterId = await this.costCenterScope(companyId, query.costCenterId);
 
-    const opening = await this.movementOf(companyId, account.id, { lt: from });
+    const opening = await this.movementOf(companyId, account.id, { lt: from }, costCenterId);
     let balance = this.balanceOf(account.nature, opening);
 
     const lines = await this.prisma.db.journalEntryLine.findMany({
       where: {
         companyId,
         accountId: account.id,
+        ...(costCenterId ? { costCenterId } : {}),
         entry: { competenceDate: { gte: from, lte: to } },
       },
       orderBy: [
@@ -142,11 +144,17 @@ export class AccountingReportsService {
       };
     });
 
-    const period = await this.movementOf(companyId, account.id, { gte: from, lte: to });
+    const period = await this.movementOf(
+      companyId,
+      account.id,
+      { gte: from, lte: to },
+      costCenterId,
+    );
 
     return {
       account,
       range: { from: formatDateOnly(from), to: formatDateOnly(to) },
+      costCenterId,
       openingBalance: this.balanceOf(account.nature, opening),
       totalDebit: period.debit,
       totalCredit: period.credit,
@@ -168,10 +176,11 @@ export class AccountingReportsService {
    */
   async trialBalance(companyId: string, query: QueryTrialBalanceDto) {
     const { from, to } = this.range(query.from, query.to);
+    const costCenterId = await this.costCenterScope(companyId, query.costCenterId);
 
     const [openings, movements] = await Promise.all([
-      this.movementsByAccount(companyId, { lt: from }),
-      this.movementsByAccount(companyId, { gte: from, lte: to }),
+      this.movementsByAccount(companyId, { lt: from }, costCenterId),
+      this.movementsByAccount(companyId, { gte: from, lte: to }, costCenterId),
     ]);
 
     const accountIds = new Set([...openings.keys(), ...movements.keys()]);
@@ -209,6 +218,7 @@ export class AccountingReportsService {
 
     return {
       range: { from: formatDateOnly(from), to: formatDateOnly(to) },
+      costCenterId,
       totalDebit,
       totalCredit,
       /** Verdadeiro é o esperado; falso é escrituração para investigar. */
@@ -285,10 +295,15 @@ export class AccountingReportsService {
   private async movementsByAccount(
     companyId: string,
     competence: Prisma.DateTimeFilter,
+    costCenterId: string | null = null,
   ): Promise<Map<string, Movement>> {
     const grouped = await this.prisma.db.journalEntryLine.groupBy({
       by: ['accountId', 'type'],
-      where: { companyId, entry: { competenceDate: competence } },
+      where: {
+        companyId,
+        ...(costCenterId ? { costCenterId } : {}),
+        entry: { competenceDate: competence },
+      },
       _sum: { amount: true },
     });
 
@@ -310,10 +325,16 @@ export class AccountingReportsService {
     companyId: string,
     accountId: string,
     competence: Prisma.DateTimeFilter,
+    costCenterId: string | null = null,
   ): Promise<Movement> {
     const grouped = await this.prisma.db.journalEntryLine.groupBy({
       by: ['type'],
-      where: { companyId, accountId, entry: { competenceDate: competence } },
+      where: {
+        companyId,
+        accountId,
+        ...(costCenterId ? { costCenterId } : {}),
+        entry: { competenceDate: competence },
+      },
       _sum: { amount: true },
     });
 
@@ -327,6 +348,28 @@ export class AccountingReportsService {
       }
     }
     return movement;
+  }
+
+  /**
+   * Centro de custo do recorte, confrontado com a empresa ativa (UI-057).
+   *
+   * Um id de outra empresa só devolveria relatório zerado — o filtro por
+   * `companyId` e a RLS já garantem isso —, mas zerado parece "sem movimento".
+   * O 404 diz a verdade: o centro não existe para esta empresa.
+   */
+  private async costCenterScope(
+    companyId: string,
+    costCenterId: string | undefined,
+  ): Promise<string | null> {
+    if (!costCenterId) return null;
+    const costCenter = await this.prisma.db.costCenter.findFirst({
+      where: { id: costCenterId, companyId },
+      select: { id: true },
+    });
+    if (!costCenter) {
+      throw new NotFoundException('Centro de custo não encontrado.');
+    }
+    return costCenter.id;
   }
 
   /** Saldo na natureza da conta: devedora soma débito, credora soma crédito. */

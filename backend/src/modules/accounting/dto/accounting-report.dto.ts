@@ -14,8 +14,23 @@ export class AccountingPeriodRangeDto {
   to!: string;
 }
 
+/**
+ * Recorte opcional por centro de custo (RF-083/RF-084 — UI-057).
+ *
+ * O centro de custo mora na partida, não no lançamento: um mesmo lançamento
+ * pode ratear a despesa entre dois centros, e o filtro soma só a fatia de cada
+ * um. Saldo anterior e movimento usam o mesmo recorte — senão o saldo final
+ * misturaria o centro pedido com o resto da empresa.
+ */
+export class CostCenterScopeDto extends AccountingPeriodRangeDto {
+  @ApiPropertyOptional({ description: 'Só as partidas deste centro de custo' })
+  @IsOptional()
+  @IsUUID()
+  costCenterId?: string;
+}
+
 /** Razão de uma conta (RF-083). */
-export class QueryLedgerDto extends AccountingPeriodRangeDto {
+export class QueryLedgerDto extends CostCenterScopeDto {
   @ApiProperty({ description: 'Conta analítica cujo razão se quer ver' })
   @IsUUID()
   accountId!: string;
@@ -37,7 +52,7 @@ export class QueryLedgerDto extends AccountingPeriodRangeDto {
 }
 
 /** Balancete de verificação (RF-084). */
-export class QueryTrialBalanceDto extends AccountingPeriodRangeDto {
+export class QueryTrialBalanceDto extends CostCenterScopeDto {
   @ApiPropertyOptional({
     default: false,
     description: 'Inclui contas sem movimento e sem saldo anterior',

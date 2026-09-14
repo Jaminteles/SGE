@@ -22,9 +22,13 @@ function buildService(options: {
   accounts?: Record<string, unknown>[];
   account?: Record<string, unknown> | null;
   lines?: Record<string, unknown>[];
+  costCenter?: Record<string, unknown> | null;
 }) {
   const prisma = {
     db: {
+      costCenter: {
+        findFirst: jest.fn().mockResolvedValue(options.costCenter ?? null),
+      },
       ledgerAccount: {
         findFirst: jest.fn().mockResolvedValue(options.account ?? null),
         findMany: jest.fn().mockResolvedValue(options.accounts ?? []),
@@ -191,6 +195,84 @@ describe('AccountingReportsService.ledger', () => {
 
     await expect(
       service.ledger('empresa-1', { ...range, accountId: 'de-outra' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('recorta saldo anterior, linhas e movimento pelo centro de custo (UI-057)', async () => {
+    const { service, prisma } = buildService({
+      account: {
+        id: 'c1',
+        code: '4.1',
+        name: 'Despesas',
+        type: LedgerAccountType.DESPESA,
+        nature: AccountNature.DEVEDORA,
+      },
+      costCenter: { id: 'cc-1' },
+    });
+
+    const result = await service.ledger('empresa-1', {
+      ...range,
+      accountId: 'c1',
+      costCenterId: 'cc-1',
+    });
+
+    expect(result.costCenterId).toBe('cc-1');
+    expect(prisma.db.costCenter.findFirst).toHaveBeenCalledWith({
+      where: { id: 'cc-1', companyId: 'empresa-1' },
+      select: { id: true },
+    });
+    const groupBy = prisma.db.journalEntryLine.groupBy as jest.Mock;
+    for (const [args] of groupBy.mock.calls) {
+      expect(args.where).toMatchObject({ companyId: 'empresa-1', costCenterId: 'cc-1' });
+    }
+    expect((prisma.db.journalEntryLine.findMany as jest.Mock).mock.calls[0][0].where).toMatchObject(
+      { companyId: 'empresa-1', costCenterId: 'cc-1' },
+    );
+  });
+
+  it('devolve 404 para centro de custo de outra empresa, sem consultar partidas', async () => {
+    const { service, prisma } = buildService({
+      account: { id: 'c1', nature: AccountNature.DEVEDORA },
+      costCenter: null,
+    });
+
+    await expect(
+      service.ledger('empresa-1', { ...range, accountId: 'c1', costCenterId: 'cc-de-outra' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.db.journalEntryLine.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('AccountingReportsService.trialBalance por centro de custo', () => {
+  it('agrega só as partidas do centro, na empresa ativa (UI-057)', async () => {
+    const { service, prisma } = buildService({ costCenter: { id: 'cc-1' } });
+
+    const result = await service.trialBalance('empresa-1', { ...range, costCenterId: 'cc-1' });
+
+    expect(result.costCenterId).toBe('cc-1');
+    const groupBy = prisma.db.journalEntryLine.groupBy as jest.Mock;
+    expect(groupBy).toHaveBeenCalledTimes(2);
+    for (const [args] of groupBy.mock.calls) {
+      expect(args.where).toMatchObject({ companyId: 'empresa-1', costCenterId: 'cc-1' });
+    }
+  });
+
+  it('sem centro, não filtra nem consulta centro de custo', async () => {
+    const { service, prisma } = buildService({});
+
+    const result = await service.trialBalance('empresa-1', range);
+
+    expect(result.costCenterId).toBeNull();
+    expect(prisma.db.costCenter.findFirst).not.toHaveBeenCalled();
+    const [[args]] = (prisma.db.journalEntryLine.groupBy as jest.Mock).mock.calls;
+    expect(args.where).not.toHaveProperty('costCenterId');
+  });
+
+  it('devolve 404 para centro de custo de outra empresa', async () => {
+    const { service } = buildService({ costCenter: null });
+
+    await expect(
+      service.trialBalance('empresa-1', { ...range, costCenterId: 'cc-de-outra' }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
