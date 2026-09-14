@@ -88,7 +88,16 @@ export const NAVIGATION: NavItem[] = [
     path: '/contabil',
     label: 'Contábil',
     icon: 'pi-book',
-    permissions: { any: ['ledger-accounts:READ', 'journal-entries:READ'] },
+    permissions: {
+      any: [
+        'ledger-accounts:READ',
+        'journal-entries:READ',
+        'accounting-classifications:READ',
+        'accounting-reports:READ',
+        'accounting-periods:READ',
+        'accounting-reports:EXPORT',
+      ],
+    },
   },
   {
     path: '/relatorios',
