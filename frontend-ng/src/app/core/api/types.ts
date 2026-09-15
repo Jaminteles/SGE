@@ -2804,3 +2804,425 @@ export interface AccountingExportFile {
   entries: number | null;
   lines: number | null;
 }
+
+// ---------------------------------------------------------------------------
+// M16 — Fiscal e tributação (RF-088 a RF-094 — UI-061 a UI-064)
+// ---------------------------------------------------------------------------
+
+/**
+ * Parâmetro fiscal vigente (RF-088).
+ *
+ * As alíquotas são **string decimal** (RN-012): entram na apuração, e `number`
+ * em JSON é ponto flutuante binário. `branchId` nulo = a empresa inteira.
+ */
+export interface TaxParameter {
+  id: string;
+  branchId: string | null;
+  taxRegime: TaxRegime;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  simplesRate: string | null;
+  issRate: string | null;
+  ipiTaxpayer: boolean;
+  taxSubstitute: boolean;
+  additionalParameters: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `CreateTaxParameterDto`. */
+export interface TaxParameterInput {
+  branchId?: string;
+  taxRegime: TaxRegime;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  simplesRate?: string;
+  issRate?: string;
+  ipiTaxpayer?: boolean;
+  taxSubstitute?: boolean;
+}
+
+/** `UpdateTaxParameterDto` — sem `branchId`: mudar de filial move o regime. */
+export interface TaxParameterUpdate {
+  taxRegime?: TaxRegime;
+  effectiveFrom?: string;
+  effectiveTo?: string | null;
+  simplesRate?: string | null;
+  issRate?: string | null;
+  ipiTaxpayer?: boolean;
+  taxSubstitute?: boolean;
+}
+
+export type TaxClassificationType = 'NCM' | 'CEST' | 'CFOP' | 'CST' | 'LC116';
+
+/** Classificação fiscal do cadastro da empresa (RF-089). */
+export interface TaxClassification {
+  id: string;
+  type: TaxClassificationType;
+  code: string;
+  description: string;
+  icmsRate: string | null;
+  ipiRate: string | null;
+  pisRate: string | null;
+  cofinsRate: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `CreateTaxClassificationDto`. */
+export interface TaxClassificationInput {
+  type: TaxClassificationType;
+  code: string;
+  description: string;
+  icmsRate?: string;
+  ipiRate?: string;
+  pisRate?: string;
+  cofinsRate?: string;
+}
+
+/** `UpdateTaxClassificationDto` — `type` e `code` são a identidade da linha. */
+export interface TaxClassificationUpdate {
+  description?: string;
+  icmsRate?: string | null;
+  ipiRate?: string | null;
+  pisRate?: string | null;
+  cofinsRate?: string | null;
+  isActive?: boolean;
+}
+
+export type TaxOperationType = 'COMPRA' | 'VENDA' | 'TRANSFERENCIA' | 'DEVOLUCAO';
+
+/** Regra fiscal aplicada a operações e produtos (RF-091). */
+export interface TaxRule {
+  id: string;
+  name: string;
+  priority: number;
+  originState: string | null;
+  destinationState: string | null;
+  operationType: TaxOperationType | null;
+  classificationId: string | null;
+  productId: string | null;
+  productCategoryId: string | null;
+  cfop: string | null;
+  icmsCst: string | null;
+  icmsRate: string | null;
+  icmsBaseReduction: string | null;
+  conditions: Record<string, unknown> | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `CreateTaxRuleDto`. Pelo menos um critério é obrigatório (bd/18 §5). */
+export interface TaxRuleInput {
+  name: string;
+  priority?: number;
+  originState?: string;
+  destinationState?: string;
+  operationType?: TaxOperationType;
+  classificationId?: string;
+  productId?: string;
+  productCategoryId?: string;
+  cfop?: string;
+  icmsCst?: string;
+  icmsRate?: string;
+  icmsBaseReduction?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+}
+
+/** `UpdateTaxRuleDto` — critério apagado vai como `null`. */
+export type TaxRuleUpdate = {
+  [K in keyof TaxRuleInput]?: TaxRuleInput[K] | null;
+} & { isActive?: boolean };
+
+/** `ResolveTaxRuleDto` — simulação: nada é gravado. */
+export interface TaxRuleResolveQuery {
+  operationType?: TaxOperationType;
+  originState?: string;
+  destinationState?: string;
+  productId?: string;
+  productCategoryId?: string;
+  classificationId?: string;
+  onDate?: string;
+}
+
+/**
+ * Resolução da regra (RF-091): a que decide e as demais candidatas, já
+ * ordenadas por prioridade e especificidade.
+ */
+export interface TaxRuleResolution {
+  matched: TaxRule | null;
+  alternatives: TaxRule[];
+}
+
+/** Divergência entre o declarado no XML e o esperado pelo cadastro (RF-090). */
+export interface TaxDivergence {
+  sequence: number;
+  field: string;
+  declared: string;
+  expected: string;
+  note: string;
+}
+
+export interface DocumentTaxItem {
+  id: string;
+  sequence: number;
+  description: string;
+  ncm: string | null;
+  cest: string | null;
+  cfop: string | null;
+  quantity: string;
+  unitPrice: string;
+  lineAmount: string;
+  icmsCst: string | null;
+  icmsBase: string;
+  icmsRate: string;
+  icmsAmount: string;
+  icmsStAmount: string;
+  ipiAmount: string;
+  pisAmount: string;
+  cofinsAmount: string;
+  classificationId: string | null;
+  classification: {
+    id: string;
+    code: string;
+    description: string;
+    icmsRate: string | null;
+    ipiRate: string | null;
+  } | null;
+}
+
+/**
+ * Tributação declarada da nota (RF-090).
+ *
+ * Nada aqui é recalculado: `declared` é o que o emitente informou e `itemTotals`
+ * é a soma das linhas, exibida só para conferência.
+ */
+export interface DocumentTaxSummary {
+  documentId: string;
+  number: string;
+  series: string | null;
+  accessKey: string | null;
+  issuedAt: string;
+  status: string;
+  declared: {
+    productsAmount: string;
+    totalAmount: string;
+    icmsAmount: string;
+    icmsStAmount: string;
+    ipiAmount: string;
+    pisAmount: string;
+    cofinsAmount: string;
+    issAmount: string;
+  };
+  itemTotals: {
+    lineAmount: string;
+    icmsAmount: string;
+    icmsStAmount: string;
+    ipiAmount: string;
+    pisAmount: string;
+    cofinsAmount: string;
+  };
+  items: DocumentTaxItem[];
+  divergences: TaxDivergence[];
+  unclassifiedItems: number;
+}
+
+/** Resultado da classificação automática por NCM (RF-090). */
+export interface AutoClassifyResult {
+  classified: number;
+  /** NCMs da nota que não existem no cadastro — não classificados. */
+  pending: string[];
+}
+
+export type FiscalEventType = 'CANCELAMENTO' | 'CCE' | 'MANIFESTACAO' | 'INUTILIZACAO';
+export type FiscalEventStatus = 'REGISTRADO' | 'TRANSMITIDO' | 'AUTORIZADO' | 'REJEITADO';
+
+/** Evento transmitido ao fisco (RF-092/RF-094). */
+export interface FiscalEvent {
+  id: string;
+  documentId: string | null;
+  type: FiscalEventType;
+  protocol: string | null;
+  sequence: number;
+  occurredAt: string;
+  justification: string | null;
+  status: FiscalEventStatus;
+  response: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+/** `CreateFiscalEventDto`. O evento nasce REGISTRADO. */
+export interface FiscalEventInput {
+  type: FiscalEventType;
+  documentId?: string;
+  sequence?: number;
+  justification?: string;
+}
+
+/** `SettleFiscalEventDto` — retorno do fisco lançado a mão. */
+export interface FiscalEventSettlement {
+  status: 'AUTORIZADO' | 'REJEITADO';
+  protocol: string;
+  message?: string;
+}
+
+export type FiscalDirection = 'ENTRADA' | 'SAIDA';
+
+export interface FiscalReportPeriod {
+  from: string;
+  to: string;
+}
+
+/** Linha da apuração fiscal por competência (RF-093). */
+export interface FiscalAssessmentRow {
+  competence: string;
+  direction: string;
+  model: string;
+  documents: number;
+  totalAmount: string;
+  productsAmount: string;
+  icmsAmount: string;
+  icmsStAmount: string;
+  ipiAmount: string;
+  pisAmount: string;
+  cofinsAmount: string;
+  issAmount: string;
+}
+
+export interface FiscalAssessmentTotal {
+  documents: number;
+  totalAmount: string;
+  icmsAmount: string;
+  icmsStAmount: string;
+  ipiAmount: string;
+  pisAmount: string;
+  cofinsAmount: string;
+  issAmount: string;
+}
+
+/**
+ * Apuração fiscal (RF-093). Os totais vêm separados por sentido: imposto de
+ * entrada é crédito e o de saída é débito — somá-los não apura nada.
+ */
+export interface FiscalAssessmentReport {
+  period: FiscalReportPeriod;
+  rows: FiscalAssessmentRow[];
+  totals: Record<string, FiscalAssessmentTotal>;
+}
+
+/** Linha do livro de entradas e saídas por CFOP e NCM (RF-093). */
+export interface FiscalLedgerRow {
+  competence: string;
+  direction: string;
+  cfop: string | null;
+  ncm: string | null;
+  items: number;
+  totalAmount: string;
+  icmsBase: string;
+  icmsAmount: string;
+  icmsStAmount: string;
+  ipiAmount: string;
+  pisAmount: string;
+  cofinsAmount: string;
+}
+
+export interface FiscalLedgerReport {
+  period: FiscalReportPeriod;
+  rows: FiscalLedgerRow[];
+}
+
+// ---------------------------------------------------------------------------
+// M17 — Notificações e automação (RF-119 a RF-125 — UI-065 a UI-067)
+// ---------------------------------------------------------------------------
+
+export type NotificationChannel = 'INTERNO' | 'EMAIL';
+export type NotificationStatus = 'PENDENTE' | 'ENVIADA' | 'LIDA' | 'FALHA' | 'CANCELADA';
+
+/**
+ * Aviso da caixa de entrada (RF-119).
+ *
+ * O backend nunca devolve endereço, chave de dedupe nem tentativas de entrega:
+ * é mecanismo de entrega, não aviso (RNF-005).
+ */
+export interface AppNotification {
+  id: string;
+  userId: string | null;
+  channel: NotificationChannel;
+  type: string;
+  title: string;
+  message: string;
+  /** 1 = mais urgente, 5 = informativo. */
+  priority: number;
+  entity: string | null;
+  entityId: string | null;
+  link: string | null;
+  status: NotificationStatus;
+  sentAt: string | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export type AutomationTrigger =
+  | 'TITULO_VENCENDO'
+  | 'PAGAMENTO_PROCESSADO'
+  | 'PAGAMENTO_FALHOU'
+  | 'APROVACAO_PENDENTE'
+  | 'DIVERGENCIA_CONCILIACAO';
+
+/** `AutomationConditionsDto` — forma fechada: o motor só entende estas chaves. */
+export interface AutomationConditions {
+  daysAhead?: number;
+  minAmount?: string;
+  entryType?: EntryType;
+  includeOverdue?: boolean;
+}
+
+/** `AutomationActionDto`. A única ação possível é notificar. */
+export interface AutomationAction {
+  type: 'NOTIFICAR';
+  channel: NotificationChannel;
+  /** Endereçamento por permissão, no formato `recurso:AÇÃO`. */
+  permission?: string;
+  userIds?: string[];
+  priority?: number;
+}
+
+/** Regra de automação de avisos (RF-125). */
+export interface AutomationRule {
+  id: string;
+  name: string;
+  description: string | null;
+  triggerEvent: AutomationTrigger;
+  conditions: AutomationConditions | null;
+  actions: AutomationAction[];
+  isActive: boolean;
+  lastRunAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `CreateAutomationRuleDto`. */
+export interface AutomationRuleInput {
+  name: string;
+  description?: string;
+  triggerEvent: AutomationTrigger;
+  conditions?: AutomationConditions;
+  actions: AutomationAction[];
+  isActive?: boolean;
+}
+
+export type AutomationRuleUpdate = Partial<AutomationRuleInput>;
+
+/** Execução registrada da regra (RF-125). */
+export interface AutomationRuleRun {
+  id: string;
+  status: string;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  executedAt: string;
+}

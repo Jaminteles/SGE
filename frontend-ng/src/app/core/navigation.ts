@@ -82,7 +82,16 @@ export const NAVIGATION: NavItem[] = [
     path: '/fiscal',
     label: 'Fiscal',
     icon: 'pi-file',
-    permissions: { any: ['fiscal-documents:READ', 'fiscal-reports:READ'] },
+    permissions: {
+      any: [
+        'fiscal-documents:READ',
+        'fiscal-reports:READ',
+        'tax-parameters:READ',
+        'tax-classifications:READ',
+        'tax-rules:READ',
+        'fiscal-events:READ',
+      ],
+    },
   },
   {
     path: '/contabil',
@@ -98,6 +107,12 @@ export const NAVIGATION: NavItem[] = [
         'accounting-reports:EXPORT',
       ],
     },
+  },
+  {
+    path: '/automacao',
+    label: 'Automação',
+    icon: 'pi-bell',
+    permissions: { any: ['notifications:READ', 'automation-rules:READ'] },
   },
   {
     path: '/relatorios',

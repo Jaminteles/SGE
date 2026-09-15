@@ -2,20 +2,7 @@ import { Component, computed, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { PermissionsService } from '../core/authz/permissions.service';
-import type { PermissionCheck } from '../core/authz/permissions';
-
-interface AbaFiscal {
-  path: string;
-  label: string;
-  permissions: PermissionCheck;
-}
-
-/** Sub-navegação do módulo Fiscal — documentos fiscais (UI-036 a UI-041). */
-const ABAS: AbaFiscal[] = [
-  { path: 'documentos', label: 'Documentos', permissions: { all: ['fiscal-documents:READ'] } },
-  { path: 'importar', label: 'Importar XML', permissions: { all: ['fiscal-documents:CREATE'] } },
-  { path: 'coleta', label: 'Coleta automática', permissions: { all: ['fiscal-documents:READ'] } },
-];
+import { ABAS_FISCAL } from './fiscal.routes';
 
 /**
  * Moldura do módulo Fiscal: a faixa de abas mais o `router-outlet` das telas.
@@ -69,6 +56,6 @@ export class FiscalShell {
   private readonly permissoes = inject(PermissionsService);
 
   protected readonly abas = computed(() =>
-    ABAS.filter((aba) => this.permissoes.permite(aba.permissions)),
+    ABAS_FISCAL.filter((aba) => this.permissoes.permite(aba.permissions)),
   );
 }
