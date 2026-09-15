@@ -17,7 +17,9 @@ import { ErrorAlert } from '../ui/error-alert';
 import { TextField } from '../ui/text-field';
 import { FiscalAttachmentsPanel } from './fiscal-attachments-panel';
 import { FiscalDuplicatePanel } from './fiscal-duplicate-panel';
+import { FiscalEventsPanel } from './fiscal-events-panel';
 import { FiscalLinksPanel } from './fiscal-links-panel';
+import { FiscalTaxesPanel } from './fiscal-taxes-panel';
 import {
   ROTULO_MODELO,
   ROTULO_ORIGEM,
@@ -57,7 +59,9 @@ const MOTIVO_MINIMO = 5;
     TextField,
     FiscalAttachmentsPanel,
     FiscalDuplicatePanel,
+    FiscalEventsPanel,
     FiscalLinksPanel,
+    FiscalTaxesPanel,
   ],
   template: `
     <p class="crumb">Fiscal / Documentos / {{ titulo() }}</p>
@@ -344,6 +348,14 @@ const MOTIVO_MINIMO = 5;
 
       <sge-fiscal-links-panel [nota]="registro" (atualizada)="aoAtualizar($event)" />
 
+      @if (podeLerTributos()) {
+        <sge-fiscal-taxes-panel [documentoId]="registro.id" />
+      }
+
+      @if (podeLerEventos()) {
+        <sge-fiscal-events-panel [documentoId]="registro.id" />
+      }
+
       <sge-fiscal-attachments-panel [nota]="registro" />
     }
 
@@ -491,6 +503,8 @@ export class FiscalDocumentDetailPage {
 
   protected readonly podeAtualizar = () => this.permissoes.pode('fiscal-documents:UPDATE');
   protected readonly podeDescartar = () => this.permissoes.pode('fiscal-documents:DELETE');
+  protected readonly podeLerTributos = () => this.permissoes.pode('document-taxes:READ');
+  protected readonly podeLerEventos = () => this.permissoes.pode('fiscal-events:READ');
   protected readonly reprocessavel = reprocessavel;
   protected readonly descartavel = descartavel;
 
