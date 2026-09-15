@@ -67,6 +67,10 @@ const ROTAS_PRONTAS: Record<string, Route> = {
     loadComponent: () => import('./contabil/contabil-shell').then((m) => m.ContabilShell),
     loadChildren: () => import('./contabil/contabil.routes').then((m) => m.CONTABIL_ROUTES),
   },
+  automacao: {
+    loadComponent: () => import('./automacao/automacao-shell').then((m) => m.AutomacaoShell),
+    loadChildren: () => import('./automacao/automacao.routes').then((m) => m.AUTOMACAO_ROUTES),
+  },
   auditoria: {
     loadComponent: () => import('./audit/audit-page').then((m) => m.AuditPage),
   },
