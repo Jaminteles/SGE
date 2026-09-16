@@ -86,3 +86,36 @@ export function formatCurrency(value: string | null | undefined): string {
   const formatted = formatDecimal(value);
   return formatted === '' ? '' : `R$ ${formatted}`;
 }
+
+/**
+ * Agrupa o milhar de um inteiro em pt-BR ("1234567" -> "1.234.567").
+ *
+ * Aceita `number` porque contagem (total de registros, quantidade de itens) é
+ * inteira de verdade e não corre risco de ponto flutuante — mas o caminho de
+ * `string` continua sendo o preferido quando o valor vem da API.
+ */
+export function formatInteger(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '';
+  const texto = typeof value === 'number' ? String(Math.trunc(value)) : value.trim();
+  if (!/^-?\d+$/.test(texto)) return String(value);
+  const negative = texto.startsWith('-');
+  const digits = negative ? texto.slice(1) : texto;
+  return `${negative ? '-' : ''}${digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
+}
+
+/**
+ * Exibe um percentual canônico em pt-BR ("18.500000" -> "18,5%").
+ *
+ * Diferente de `formatDecimal`, aqui os zeros à direita saem: alíquota chega do
+ * banco como `numeric(9,6)` e "18,500000%" só polui a leitura. O milhar é
+ * agrupado porque índice acumulado passa de mil com facilidade.
+ */
+export function formatPercent(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '';
+  const negative = value.startsWith('-');
+  const unsigned = negative ? value.slice(1) : value;
+  const [int = '0', frac = ''] = unsigned.split('.');
+  const enxuta = frac.replace(/0+$/, '');
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${negative ? '-' : ''}${grouped}${enxuta ? `,${enxuta}` : ''}%`;
+}

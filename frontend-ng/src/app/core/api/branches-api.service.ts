@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { toHttpParams } from './params';
+import { comCache } from './query-cache';
 import type { ListQuery } from './query';
 import type { Branch, BranchInput, PaginatedResult } from './types';
 
@@ -12,7 +13,10 @@ export class BranchesApiService {
   private readonly http = inject(HttpClient);
 
   list(query: ListQuery = {}): Observable<PaginatedResult<Branch>> {
-    return this.http.get<PaginatedResult<Branch>>('branches', { params: toHttpParams(query) });
+    return this.http.get<PaginatedResult<Branch>>('branches', {
+      params: toHttpParams(query),
+      context: comCache(),
+    });
   }
 
   get(id: string): Observable<Branch> {

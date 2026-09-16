@@ -3,6 +3,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ControlValueAccessor, FormsModule, NG_VALUE_ACCESSOR } from '@angular/forms';
 import { AutoCompleteModule, type AutoCompleteSelectEvent } from 'primeng/autocomplete';
 import { Observable, Subject, of } from 'rxjs';
+
+import { DescribedByDirective } from '../core/a11y/described-by.directive';
 import { catchError, switchMap } from 'rxjs/operators';
 
 import type { OpcaoFiltro } from './filter-bar';
@@ -28,13 +30,13 @@ export const LIMITE_BUSCA = 20;
  */
 @Component({
   selector: 'sge-search-select',
-  imports: [FormsModule, AutoCompleteModule],
+  imports: [FormsModule, AutoCompleteModule, DescribedByDirective],
   providers: [
     { provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => SearchSelect), multi: true },
   ],
   template: `
     <div class="campo">
-      <label class="campo__rotulo" [attr.for]="id">{{ rotulo() }}</label>
+      <label class="campo__rotulo" [id]="id + '-rotulo'" [attr.for]="id">{{ rotulo() }}</label>
       <p-autocomplete
         [inputId]="id"
         [suggestions]="sugestoes()"
@@ -55,7 +57,9 @@ export const LIMITE_BUSCA = 20;
         (onSelect)="escolher($event)"
         (onClear)="limpar()"
         (onBlur)="aoTocar()"
-        [ariaLabelledBy]="id"
+        [ariaLabelledBy]="id + '-rotulo'"
+        [sgeDescribedBy]="[dica() ? id + '-dica' : null, erro() ? id + '-erro' : null]"
+        [sgeInvalido]="!!erro()"
       />
       @if (dica()) {
         <span class="campo__dica" [id]="id + '-dica'">{{ dica() }}</span>

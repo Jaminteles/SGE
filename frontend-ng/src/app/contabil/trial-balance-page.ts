@@ -97,13 +97,13 @@ import { ROTULO_TIPO_CONTA, mesDaData, problemaRecorte, saldoInvertido } from '.
           <table class="tabela">
             <thead>
               <tr>
-                <th>Conta</th>
-                <th>Tipo</th>
-                <th class="numero">Saldo anterior</th>
-                <th class="numero">Débitos</th>
-                <th class="numero">Créditos</th>
-                <th class="numero">Saldo final</th>
-                <th></th>
+                <th scope="col">Conta</th>
+                <th scope="col">Tipo</th>
+                <th class="numero" scope="col">Saldo anterior</th>
+                <th class="numero" scope="col">Débitos</th>
+                <th class="numero" scope="col">Créditos</th>
+                <th class="numero" scope="col">Saldo final</th>
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>

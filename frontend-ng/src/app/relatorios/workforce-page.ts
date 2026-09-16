@@ -80,11 +80,11 @@ import { ReportFilterBar } from './report-filter-bar';
           <table class="tabela">
             <thead>
               <tr>
-                <th>Departamento</th>
-                <th>Situação</th>
-                <th class="numero">Funcionários</th>
-                <th class="numero">Com salário</th>
-                <th class="numero">Salário base</th>
+                <th scope="col">Departamento</th>
+                <th scope="col">Situação</th>
+                <th class="numero" scope="col">Funcionários</th>
+                <th class="numero" scope="col">Com salário</th>
+                <th class="numero" scope="col">Salário base</th>
               </tr>
             </thead>
             <tbody>
@@ -114,10 +114,10 @@ import { ReportFilterBar } from './report-filter-bar';
           <table class="tabela">
             <thead>
               <tr>
-                <th>Competência</th>
-                <th class="numero">Admissões</th>
-                <th class="numero">Desligamentos</th>
-                <th class="numero">Saldo</th>
+                <th scope="col">Competência</th>
+                <th class="numero" scope="col">Admissões</th>
+                <th class="numero" scope="col">Desligamentos</th>
+                <th class="numero" scope="col">Saldo</th>
               </tr>
             </thead>
             <tbody>
@@ -147,12 +147,12 @@ import { ReportFilterBar } from './report-filter-bar';
           <table class="tabela">
             <thead>
               <tr>
-                <th>Competência</th>
-                <th>Centro de custo</th>
-                <th>Tipo</th>
-                <th class="numero">Provisionado</th>
-                <th class="numero">Realizado</th>
-                <th class="numero">Diferença</th>
+                <th scope="col">Competência</th>
+                <th scope="col">Centro de custo</th>
+                <th scope="col">Tipo</th>
+                <th class="numero" scope="col">Provisionado</th>
+                <th class="numero" scope="col">Realizado</th>
+                <th class="numero" scope="col">Diferença</th>
               </tr>
             </thead>
             <tbody>

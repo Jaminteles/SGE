@@ -72,6 +72,66 @@ body {
   outline-offset: 2px;
 }
 
+/* ---------- Acessibilidade (WCAG 2.1 AA — UI-082) ---------- */
+
+/* Texto só para leitor de tela. Nada de `display: none` nem
+   `visibility: hidden`: os dois tiram o elemento da árvore de acessibilidade,
+   que é exatamente o contrário do que se quer aqui. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Link de pular (critério 2.4.1): primeiro elemento focável da moldura, some
+   até receber foco. Sem ele, quem navega por teclado atravessa os quinze itens
+   do menu lateral em cada tela antes de chegar ao conteúdo. */
+.pular-conteudo {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 2000;
+  padding: 0.55rem 0.9rem;
+  border-radius: var(--sge-raio-1);
+  background: var(--p-primary-color);
+  color: var(--p-primary-contrast-color);
+  font-size: var(--sge-fonte-sm);
+  font-weight: var(--sge-peso-forte);
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform 0.15s;
+}
+
+.pular-conteudo:focus-visible {
+  transform: translateY(0);
+}
+
+/* O `<main>` recebe foco por programa na troca de rota; o contorno do foco
+   numa área inteira da tela não ajuda ninguém e confunde quem enxerga. */
+main:focus {
+  outline: none;
+}
+
+/* Critério 2.3.3 / preferência do sistema: quem pediu menos movimento não
+   deveria receber transição alguma da aplicação. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* ---------- Primitivas de página ----------
    Compartilhadas por todas as páginas dentro da moldura autenticada. Ficam no
    global porque componentes com encapsulamento de estilo não as herdariam. */
@@ -352,6 +412,71 @@ body {
     top: 0;
     left: 0;
     width: 100%;
+  }
+}
+
+/* ---------- Responsividade das telas (RNF-014 — UI-083) ----------
+   A moldura é responsabilidade de `layout/app-layout.scss`; aqui ficam as
+   primitivas que toda tela usa. O alvo é o uso real em tablet e celular:
+   conferir um título, aprovar um pagamento, consultar um saldo — não digitar
+   um lançamento contábil inteiro no telefone. */
+
+@media (max-width: 900px) {
+  /* O cabeçalho de página tem título à esquerda e ações à direita. Na largura
+     do celular os dois não cabem na mesma linha sem espremer o botão. */
+  .pagehead {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .pagehead__actions {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  /* 200px de mínimo forçaria uma coluna só já no tablet; 150px cabe duas. */
+  .kpis {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.6rem;
+  }
+
+  .kpi {
+    padding: 0.8rem 0.9rem;
+  }
+
+  .kpi__value {
+    font-size: 1.2rem;
+  }
+
+  .secao {
+    padding: var(--sge-espaco-4);
+  }
+
+  /* Campo espremido em duas colunas de 110px é pior que campo em coluna única. */
+  .grade-campos {
+    grid-template-columns: 1fr;
+  }
+
+  /*
+   * A tabela é o ponto em que "responsivo" costuma virar perda de informação.
+   * Aqui ela **não** vira cartão nem esconde coluna sozinha: as listagens do
+   * SGE têm valor, vencimento e situação lado a lado justamente para serem
+   * comparados, e quem quiser menos coluna já tem o seletor de colunas
+   * (UI-078). O que muda é o cartão deixar a tabela rolar na horizontal, em
+   * vez de recortá-la — `.table-card` esconde o estouro por padrão para
+   * arredondar o canto, e no celular isso apagaria as últimas colunas.
+   */
+  .table-card {
+    overflow-x: auto;
+  }
+
+  /* Os diálogos do sistema declaram largura em `rem` (30 a 46), calibrada para
+     o formulário que carregam. No celular qualquer uma delas estoura a tela.
+     O teto fica aqui, uma vez: repetir `maxWidth` em setenta diálogos seria a
+     mesma decisão escrita setenta vezes — e a septuagésima primeira esqueceria. */
+  .p-dialog {
+    max-width: 94vw;
   }
 }
 

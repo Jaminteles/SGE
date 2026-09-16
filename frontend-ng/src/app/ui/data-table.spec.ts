@@ -154,3 +154,60 @@ describe('DataTable — colunas visíveis (UI-078)', () => {
     expect(escondidas('thead th')).toEqual([]);
   });
 });
+
+describe('DataTable — rolagem virtual (RNF-008 — UI-085)', () => {
+  @Component({
+    imports: [DataTable],
+    template: `
+      <sge-data-table
+        chave="admin.parametros"
+        [colunas]="colunas"
+        [linhas]="linhas"
+        [total]="linhas.length"
+        [tamanhoPagina]="linhas.length"
+        [virtual]="true"
+        [alturaLinha]="40"
+        altura="400px"
+      />
+    `,
+  })
+  class HospedeiroVirtual {
+    readonly colunas: Coluna[] = [
+      { campo: 'chave', cabecalho: 'Chave' },
+      { campo: 'valor', cabecalho: 'Valor' },
+    ];
+    readonly linhas = Array.from({ length: 500 }, (_, i) => ({
+      chave: `parametro.${i}`,
+      valor: String(i),
+    }));
+  }
+
+  let fixture: ComponentFixture<HospedeiroVirtual>;
+
+  beforeEach(async () => {
+    localStorage.clear();
+    await TestBed.configureTestingModule({ imports: [HospedeiroVirtual] }).compileComponents();
+    fixture = TestBed.createComponent(HospedeiroVirtual);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  });
+
+  it('não materializa a coleção inteira no DOM', () => {
+    // O jsdom não tem layout: a janela do virtualizador mede zero e ele desenha
+    // pouquíssimo. O que este teste guarda é o contrário do que interessa
+    // evitar — sem virtualização, as 500 linhas estariam todas no DOM.
+    const corpo = fixture.nativeElement.querySelectorAll('tbody tr');
+    expect(corpo.length).toBeLessThan(100);
+  });
+
+  it('não oferece o seletor de colunas no modo virtual', () => {
+    // A tabela virtual recicla `<tr>`: esconder célula por índice depois do
+    // render funcionaria só até a primeira rolagem.
+    expect(fixture.nativeElement.querySelector('p-multiselect')).toBeNull();
+  });
+
+  it('não pagina nem pede página ao servidor enquanto rola', () => {
+    expect(fixture.nativeElement.querySelector('.p-paginator')).toBeNull();
+  });
+});

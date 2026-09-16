@@ -132,13 +132,13 @@ export const LINHAS_RAZAO = 200;
           <table class="tabela">
             <thead>
               <tr>
-                <th>Competência</th>
-                <th>Nº</th>
-                <th>Histórico</th>
-                <th>Origem</th>
-                <th class="numero">Débito</th>
-                <th class="numero">Crédito</th>
-                <th class="numero">Saldo</th>
+                <th scope="col">Competência</th>
+                <th scope="col">Nº</th>
+                <th scope="col">Histórico</th>
+                <th scope="col">Origem</th>
+                <th class="numero" scope="col">Débito</th>
+                <th class="numero" scope="col">Crédito</th>
+                <th class="numero" scope="col">Saldo</th>
               </tr>
             </thead>
             <tbody>

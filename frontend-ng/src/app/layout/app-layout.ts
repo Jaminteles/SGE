@@ -1,4 +1,14 @@
-import { Component, computed, inject } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  Injector,
+  afterNextRender,
+  computed,
+  effect,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { Router } from '@angular/router';
 import { AvatarModule } from 'primeng/avatar';
@@ -6,6 +16,8 @@ import { ButtonModule } from 'primeng/button';
 import { TooltipModule } from 'primeng/tooltip';
 
 import { SessionExpiryBanner } from '../auth/session-expiry-banner';
+import { ID_CONTEUDO, RouteAnnouncer } from '../core/a11y/route-announcer';
+import { ViewportService } from '../core/layout/viewport.service';
 import { GlobalSearch } from '../search/global-search';
 import { AuthService } from '../core/auth/auth.service';
 import { PermissionsService } from '../core/authz/permissions.service';
@@ -36,7 +48,9 @@ import { ConfirmDialog } from '../ui/confirm-dialog';
     SessionExpiryBanner,
     ConfirmDialog,
     GlobalSearch,
+    RouteAnnouncer,
   ],
+  host: { '(document:keydown.escape)': 'fecharMenu()' },
   templateUrl: './app-layout.html',
   styleUrl: './app-layout.scss',
 })
@@ -50,6 +64,28 @@ export class AppLayout {
   // da moldura pedindo por ele, a preferência salva não valeria no recarregar.
   private readonly prefs = inject(UserPreferencesService);
   private readonly router = inject(Router);
+  private readonly viewport = inject(ViewportService);
+  private readonly injector = inject(Injector);
+
+  private readonly botaoMenu = viewChild<ElementRef<HTMLButtonElement>>('botaoMenu');
+  private readonly menu = viewChild<ElementRef<HTMLElement>>('menu');
+
+  /** Alvo do link de pular e do foco na troca de rota (UI-082). */
+  protected readonly idConteudo = ID_CONTEUDO;
+
+  /** Ligação `aria-controls` entre o botão da gaveta e o menu (UI-083). */
+  protected readonly idMenu = 'menu-modulos';
+
+  private readonly _menuAberto = signal(false);
+  protected readonly menuAberto = this._menuAberto.asReadonly();
+
+  /**
+   * A gaveta fechada sai da tela por `transform`, e o que sai por `transform`
+   * continua focável: sem `inert`, o Tab do celular percorreria quinze itens
+   * de menu invisíveis antes de chegar ao conteúdo. No layout largo o menu
+   * nunca é inerte — ele está à vista o tempo todo.
+   */
+  protected readonly menuInerte = computed(() => this.viewport.compacto() && !this.menuAberto());
 
   protected readonly iniciais = computed(() => initials(this.auth.usuario()?.name ?? ''));
 
@@ -70,11 +106,57 @@ export class AppLayout {
 
   protected readonly bloqueados = computed(() => this.itens().filter((i) => !i.liberado).length);
 
+  constructor() {
+    // Voltar ao layout largo (girar o tablet, arrastar a janela) precisa
+    // devolver o menu ao estado fixo: deixá-lo "aberto" faria o véu cobrir a
+    // tela inteira num desktop, sem nada para fechar.
+    effect(() => {
+      if (!this.viewport.compacto()) this._menuAberto.set(false);
+    });
+  }
+
   protected async sair(): Promise<void> {
     await this.auth.logout();
     await this.router.navigate(['/login']);
   }
 
+  /**
+   * Abrir e fechar a gaveta leva o foco junto (UI-082 / UI-083).
+   *
+   * Abrir sem mover o foco deixaria o usuário de teclado com um menu na tela e
+   * o cursor atrás dele; fechar sem devolvê-lo jogaria o foco para o início do
+   * documento. O destino natural de volta é o próprio botão que abriu.
+   */
+  protected alternarMenu(): void {
+    const abrindo = !this._menuAberto();
+    this._menuAberto.set(abrindo);
+    if (abrindo) {
+      afterNextRender(() => this.menu()?.nativeElement.querySelector('a')?.focus(), {
+        injector: this.injector,
+      });
+    } else {
+      this.botaoMenu()?.nativeElement.focus();
+    }
+  }
+
+  /** Fecha a gaveta; sem efeito quando ela já está fechada (Esc no desktop). */
+  protected fecharMenu(): void {
+    if (!this._menuAberto()) return;
+    this._menuAberto.set(false);
+    this.botaoMenu()?.nativeElement.focus();
+  }
+
+  /**
+   * O link de pular move o foco por programa em vez de deixar o navegador
+   * seguir a âncora: a âncora sujaria a URL com um fragmento que o router
+   * carregaria para a próxima navegação, e o foco é o que realmente importa
+   * aqui — é ele que decide onde o Tab seguinte cai.
+   */
+  protected pularParaConteudo(evento: Event): void {
+    evento.preventDefault();
+    // `focus()` já rola o elemento para a vista — não precisa de segundo passo.
+    document.getElementById(ID_CONTEUDO)?.focus();
+  }
   protected trocarEmpresa(): void {
     void this.router.navigate(['/selecionar-empresa']);
   }

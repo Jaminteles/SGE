@@ -51,7 +51,8 @@ import { formatCnpj } from '../core/lib/format';
                 </span>
               </span>
               @if (vinculo.companyId === empresa.ativaId()) {
-                <i class="pi pi-check empresa__check"></i>
+                <i class="pi pi-check empresa__check" aria-hidden="true"></i>
+                <span class="sr-only">Empresa ativa</span>
               }
             </button>
           } @empty {

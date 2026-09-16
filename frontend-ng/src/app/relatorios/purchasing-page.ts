@@ -77,12 +77,12 @@ import { ReportFilterBar } from './report-filter-bar';
           <table class="tabela">
             <thead>
               <tr>
-                <th>Competência</th>
-                <th>Situação</th>
-                <th class="numero">Pedidos</th>
-                <th class="numero">Produtos</th>
-                <th class="numero">Frete</th>
-                <th class="numero">Total</th>
+                <th scope="col">Competência</th>
+                <th scope="col">Situação</th>
+                <th class="numero" scope="col">Pedidos</th>
+                <th class="numero" scope="col">Produtos</th>
+                <th class="numero" scope="col">Frete</th>
+                <th class="numero" scope="col">Total</th>
               </tr>
             </thead>
             <tbody>
@@ -114,13 +114,13 @@ import { ReportFilterBar } from './report-filter-bar';
           <table class="tabela">
             <thead>
               <tr>
-                <th>Fornecedor</th>
-                <th class="numero">Pedidos</th>
-                <th class="numero">Total</th>
-                <th class="numero">Recebimentos</th>
-                <th class="numero">Divergentes</th>
-                <th class="numero">Prazo médio</th>
-                <th class="numero">Pior atraso</th>
+                <th scope="col">Fornecedor</th>
+                <th class="numero" scope="col">Pedidos</th>
+                <th class="numero" scope="col">Total</th>
+                <th class="numero" scope="col">Recebimentos</th>
+                <th class="numero" scope="col">Divergentes</th>
+                <th class="numero" scope="col">Prazo médio</th>
+                <th class="numero" scope="col">Pior atraso</th>
               </tr>
             </thead>
             <tbody>
@@ -169,11 +169,11 @@ import { ReportFilterBar } from './report-filter-bar';
           <table class="tabela">
             <thead>
               <tr>
-                <th>Local</th>
-                <th class="numero">Itens</th>
-                <th class="numero">Quantidade</th>
-                <th class="numero">Valor</th>
-                <th class="numero">Abaixo do mínimo</th>
+                <th scope="col">Local</th>
+                <th class="numero" scope="col">Itens</th>
+                <th class="numero" scope="col">Quantidade</th>
+                <th class="numero" scope="col">Valor</th>
+                <th class="numero" scope="col">Abaixo do mínimo</th>
               </tr>
             </thead>
             <tbody>

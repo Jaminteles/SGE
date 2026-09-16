@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { toHttpParams } from './params';
+import { comCache } from './query-cache';
 import type { ListQuery } from './query';
 import type {
   ItemType,
@@ -63,6 +64,7 @@ export class CatalogApiService {
   listCategories(query: ListQuery = {}): Observable<PaginatedResult<ProductCategory>> {
     return this.http.get<PaginatedResult<ProductCategory>>('product-categories', {
       params: toHttpParams(query),
+      context: comCache(),
     });
   }
 
@@ -81,6 +83,7 @@ export class CatalogApiService {
   listUnits(query: ListQuery = {}): Observable<PaginatedResult<UnitOfMeasure>> {
     return this.http.get<PaginatedResult<UnitOfMeasure>>('units-of-measure', {
       params: toHttpParams(query),
+      context: comCache(),
     });
   }
 

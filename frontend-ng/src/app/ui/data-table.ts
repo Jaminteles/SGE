@@ -39,6 +39,12 @@ export interface PaginaSolicitada {
  * avisa quando o usuário pede outra. Nunca ordena nem fatia a coleção inteira —
  * numa base de ERP a coleção inteira não cabe no navegador.
  *
+ * O modo `virtual` (UI-085) é a exceção deliberada: ali a coleção **já está**
+ * inteira em memória porque o endpoint não pagina, e o que se evita é desenhar
+ * `<tr>` que ninguém vê. Nesse modo não há paginador nem carregamento
+ * preguiçoso — pedir página ao servidor no meio de uma rolagem virtual faria o
+ * componente disputar a rolagem com o próprio PrimeNG.
+ *
  * Com `chave` preenchida, a tabela ganha o seletor de colunas visíveis e guarda
  * a escolha nas preferências do usuário (UI-078). Esconder é feito por índice
  * de célula, e não removendo a coluna da lista: o `<tr>` de cada página é
@@ -49,10 +55,10 @@ export interface PaginaSolicitada {
   selector: 'sge-data-table',
   imports: [NgTemplateOutlet, FormsModule, MultiSelectModule, TableModule],
   template: `
-    @if (chave() || temFerramentas()) {
+    @if (chaveEfetiva() || temFerramentas()) {
       <div class="tabela__ferramentas">
         <ng-content select="[ferramentas]" />
-        @if (chave()) {
+        @if (chaveEfetiva()) {
           <p-multiselect
             styleClass="tabela__colunas"
             [options]="opcoesDeColuna()"
@@ -73,8 +79,12 @@ export interface PaginaSolicitada {
     <p-table
       [value]="linhas()"
       [columns]="colunas()"
-      [lazy]="true"
-      [paginator]="true"
+      [lazy]="!virtual()"
+      [paginator]="!virtual()"
+      [scrollable]="virtual()"
+      [scrollHeight]="virtual() ? altura() : ''"
+      [virtualScroll]="virtual()"
+      [virtualScrollItemSize]="alturaLinha()"
       [rows]="tamanhoPagina()"
       [totalRecords]="total()"
       [first]="primeiroRegistro()"
@@ -155,6 +165,24 @@ export class DataTable {
   /** Liga a barra de ferramentas mesmo sem seletor de colunas (exportação, UI-080). */
   readonly temFerramentas = input(false);
 
+  /**
+   * Rolagem virtual (RNF-008 — UI-085).
+   *
+   * Vale para a tabela que desenha a coleção inteira de uma vez — parâmetros do
+   * sistema, conferência de importação, resultado de um recorte que não pagina.
+   * Aí o navegador monta milhares de `<tr>` que ninguém vai ver, e a rolagem
+   * engasga. Com a virtualização, ele monta a janela visível e mais um pouco.
+   *
+   * **Não** ligue na listagem paginada comum: com 20 a 50 linhas por página, a
+   * virtualização só acrescenta um contêiner de rolagem dentro de outro e uma
+   * altura fixa onde a página já tinha a sua.
+   */
+  readonly virtual = input(false);
+  /** Altura de uma linha em pixels — precisa bater com o CSS, ou a barra mente. */
+  readonly alturaLinha = input(44);
+  /** Altura da janela de rolagem. */
+  readonly altura = input('60vh');
+
   readonly paginaMudou = output<PaginaSolicitada>();
 
   private readonly prefs = inject(UserPreferencesService);
@@ -170,13 +198,21 @@ export class DataTable {
   /** O PrimeNG conta registros a partir de 0; a aplicação conta páginas a partir de 1. */
   protected readonly primeiroRegistro = computed(() => (this.pagina() - 1) * this.tamanhoPagina());
 
+  /**
+   * O seletor de colunas esconde célula por índice, depois de cada render. A
+   * tabela virtual recicla `<tr>` durante a rolagem, e as linhas que entram
+   * depois nasceriam com todas as colunas de volta. Em vez de um seletor que
+   * funciona pela metade, ele não aparece no modo virtual.
+   */
+  protected readonly chaveEfetiva = computed(() => (this.virtual() ? '' : this.chave()));
+
   /** Só colunas com cabeçalho e não fixas entram no seletor. */
   protected readonly opcoesDeColuna = computed(() =>
     this.colunas().filter((coluna) => !coluna.fixa && coluna.cabecalho.trim() !== ''),
   );
 
   private readonly ocultas = computed(() => {
-    const chave = this.chave();
+    const chave = this.chaveEfetiva();
     if (!chave) return new Set<string>();
     const opcionais = new Set(this.opcoesDeColuna().map((coluna) => coluna.campo));
     // Uma coluna que deixou de existir (ou virou fixa) não pode continuar
@@ -213,7 +249,7 @@ export class DataTable {
   }
 
   protected definirVisiveis(campos: string[]): void {
-    const chave = this.chave();
+    const chave = this.chaveEfetiva();
     if (!chave) return;
     const visiveis = new Set(campos);
     this.prefs.definirColunasOcultas(

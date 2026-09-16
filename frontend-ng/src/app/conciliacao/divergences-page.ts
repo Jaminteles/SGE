@@ -114,11 +114,11 @@ export function consultaDivergencias(filtros: { conta: string; de: string; ate: 
           <table class="tabela">
             <thead>
               <tr>
-                <th>Conta</th>
-                <th class="numero">Saldo</th>
-                <th>Data do saldo</th>
-                <th class="numero">Pendentes</th>
-                <th class="numero">Valor pendente</th>
+                <th scope="col">Conta</th>
+                <th class="numero" scope="col">Saldo</th>
+                <th scope="col">Data do saldo</th>
+                <th class="numero" scope="col">Pendentes</th>
+                <th class="numero" scope="col">Valor pendente</th>
               </tr>
             </thead>
             <tbody>
@@ -148,9 +148,9 @@ export function consultaDivergencias(filtros: { conta: string; de: string; ate: 
           <table class="tabela">
             <thead>
               <tr>
-                <th>Data da baixa</th>
-                <th>Conta</th>
-                <th class="numero">Valor</th>
+                <th scope="col">Data da baixa</th>
+                <th scope="col">Conta</th>
+                <th class="numero" scope="col">Valor</th>
               </tr>
             </thead>
             <tbody>
@@ -175,11 +175,11 @@ export function consultaDivergencias(filtros: { conta: string; de: string; ate: 
             <table class="tabela">
               <thead>
                 <tr>
-                  <th>Data</th>
-                  <th>Conta</th>
-                  <th>Descrição</th>
-                  <th class="numero">Valor</th>
-                  <th></th>
+                  <th scope="col">Data</th>
+                  <th scope="col">Conta</th>
+                  <th scope="col">Descrição</th>
+                  <th class="numero" scope="col">Valor</th>
+                  <th scope="col"></th>
                 </tr>
               </thead>
               <tbody>
@@ -214,12 +214,12 @@ export function consultaDivergencias(filtros: { conta: string; de: string; ate: 
           <table class="tabela">
             <thead>
               <tr>
-                <th>Movimento</th>
-                <th>Descrição</th>
-                <th class="numero">Conciliado</th>
-                <th class="numero">Diferença</th>
-                <th>Justificativa</th>
-                <th></th>
+                <th scope="col">Movimento</th>
+                <th scope="col">Descrição</th>
+                <th class="numero" scope="col">Conciliado</th>
+                <th class="numero" scope="col">Diferença</th>
+                <th scope="col">Justificativa</th>
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>

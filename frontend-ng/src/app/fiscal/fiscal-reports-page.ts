@@ -122,17 +122,17 @@ const OPCOES_RELATORIO = [
             <table class="tabela">
               <thead>
                 <tr>
-                  <th>Competência</th>
-                  <th>Sentido</th>
-                  <th>Modelo</th>
-                  <th class="numero">Documentos</th>
-                  <th class="numero">Total</th>
-                  <th class="numero">ICMS</th>
-                  <th class="numero">ICMS ST</th>
-                  <th class="numero">IPI</th>
-                  <th class="numero">PIS</th>
-                  <th class="numero">COFINS</th>
-                  <th class="numero">ISS</th>
+                  <th scope="col">Competência</th>
+                  <th scope="col">Sentido</th>
+                  <th scope="col">Modelo</th>
+                  <th class="numero" scope="col">Documentos</th>
+                  <th class="numero" scope="col">Total</th>
+                  <th class="numero" scope="col">ICMS</th>
+                  <th class="numero" scope="col">ICMS ST</th>
+                  <th class="numero" scope="col">IPI</th>
+                  <th class="numero" scope="col">PIS</th>
+                  <th class="numero" scope="col">COFINS</th>
+                  <th class="numero" scope="col">ISS</th>
                 </tr>
               </thead>
               <tbody>
@@ -168,18 +168,18 @@ const OPCOES_RELATORIO = [
           <table class="tabela">
             <thead>
               <tr>
-                <th>Competência</th>
-                <th>Sentido</th>
-                <th>CFOP</th>
-                <th>NCM</th>
-                <th class="numero">Itens</th>
-                <th class="numero">Total</th>
-                <th class="numero">Base ICMS</th>
-                <th class="numero">ICMS</th>
-                <th class="numero">ICMS ST</th>
-                <th class="numero">IPI</th>
-                <th class="numero">PIS</th>
-                <th class="numero">COFINS</th>
+                <th scope="col">Competência</th>
+                <th scope="col">Sentido</th>
+                <th scope="col">CFOP</th>
+                <th scope="col">NCM</th>
+                <th class="numero" scope="col">Itens</th>
+                <th class="numero" scope="col">Total</th>
+                <th class="numero" scope="col">Base ICMS</th>
+                <th class="numero" scope="col">ICMS</th>
+                <th class="numero" scope="col">ICMS ST</th>
+                <th class="numero" scope="col">IPI</th>
+                <th class="numero" scope="col">PIS</th>
+                <th class="numero" scope="col">COFINS</th>
               </tr>
             </thead>
             <tbody>

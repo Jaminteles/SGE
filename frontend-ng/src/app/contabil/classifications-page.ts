@@ -94,10 +94,10 @@ import {
         <table class="tabela">
           <thead>
             <tr>
-              <th>{{ rotuloOrigem() }}</th>
-              <th>Conta contábil</th>
+              <th scope="col">{{ rotuloOrigem() }}</th>
+              <th scope="col">Conta contábil</th>
               @if (podeClassificar()) {
-                <th class="coluna-edicao">Alterar para</th>
+                <th class="coluna-edicao" scope="col">Alterar para</th>
               }
             </tr>
           </thead>

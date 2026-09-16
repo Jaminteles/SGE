@@ -88,10 +88,10 @@ import { ReportFilterBar } from './report-filter-bar';
           <table class="tabela">
             <thead>
               <tr>
-                <th>Competência</th>
-                <th class="numero">Entradas</th>
-                <th class="numero">Saídas</th>
-                <th class="numero">Resultado</th>
+                <th scope="col">Competência</th>
+                <th class="numero" scope="col">Entradas</th>
+                <th class="numero" scope="col">Saídas</th>
+                <th class="numero" scope="col">Resultado</th>
               </tr>
             </thead>
             <tbody>

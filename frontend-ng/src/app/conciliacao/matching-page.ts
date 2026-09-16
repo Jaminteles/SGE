@@ -181,13 +181,13 @@ export interface AlvoVinculo {
           <table class="tabela">
             <thead>
               <tr>
-                <th>Confiança</th>
-                <th>Título / parcela</th>
-                <th>Vencimento</th>
-                <th class="numero">Saldo</th>
-                <th class="numero">Diferença</th>
-                <th>Critérios aplicados</th>
-                <th></th>
+                <th scope="col">Confiança</th>
+                <th scope="col">Título / parcela</th>
+                <th scope="col">Vencimento</th>
+                <th class="numero" scope="col">Saldo</th>
+                <th class="numero" scope="col">Diferença</th>
+                <th scope="col">Critérios aplicados</th>
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>
@@ -244,11 +244,11 @@ export interface AlvoVinculo {
             <table class="tabela">
               <thead>
                 <tr>
-                  <th>Confirmada em</th>
-                  <th>Modalidade</th>
-                  <th>Favorecido / descrição</th>
-                  <th class="numero">Valor</th>
-                  <th></th>
+                  <th scope="col">Confirmada em</th>
+                  <th scope="col">Modalidade</th>
+                  <th scope="col">Favorecido / descrição</th>
+                  <th class="numero" scope="col">Valor</th>
+                  <th scope="col"></th>
                 </tr>
               </thead>
               <tbody>
@@ -289,13 +289,13 @@ export interface AlvoVinculo {
           <table class="tabela">
             <thead>
               <tr>
-                <th>Criado em</th>
-                <th>Alvo</th>
-                <th>Origem</th>
-                <th class="numero">Conciliado</th>
-                <th class="numero">Diferença</th>
-                <th>Justificativa / desfazimento</th>
-                <th></th>
+                <th scope="col">Criado em</th>
+                <th scope="col">Alvo</th>
+                <th scope="col">Origem</th>
+                <th class="numero" scope="col">Conciliado</th>
+                <th class="numero" scope="col">Diferença</th>
+                <th scope="col">Justificativa / desfazimento</th>
+                <th scope="col"></th>
               </tr>
             </thead>
             <tbody>

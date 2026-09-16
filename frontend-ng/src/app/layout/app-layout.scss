@@ -24,6 +24,35 @@
   flex: 1;
 }
 
+/* Botão da gaveta (UI-083): existe só abaixo do ponto de quebra. 44px de lado
+   é o alvo mínimo confortável no toque — abaixo disso erra-se o alvo. */
+.menu-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-left: -0.5rem;
+  border: 0;
+  border-radius: var(--sge-raio-1);
+  background: transparent;
+  color: var(--p-text-color);
+  font-size: 1rem;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--p-content-hover-background);
+  }
+}
+
+/* Véu da gaveta. Fica abaixo da barra lateral e acima do resto. */
+.veu {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgb(0 0 0 / 45%);
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -164,4 +193,89 @@
   min-width: 0;
   padding: 1.375rem 1.625rem;
   overflow: auto;
+}
+
+/* ---------- Responsividade (RNF-014 — UI-083) ----------
+   Dois degraus, não um por aparelho:
+
+   - até 1024px (tablet deitado): a moldura continua inteira, só com menos
+     respiro — a barra lateral encolhe e o conteúdo perde margem, porque é a
+     tabela que precisa do espaço.
+   - até 900px (tablet em pé e celular): a barra lateral vira gaveta sobre o
+     conteúdo. Abaixo disso não existe largura que sirva às duas coisas ao
+     mesmo tempo; empilhar o menu acima do conteúdo empurraria a tabela para
+     fora da primeira tela em toda navegação. */
+
+@media (max-width: 1024px) {
+  .sidebar {
+    width: 196px;
+  }
+
+  .content {
+    padding: 1rem 1.125rem;
+  }
+
+  .topbar {
+    gap: 0.6rem;
+    padding: 0 0.875rem;
+  }
+
+  .brand__name {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .menu-toggle {
+    display: inline-flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 60px;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    width: 264px;
+    /* Fora da tela, não `display: none`: a gaveta desliza, e a transição só
+       existe porque o elemento permanece no fluxo de renderização. Quem pediu
+       menos movimento não vê o deslize — a regra global de
+       `prefers-reduced-motion` zera a duração. */
+    transform: translateX(-100%);
+    transition: transform 0.2s ease-out;
+    box-shadow: 0 0 24px rgb(0 0 0 / 30%);
+  }
+
+  .sidebar--aberta {
+    transform: translateX(0);
+  }
+
+  /* Alvo de toque: no dedo, 0.5rem de altura de item vira erro de clique. */
+  .navitem {
+    padding: 0.7rem 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  .content {
+    padding: 0.875rem;
+  }
+}
+
+/* Celular: a barra superior não comporta seis controles lado a lado. O nome da
+   empresa é o que cede espaço — ele continua no botão, apenas truncado. */
+@media (max-width: 640px) {
+  .company span {
+    max-width: 7.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .company {
+    padding: 0.4rem 0.5rem;
+  }
+
+  .sidebar {
+    width: min(84vw, 264px);
+  }
 }

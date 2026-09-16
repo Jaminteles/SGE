@@ -95,11 +95,11 @@ type Confirmacao = { periodo: AccountingPeriod; acao: 'EM_FECHAMENTO' | 'FECHADO
         <table class="tabela">
           <thead>
             <tr>
-              <th>Período</th>
-              <th>Intervalo</th>
-              <th>Situação</th>
-              <th>Histórico</th>
-              <th></th>
+              <th scope="col">Período</th>
+              <th scope="col">Intervalo</th>
+              <th scope="col">Situação</th>
+              <th scope="col">Histórico</th>
+              <th scope="col"></th>
             </tr>
           </thead>
           <tbody>
@@ -107,7 +107,8 @@ type Confirmacao = { periodo: AccountingPeriod; acao: 'EM_FECHAMENTO' | 'FECHADO
               <tr [class.fechado]="periodo.status === 'FECHADO'">
                 <td class="mes">
                   @if (periodo.status === 'FECHADO') {
-                    <i class="pi pi-lock" aria-label="Bloqueado para lançamentos"></i>
+                    <i class="pi pi-lock" aria-hidden="true"></i>
+                    <span class="sr-only">Bloqueado para lançamentos</span>
                   } @else {
                     <i class="pi pi-lock-open" aria-hidden="true"></i>
                   }

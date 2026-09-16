@@ -77,6 +77,7 @@ import { LoadingBlock } from '../ui/loading-block';
                 <button
                   type="button"
                   role="option"
+                  tabindex="-1"
                   [id]="'busca-' + item.indice"
                   [attr.aria-selected]="item.indice === ativo()"
                   class="busca__item"
@@ -127,6 +128,19 @@ import { LoadingBlock } from '../ui/loading-block';
       border-radius: 5px;
       font-family: inherit;
       font-size: 0.68rem;
+    }
+    /* No celular a barra superior não tem 20rem sobrando, e o atalho de teclado
+       não significa nada num aparelho sem teclado: sobra a lupa, com o rótulo
+       acessível que o botão já carrega (UI-083). */
+    @media (max-width: 900px) {
+      .gatilho {
+        width: auto;
+        padding: 0.45rem 0.7rem;
+      }
+      .gatilho__texto,
+      .gatilho__kbd {
+        display: none;
+      }
     }
     .busca__campo {
       display: flex;

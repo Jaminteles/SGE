@@ -83,12 +83,12 @@ interface SecaoDre {
           <table class="tabela dre">
             <thead>
               <tr>
-                <th>Conta</th>
-                <th class="numero">{{ data(dre.range.from) }} a {{ data(dre.range.to) }}</th>
+                <th scope="col">Conta</th>
+                <th class="numero" scope="col">{{ data(dre.range.from) }} a {{ data(dre.range.to) }}</th>
                 @if (comparativo(); as c) {
-                  <th class="numero">{{ data(c.range.from) }} a {{ data(c.range.to) }}</th>
-                  <th class="numero">Variação</th>
-                  <th class="numero">%</th>
+                  <th class="numero" scope="col">{{ data(c.range.from) }} a {{ data(c.range.to) }}</th>
+                  <th class="numero" scope="col">Variação</th>
+                  <th class="numero" scope="col">%</th>
                 }
               </tr>
             </thead>

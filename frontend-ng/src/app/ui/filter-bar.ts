@@ -42,10 +42,10 @@ export type ValoresFiltro = Record<string, string> & { q: string };
   selector: 'sge-filter-bar',
   imports: [ButtonModule, DialogModule, FormsModule, InputTextModule, SelectModule],
   template: `
-    <div class="barra-filtro">
+    <div class="barra-filtro" role="search" aria-label="Busca e filtros da listagem">
       @if (busca()) {
         <span class="barra-filtro__busca">
-          <i class="pi pi-search"></i>
+          <i class="pi pi-search" aria-hidden="true"></i>
           <input
             pInputText
             type="search"
@@ -198,6 +198,21 @@ export type ValoresFiltro = Record<string, string> & { q: string };
       align-items: center;
       gap: 0.25rem;
       margin-left: auto;
+    }
+
+    /* Celular e tablet em pé (UI-083): busca ocupa a linha inteira e os filtros
+       descem para a linha seguinte, em vez de virarem seis campos de 60px. */
+    @media (max-width: 900px) {
+      .barra-filtro {
+        flex-wrap: wrap;
+      }
+      .barra-filtro__busca {
+        flex-basis: 100%;
+      }
+      .barra-filtro__periodo,
+      .barra-filtro__salvos {
+        margin-left: 0;
+      }
     }
   `,
 })

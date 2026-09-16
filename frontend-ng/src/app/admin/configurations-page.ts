@@ -255,6 +255,7 @@ interface FormParametro {
           [tamanhoPagina]="parametros().length || 1"
           [carregando]="carregandoParametros()"
           mensagemVazia="Nenhum parâmetro definido."
+          [virtual]="true"
         >
           <ng-template #linha let-item>
             <tr>

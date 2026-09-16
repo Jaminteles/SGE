@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 
 import { toHttpParams } from './params';
+import { comCache } from './query-cache';
 import type { ListQuery } from './query';
 import type {
   AccountClassification,
@@ -82,7 +83,7 @@ export class AccountingApiService {
   // --- Plano de contas (RF-078/RF-079) -------------------------------------
 
   tree(): Observable<LedgerAccountNode[]> {
-    return this.http.get<LedgerAccountNode[]>('ledger-accounts/tree');
+    return this.http.get<LedgerAccountNode[]>('ledger-accounts/tree', { context: comCache() });
   }
 
   listAccounts(query: LedgerAccountQuery = {}): Observable<PaginatedResult<LedgerAccount>> {
@@ -172,7 +173,9 @@ export class AccountingApiService {
 
   // --- Períodos (RF-086) ---------------------------------------------------
 
-  listPeriods(query: { year?: number; status?: AccountingPeriodStatus } = {}): Observable<AccountingPeriod[]> {
+  listPeriods(
+    query: { year?: number; status?: AccountingPeriodStatus } = {},
+  ): Observable<AccountingPeriod[]> {
     return this.http.get<AccountingPeriod[]>('accounting/periods', { params: toHttpParams(query) });
   }
 

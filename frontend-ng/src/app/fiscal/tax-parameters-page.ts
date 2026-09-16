@@ -94,14 +94,14 @@ import {
         <table class="tabela">
           <thead>
             <tr>
-              <th>Abrangência</th>
-              <th>Regime</th>
-              <th>Vigência</th>
-              <th class="numero">Simples</th>
-              <th class="numero">ISS</th>
-              <th>Marcações</th>
+              <th scope="col">Abrangência</th>
+              <th scope="col">Regime</th>
+              <th scope="col">Vigência</th>
+              <th class="numero" scope="col">Simples</th>
+              <th class="numero" scope="col">ISS</th>
+              <th scope="col">Marcações</th>
               @if (podeEncerrar() || podeEditar()) {
-                <th class="coluna-acoes">Ações</th>
+                <th class="coluna-acoes" scope="col">Ações</th>
               }
             </tr>
           </thead>

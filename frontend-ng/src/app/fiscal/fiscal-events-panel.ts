@@ -75,13 +75,13 @@ import {
         <table class="tabela">
           <thead>
             <tr>
-              <th>Evento</th>
-              <th>Situação</th>
-              <th>Protocolo</th>
-              <th>Ocorrido em</th>
-              <th>Justificativa</th>
+              <th scope="col">Evento</th>
+              <th scope="col">Situação</th>
+              <th scope="col">Protocolo</th>
+              <th scope="col">Ocorrido em</th>
+              <th scope="col">Justificativa</th>
               @if (podeTransmitir()) {
-                <th class="coluna-acoes">Ações</th>
+                <th class="coluna-acoes" scope="col">Ações</th>
               }
             </tr>
           </thead>

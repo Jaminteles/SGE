@@ -26,14 +26,6 @@ import { SkeletonModule } from 'primeng/skeleton';
       gap: 0.65rem;
       padding: 1.125rem;
     }
-    .sr-only {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      clip: rect(0 0 0 0);
-      white-space: nowrap;
-    }
   `,
 })
 export class LoadingBlock {

@@ -122,15 +122,15 @@ import { formatarPercentual } from './tributos';
           <table class="tabela">
             <thead>
               <tr>
-                <th>#</th>
-                <th>Descrição</th>
-                <th>NCM / CFOP</th>
-                <th class="numero">Quantidade</th>
-                <th class="numero">Valor</th>
-                <th class="numero">ICMS</th>
-                <th>Classificação</th>
+                <th scope="col">#</th>
+                <th scope="col">Descrição</th>
+                <th scope="col">NCM / CFOP</th>
+                <th class="numero" scope="col">Quantidade</th>
+                <th class="numero" scope="col">Valor</th>
+                <th class="numero" scope="col">ICMS</th>
+                <th scope="col">Classificação</th>
                 @if (podeClassificar()) {
-                  <th class="coluna-edicao">Classificar</th>
+                  <th class="coluna-edicao" scope="col">Classificar</th>
                 }
               </tr>
             </thead>

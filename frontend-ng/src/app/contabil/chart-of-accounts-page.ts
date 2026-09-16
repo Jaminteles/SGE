@@ -116,13 +116,13 @@ import {
         <table class="tabela">
           <thead>
             <tr>
-              <th>Conta</th>
-              <th>Tipo</th>
-              <th>Natureza</th>
-              <th>Classe</th>
-              <th>SPED</th>
-              <th>Situação</th>
-              <th></th>
+              <th scope="col">Conta</th>
+              <th scope="col">Tipo</th>
+              <th scope="col">Natureza</th>
+              <th scope="col">Classe</th>
+              <th scope="col">SPED</th>
+              <th scope="col">Situação</th>
+              <th scope="col"></th>
             </tr>
           </thead>
           <tbody>
@@ -144,6 +144,7 @@ import {
                           class="pi"
                           [class.pi-chevron-right]="linha.recolhida"
                           [class.pi-chevron-down]="!linha.recolhida"
+                          aria-hidden="true"
                         ></i>
                       </button>
                     } @else {

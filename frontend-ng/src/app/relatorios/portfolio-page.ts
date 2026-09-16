@@ -78,10 +78,10 @@ import { ReportFilterBar } from './report-filter-bar';
           <table class="tabela">
             <thead>
               <tr>
-                <th>Faixa</th>
-                <th class="numero">Parcelas</th>
-                <th class="numero">A receber</th>
-                <th class="numero">A pagar</th>
+                <th scope="col">Faixa</th>
+                <th class="numero" scope="col">Parcelas</th>
+                <th class="numero" scope="col">A receber</th>
+                <th class="numero" scope="col">A pagar</th>
               </tr>
             </thead>
             <tbody>
@@ -107,13 +107,13 @@ import { ReportFilterBar } from './report-filter-bar';
           <table class="tabela">
             <thead>
               <tr>
-                <th>Competência</th>
-                <th>Tipo</th>
-                <th>Situação</th>
-                <th class="numero">Parcelas</th>
-                <th class="numero">Saldo</th>
-                <th class="numero">Encargos</th>
-                <th class="numero">Atualizado</th>
+                <th scope="col">Competência</th>
+                <th scope="col">Tipo</th>
+                <th scope="col">Situação</th>
+                <th class="numero" scope="col">Parcelas</th>
+                <th class="numero" scope="col">Saldo</th>
+                <th class="numero" scope="col">Encargos</th>
+                <th class="numero" scope="col">Atualizado</th>
               </tr>
             </thead>
             <tbody>

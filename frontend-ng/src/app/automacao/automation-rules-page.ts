@@ -358,9 +358,9 @@ const OPCOES_PRIORIDADE = [
         <table class="tabela">
           <thead>
             <tr>
-              <th>Executada em</th>
-              <th>Situação</th>
-              <th>Resultado</th>
+              <th scope="col">Executada em</th>
+              <th scope="col">Situação</th>
+              <th scope="col">Resultado</th>
             </tr>
           </thead>
           <tbody>

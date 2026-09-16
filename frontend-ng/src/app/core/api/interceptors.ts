@@ -7,13 +7,18 @@ import { activeCompanyStore } from '../company/active-company-store';
 import { config } from '../lib/config';
 import { NetworkError, toApiError } from './errors';
 import { SEM_AUTH, SEM_EMPRESA } from './http-context';
+import { queryCacheInterceptor } from './query-cache';
 import { TokenRefreshService } from './token-refresh.service';
 
 /**
  * Os interceptors substituem o cliente HTTP escrito à mão do projeto React.
  * A ordem em `withInterceptors` importa: o primeiro da lista é o mais externo.
  *
- *   baseUrl → erro → empresa → auth → backend
+ *   baseUrl → cache → erro → empresa → auth → backend
+ *
+ * O de cache (UI-085) fica logo depois do de base porque precisa da URL final
+ * como chave, e antes de todos os outros porque resposta servida da memória não
+ * tem por que atravessar token, empresa e tempo limite de novo.
  *
  * O de auth fica por último (mais interno) porque a repetição depois da
  * renovação precisa acontecer **antes** da tradução de erro — senão a segunda
@@ -107,14 +112,14 @@ export const timeoutInterceptor: HttpInterceptorFn = (req, next) =>
   next(req).pipe(
     timeout({
       each: TEMPO_LIMITE_MS,
-      with: () =>
-        throwError(() => new NetworkError('O servidor demorou demais para responder.')),
+      with: () => throwError(() => new NetworkError('O servidor demorou demais para responder.')),
     }),
   );
 
 /** Ordem de registro em `provideHttpClient(withInterceptors(...))`. */
 export const SGE_INTERCEPTORS: HttpInterceptorFn[] = [
   baseUrlInterceptor,
+  queryCacheInterceptor,
   errorInterceptor,
   companyInterceptor,
   authInterceptor,

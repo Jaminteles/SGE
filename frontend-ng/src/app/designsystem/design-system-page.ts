@@ -4,6 +4,7 @@ import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 
 import { ApiError } from '../core/api/errors';
+import { FORMATO_PIPES } from '../core/lib/pipes';
 import { UserPreferencesService } from '../core/prefs/user-preferences.service';
 import { ThemeService } from '../theme/theme-service';
 import { Alert } from '../ui/alert';
@@ -65,6 +66,7 @@ interface LinhaExemplo {
     SelectField,
     StateScreen,
     TextField,
+    ...FORMATO_PIPES,
   ],
   template: `
     <p class="crumb">Design system</p>
@@ -138,6 +140,73 @@ interface LinhaExemplo {
       <p class="nota">
         Número de dinheiro usa <code>font-variant-numeric: tabular-nums</code> e alinha à direita:
         em coluna, os valores ficam comparáveis a olho.
+      </p>
+    </section>
+
+    <section class="card secao">
+      <h2 class="secao__titulo">Formatos pt-BR (UI-084)</h2>
+      <p class="ds__texto">
+        Dinheiro sai do banco como <code>numeric(18,2)</code> e chega aqui como
+        <strong>string</strong>. Estes pipes formatam a string canônica direto; passar pelos pipes
+        nativos do Angular obrigaria a converter para <code>number</code>, e a partir daí o que está
+        na tela deixaria de ser garantidamente o que está no banco (RN-012).
+      </p>
+      <table class="ds__formatos">
+        <tbody>
+          <tr>
+            <th scope="row"><code>| sgeMoeda</code></th>
+            <td>
+              <code>'{{ exemploValor }}'</code>
+            </td>
+            <td>{{ exemploValor | sgeMoeda }}</td>
+          </tr>
+          <tr>
+            <th scope="row"><code>| sgeDecimal: 6</code></th>
+            <td>
+              <code>'{{ exemploQuantidade }}'</code>
+            </td>
+            <td>{{ exemploQuantidade | sgeDecimal: 6 }}</td>
+          </tr>
+          <tr>
+            <th scope="row"><code>| sgeInteiro</code></th>
+            <td>
+              <code>{{ exemploContagem }}</code>
+            </td>
+            <td>{{ exemploContagem | sgeInteiro }}</td>
+          </tr>
+          <tr>
+            <th scope="row"><code>| sgePercentual</code></th>
+            <td>
+              <code>'{{ exemploAliquota }}'</code>
+            </td>
+            <td>{{ exemploAliquota | sgePercentual }}</td>
+          </tr>
+          <tr>
+            <th scope="row"><code>| sgeData</code></th>
+            <td>
+              <code>'{{ exemploData }}'</code>
+            </td>
+            <td>{{ exemploData | sgeData }}</td>
+          </tr>
+          <tr>
+            <th scope="row"><code>| sgeDataHora</code></th>
+            <td>
+              <code>'{{ exemploDataHora }}'</code>
+            </td>
+            <td>{{ exemploDataHora | sgeDataHora }}</td>
+          </tr>
+          <tr>
+            <th scope="row"><code>| sgeCnpj</code></th>
+            <td>
+              <code>'{{ exemploCnpj }}'</code>
+            </td>
+            <td>{{ exemploCnpj | sgeCnpj }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="nota">
+        Data é lida dos dígitos da própria string: <code>new Date('2026-08-10')</code> é meia-noite
+        UTC e voltaria como 09/08 no fuso de Brasília — vencimento não pode andar um dia para trás.
       </p>
     </section>
 
@@ -257,6 +326,22 @@ interface LinhaExemplo {
     </section>
   `,
   styles: `
+    .ds__formatos {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: var(--sge-fonte-sm);
+    }
+    .ds__formatos th,
+    .ds__formatos td {
+      padding: 0.35rem 0.6rem 0.35rem 0;
+      text-align: left;
+      font-weight: 400;
+      vertical-align: baseline;
+    }
+    .ds__formatos td:last-child {
+      font-variant-numeric: tabular-nums;
+      color: var(--p-text-color);
+    }
     .ds__texto {
       margin: 0 0 0.875rem;
       font-size: var(--sge-fonte-md);
@@ -324,6 +409,15 @@ interface LinhaExemplo {
   `,
 })
 export class DesignSystemPage {
+  /** Valores de amostra da seção de formatos — sempre no canônico da API. */
+  protected readonly exemploValor = '1234567.5';
+  protected readonly exemploQuantidade = '10.123456';
+  protected readonly exemploContagem = 1234567;
+  protected readonly exemploAliquota = '18.500000';
+  protected readonly exemploData = '2026-08-10';
+  protected readonly exemploDataHora = '2026-08-10T14:35:00';
+  protected readonly exemploCnpj = '12345678000190';
+
   protected readonly tema = inject(ThemeService);
   protected readonly prefs = inject(UserPreferencesService);
   private readonly confirmacao = inject(ConfirmService);

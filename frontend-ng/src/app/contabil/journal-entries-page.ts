@@ -149,11 +149,11 @@ import {
                 <table class="partidas__tabela">
                   <thead>
                     <tr>
-                      <th>#</th>
-                      <th>Conta</th>
-                      <th class="numero">Débito</th>
-                      <th class="numero">Crédito</th>
-                      <th>Complemento</th>
+                      <th scope="col">#</th>
+                      <th scope="col">Conta</th>
+                      <th class="numero" scope="col">Débito</th>
+                      <th class="numero" scope="col">Crédito</th>
+                      <th scope="col">Complemento</th>
                     </tr>
                   </thead>
                   <tbody>

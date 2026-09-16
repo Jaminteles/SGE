@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { toHttpParams } from './params';
+import { comCache } from './query-cache';
 import type { ListQuery } from './query';
 import type { PaginatedResult, PermissionCatalogItem, Role, RoleInput } from './types';
 
@@ -33,6 +34,6 @@ export class RolesApiService {
 
   /** Catálogo global de permissões — a matriz da UI-010 é montada a partir dele. */
   permissionCatalog(): Observable<PermissionCatalogItem[]> {
-    return this.http.get<PermissionCatalogItem[]>('permissions');
+    return this.http.get<PermissionCatalogItem[]>('permissions', { context: comCache() });
   }
 }

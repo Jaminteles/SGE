@@ -14,6 +14,7 @@ import type {
   TaxRuleInput,
   TaxRuleUpdate,
 } from '../core/api/types';
+import { formatPercent } from '../core/lib/decimal';
 import type { OpcaoFiltro } from '../ui/filter-bar';
 import type { Severidade } from './rotulos';
 
@@ -50,11 +51,14 @@ export function lerPercentual(entrada: string): PercentualLido {
   return { valor: texto, erro: null };
 }
 
-/** Exibe o percentual sem zeros à direita inúteis: "18.500000" vira "18,5%". */
+/**
+ * Exibe o percentual sem zeros à direita inúteis: "18.500000" vira "18,5%".
+ *
+ * A formatação é a de `core/lib/decimal` (UI-084); aqui fica só o travessão do
+ * campo vazio, que é convenção das telas fiscais e não do formato pt-BR.
+ */
 export function formatarPercentual(valor: string | null | undefined): string {
-  if (valor === null || valor === undefined || valor === '') return '—';
-  const limpo = valor.includes('.') ? valor.replace(/0+$/, '').replace(/\.$/, '') : valor;
-  return `${limpo.replace('.', ',')}%`;
+  return formatPercent(valor) || '—';
 }
 
 // ---------------------------------------------------------------------------
@@ -462,7 +466,11 @@ export function montarEdicaoRegra(form: FormRegra, atual: TaxRule): TaxRuleUpdat
   const texto = [
     ['operationType', form.operationType || null, atual.operationType],
     ['originState', form.originState.trim().toUpperCase() || null, atual.originState],
-    ['destinationState', form.destinationState.trim().toUpperCase() || null, atual.destinationState],
+    [
+      'destinationState',
+      form.destinationState.trim().toUpperCase() || null,
+      atual.destinationState,
+    ],
     ['classificationId', form.classificationId || null, atual.classificationId],
     ['cfop', form.cfop.trim() || null, atual.cfop],
     ['icmsCst', form.icmsCst.trim() || null, atual.icmsCst],
@@ -596,4 +604,3 @@ export function problemaRecorteFiscal(from: string, to: string): string | null {
   if (to < from) return 'A data final é anterior à inicial.';
   return null;
 }
-

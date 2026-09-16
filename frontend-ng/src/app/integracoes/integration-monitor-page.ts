@@ -146,12 +146,12 @@ const FILTROS_EVENTO: DefinicaoFiltro[] = [
           <table class="tabela">
             <thead>
               <tr>
-                <th>Integração</th>
-                <th>Situação</th>
-                <th class="numero">Falhas seguidas</th>
-                <th>Último sucesso</th>
-                <th>Último erro</th>
-                <th class="numero">Erros 24h</th>
+                <th scope="col">Integração</th>
+                <th scope="col">Situação</th>
+                <th class="numero" scope="col">Falhas seguidas</th>
+                <th scope="col">Último sucesso</th>
+                <th scope="col">Último erro</th>
+                <th class="numero" scope="col">Erros 24h</th>
               </tr>
             </thead>
             <tbody>
@@ -254,12 +254,12 @@ const FILTROS_EVENTO: DefinicaoFiltro[] = [
           <table class="tabela">
             <thead>
               <tr>
-                <th>Alvo</th>
-                <th>Identificação</th>
-                <th>Situação</th>
-                <th class="numero">Tentativas</th>
-                <th>Erro</th>
-                <th class="coluna-acoes">Ações</th>
+                <th scope="col">Alvo</th>
+                <th scope="col">Identificação</th>
+                <th scope="col">Situação</th>
+                <th class="numero" scope="col">Tentativas</th>
+                <th scope="col">Erro</th>
+                <th class="coluna-acoes" scope="col">Ações</th>
               </tr>
             </thead>
             <tbody>

@@ -360,6 +360,7 @@ const PARCELA_ABERTA: InstallmentStatus[] = ['ABERTA', 'PARCIALMENTE_LIQUIDADA']
                       class="pi"
                       [class.pi-undo]="!!baixa.reversalOfId"
                       [class.pi-arrow-right]="!baixa.reversalOfId"
+                      aria-hidden="true"
                     ></i>
                     {{ baixa.reversalOfId ? 'Estorno' : 'Baixa' }} em
                     {{ data(baixa.settlementDate) }}

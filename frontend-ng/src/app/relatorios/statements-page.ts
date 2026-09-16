@@ -127,11 +127,11 @@ import { ReportFilterBar } from './report-filter-bar';
             <table class="tabela">
               <thead>
                 <tr>
-                  <th>Conta</th>
-                  <th class="numero">Saldo anterior</th>
-                  <th class="numero">Débito</th>
-                  <th class="numero">Crédito</th>
-                  <th class="numero">Saldo final</th>
+                  <th scope="col">Conta</th>
+                  <th class="numero" scope="col">Saldo anterior</th>
+                  <th class="numero" scope="col">Débito</th>
+                  <th class="numero" scope="col">Crédito</th>
+                  <th class="numero" scope="col">Saldo final</th>
                 </tr>
               </thead>
               <tbody>
@@ -204,14 +204,14 @@ import { ReportFilterBar } from './report-filter-bar';
             <table class="tabela">
               <thead>
                 <tr>
-                  <th>Competência</th>
-                  <th>Sentido</th>
-                  <th>Modelo</th>
-                  <th class="numero">Documentos</th>
-                  <th class="numero">Total</th>
-                  <th class="numero">ICMS</th>
-                  <th class="numero">IPI</th>
-                  <th class="numero">PIS/COFINS</th>
+                  <th scope="col">Competência</th>
+                  <th scope="col">Sentido</th>
+                  <th scope="col">Modelo</th>
+                  <th class="numero" scope="col">Documentos</th>
+                  <th class="numero" scope="col">Total</th>
+                  <th class="numero" scope="col">ICMS</th>
+                  <th class="numero" scope="col">IPI</th>
+                  <th class="numero" scope="col">PIS/COFINS</th>
                 </tr>
               </thead>
               <tbody>
@@ -247,14 +247,14 @@ import { ReportFilterBar } from './report-filter-bar';
             <table class="tabela">
               <thead>
                 <tr>
-                  <th>Competência</th>
-                  <th>Sentido</th>
-                  <th>CFOP</th>
-                  <th>NCM</th>
-                  <th class="numero">Itens</th>
-                  <th class="numero">Total</th>
-                  <th class="numero">Base ICMS</th>
-                  <th class="numero">ICMS</th>
+                  <th scope="col">Competência</th>
+                  <th scope="col">Sentido</th>
+                  <th scope="col">CFOP</th>
+                  <th scope="col">NCM</th>
+                  <th class="numero" scope="col">Itens</th>
+                  <th class="numero" scope="col">Total</th>
+                  <th class="numero" scope="col">Base ICMS</th>
+                  <th class="numero" scope="col">ICMS</th>
                 </tr>
               </thead>
               <tbody>
