@@ -16,6 +16,7 @@ import { PermissionsService } from '../core/authz/permissions.service';
 import { ListState } from '../core/lib/list-state';
 import { FILTRO_SITUACAO, consultaPadrao } from '../admin/filtros';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { DataTable, type Coluna } from '../ui/data-table';
 import { ErrorAlert } from '../ui/error-alert';
 import { FilterBar, type OpcaoFiltro } from '../ui/filter-bar';
@@ -349,6 +350,7 @@ const UNIDADE_VAZIA: FormularioUnidade = { symbol: '', description: '' };
 })
 export class TaxonomyPage {
   private readonly api = inject(CatalogApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly permissoes = inject(PermissionsService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -489,7 +491,16 @@ export class TaxonomyPage {
     });
   }
 
-  protected inativarCategoria(categoria: ProductCategory): void {
+  protected async inativarCategoria(categoria: ProductCategory): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Inativar categoria de produto?',
+      mensagem:
+        'A categoria deixa de ser oferecida em novos produtos. Os produtos já classificados nela não mudam.',
+      rotuloConfirmar: 'Inativar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.api
       .inactivateCategory(categoria.id)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -544,7 +555,16 @@ export class TaxonomyPage {
     });
   }
 
-  protected inativarUnidade(unidade: UnitOfMeasure): void {
+  protected async inativarUnidade(unidade: UnitOfMeasure): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Inativar unidade de medida?',
+      mensagem:
+        'A unidade deixa de ser oferecida em novos produtos. Os produtos que já a usam não mudam.',
+      rotuloConfirmar: 'Inativar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.api
       .inactivateUnit(unidade.id)
       .pipe(takeUntilDestroyed(this.destroyRef))

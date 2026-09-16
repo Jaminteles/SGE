@@ -29,6 +29,7 @@ import { PermissionsService } from '../core/authz/permissions.service';
 import { formatCurrency } from '../core/lib/decimal';
 import { formatCnpj, formatDate } from '../core/lib/format';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import {
   BankAccountFields,
   CONTA_VAZIA,
@@ -1016,6 +1017,7 @@ const CONTATO_VAZIO: FormularioContato = {
 })
 export class PartnerFormPage {
   private readonly api = inject(PartnersApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly condicoes = inject(PaymentConditionsApiService);
   private readonly configuracoes = inject(ConfigurationsApiService);
   private readonly funcionarios = inject(EmployeesApiService);
@@ -1287,7 +1289,15 @@ export class PartnerFormPage {
     });
   }
 
-  protected removerEndereco(endereco: PartnerAddress): void {
+  protected async removerEndereco(endereco: PartnerAddress): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Remover endereço do parceiro?',
+      mensagem: 'O endereço sai do cadastro. A ação não pode ser desfeita.',
+      rotuloConfirmar: 'Remover',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     const parceiro = this.registro();
     if (!parceiro) return;
     this.api
@@ -1361,7 +1371,15 @@ export class PartnerFormPage {
     });
   }
 
-  protected removerContato(contato: PartnerContact): void {
+  protected async removerContato(contato: PartnerContact): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Remover contato do parceiro?',
+      mensagem: 'O contato sai do cadastro. A ação não pode ser desfeita.',
+      rotuloConfirmar: 'Remover',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     const parceiro = this.registro();
     if (!parceiro) return;
     this.api
@@ -1416,7 +1434,15 @@ export class PartnerFormPage {
     });
   }
 
-  protected removerConta(conta: BankAccount): void {
+  protected async removerConta(conta: BankAccount): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Remover conta bancária do parceiro?',
+      mensagem: 'A conta sai do cadastro e deixa de ser oferecida em novas ordens de pagamento.',
+      rotuloConfirmar: 'Remover',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     const parceiro = this.registro();
     if (!parceiro) return;
     this.api

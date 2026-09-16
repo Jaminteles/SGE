@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 
+import { type ColunaExportavel } from '../core/lib/csv';
 import { CatalogApiService } from '../core/api/catalog-api.service';
 import type { ItemType, Product } from '../core/api/types';
 import { PermissionsService } from '../core/authz/permissions.service';
@@ -11,6 +12,8 @@ import { formatCurrency } from '../core/lib/decimal';
 import { ListState } from '../core/lib/list-state';
 import { FILTRO_SITUACAO } from '../admin/filtros';
 import { Alert } from '../ui/alert';
+import { PrintExport } from '../ui/print-export';
+import { ConfirmService } from '../ui/confirm.service';
 import { DataTable, type Coluna } from '../ui/data-table';
 import { ErrorAlert } from '../ui/error-alert';
 import { FilterBar, type OpcaoFiltro } from '../ui/filter-bar';
@@ -27,7 +30,16 @@ import { FILTRO_TIPO_ITEM, ROTULO_ITEM, consultaProduto } from './rotulos';
  */
 @Component({
   selector: 'sge-products-page',
-  imports: [RouterLink, ButtonModule, TagModule, Alert, DataTable, ErrorAlert, FilterBar],
+  imports: [
+    RouterLink,
+    ButtonModule,
+    TagModule,
+    Alert,
+    DataTable,
+    ErrorAlert,
+    FilterBar,
+    PrintExport,
+  ],
   template: `
     <p class="crumb">Cadastros / Catálogo</p>
 
@@ -44,6 +56,7 @@ import { FILTRO_TIPO_ITEM, ROTULO_ITEM, consultaProduto } from './rotulos';
     </div>
 
     <sge-filter-bar
+      chave="cadastros.produtos"
       placeholderBusca="Buscar por código, nome ou NCM"
       [valores]="lista.filtros()"
       [filtros]="[FILTRO_TIPO_ITEM, filtroCategoria(), FILTRO_SITUACAO]"
@@ -60,6 +73,7 @@ import { FILTRO_TIPO_ITEM, ROTULO_ITEM, consultaProduto } from './rotulos';
 
     <section class="card table-card espaco">
       <sge-data-table
+        chave="cadastros.produtos"
         [colunas]="colunas"
         [linhas]="lista.linhas()"
         [total]="lista.total()"
@@ -73,6 +87,13 @@ import { FILTRO_TIPO_ITEM, ROTULO_ITEM, consultaProduto } from './rotulos';
         "
         (paginaMudou)="lista.irParaPagina($event.page, $event.pageSize)"
       >
+        <sge-print-export
+          ferramentas
+          nome="produtos"
+          [colunas]="colunasExportadas"
+          [consulta]="exportarLista"
+        />
+
         <ng-template #linha let-item>
           <tr>
             <td>{{ item.code }}</td>
@@ -114,11 +135,32 @@ import { FILTRO_TIPO_ITEM, ROTULO_ITEM, consultaProduto } from './rotulos';
 })
 export class ProductsPage {
   private readonly api = inject(CatalogApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly permissoes = inject(PermissionsService);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly FILTRO_TIPO_ITEM = FILTRO_TIPO_ITEM;
   protected readonly FILTRO_SITUACAO = FILTRO_SITUACAO;
+
+  /**
+   * Colunas do CSV (RF-113 — UI-080). Não são as da tela: a listagem mostra
+   * valores já formatados e junta campos na mesma célula; o arquivo leva o
+   * dado como veio da API, para ser somado e filtrado na planilha.
+   */
+  protected readonly colunasExportadas: ColunaExportavel[] = [
+    { campo: 'code', cabecalho: 'Código' },
+    { campo: 'description', cabecalho: 'Descrição' },
+    { campo: 'type', cabecalho: 'Tipo' },
+    { campo: 'unit.symbol', cabecalho: 'Unidade' },
+    { campo: 'category.name', cabecalho: 'Categoria' },
+    { campo: 'ncm', cabecalho: 'NCM' },
+    { campo: 'cest', cabecalho: 'CEST' },
+    { campo: 'averageCost', cabecalho: 'Custo médio' },
+    { campo: 'salePrice', cabecalho: 'Preço de venda' },
+    { campo: 'isActive', cabecalho: 'Ativo' },
+  ];
+
+  protected readonly exportarLista = () => this.lista.exportar();
 
   protected readonly colunas: Coluna[] = [
     { campo: 'code', cabecalho: 'Código', largura: '9rem' },
@@ -169,7 +211,16 @@ export class ProductsPage {
     return item.salePrice ? formatCurrency(item.salePrice) : '—';
   }
 
-  protected inativar(item: Product): void {
+  protected async inativar(item: Product): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Inativar produto?',
+      mensagem:
+        'O produto deixa de aparecer nas listagens e não entra em novos pedidos ou movimentações. O saldo e o histórico são preservados.',
+      rotuloConfirmar: 'Inativar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.aviso.set(null);
     this.api
       .inactivate(item.id)

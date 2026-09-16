@@ -17,6 +17,7 @@ import { PermissionsService } from '../core/authz/permissions.service';
 import { ListState } from '../core/lib/list-state';
 import { FILTRO_SITUACAO, consultaPadrao } from '../admin/filtros';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { DataTable, type Coluna } from '../ui/data-table';
 import { DecimalField } from '../ui/decimal-field';
 import { ErrorAlert } from '../ui/error-alert';
@@ -407,6 +408,7 @@ function inteiro(valor: string): number | undefined {
 })
 export class PaymentConditionsPage {
   private readonly api = inject(PaymentConditionsApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly permissoes = inject(PermissionsService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -553,7 +555,16 @@ export class PaymentConditionsPage {
     });
   }
 
-  protected inativarCondicao(condicao: PaymentTerm): void {
+  protected async inativarCondicao(condicao: PaymentTerm): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Inativar condição de pagamento?',
+      mensagem:
+        'A condição deixa de ser oferecida em novos títulos. Os títulos já emitidos com ela não mudam.',
+      rotuloConfirmar: 'Inativar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.api
       .inactivateTerm(condicao.id)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -609,7 +620,16 @@ export class PaymentConditionsPage {
     });
   }
 
-  protected inativarForma(forma: PaymentMethod): void {
+  protected async inativarForma(forma: PaymentMethod): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Inativar forma de pagamento?',
+      mensagem:
+        'A forma deixa de ser oferecida em novas baixas e ordens. As já registradas não mudam.',
+      rotuloConfirmar: 'Inativar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.api
       .inactivateMethod(forma.id)
       .pipe(takeUntilDestroyed(this.destroyRef))

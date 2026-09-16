@@ -140,6 +140,31 @@ export const routes: Routes = [
       },
       ...rotasDeModulo,
       {
+        // Documentação viva do design system (UI-076): a própria aplicação
+        // desenhando os componentes, com os tokens em vigor.
+        path: 'design-system',
+        loadComponent: () =>
+          import('./designsystem/design-system-page').then((m) => m.DesignSystemPage),
+        title: 'Design system · SGE',
+      },
+      {
+        // Assistente de primeira configuração (RF-006 — UI-079). Não é módulo:
+        // some da navegação assim que a empresa está configurada, e cada passo
+        // confere a própria permissão — o guard de rota barraria quem só pode
+        // configurar uma parte.
+        path: 'onboarding',
+        loadComponent: () => import('./onboarding/onboarding-page').then((m) => m.OnboardingPage),
+        title: 'Primeira configuração · SGE',
+      },
+      {
+        // Preferências de interface (UI-078): não é módulo do sistema, não
+        // entra na navegação lateral e não exige permissão — a escolha é do
+        // usuário sobre a própria tela.
+        path: 'preferencias',
+        loadComponent: () => import('./prefs/preferences-page').then((m) => m.PreferencesPage),
+        title: 'Preferências · SGE',
+      },
+      {
         path: 'sem-permissao',
         loadComponent: () => import('./pages/sem-permissao-page').then((m) => m.SemPermissaoPage),
         title: 'Sem permissão · SGE',

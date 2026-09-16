@@ -13,6 +13,7 @@ import { formatCurrency } from '../core/lib/decimal';
 import { ListState } from '../core/lib/list-state';
 import { FILTRO_SITUACAO, consultaPadrao } from '../admin/filtros';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { DataTable, type Coluna } from '../ui/data-table';
 import { DecimalField } from '../ui/decimal-field';
 import { ErrorAlert } from '../ui/error-alert';
@@ -405,6 +406,7 @@ const DEPARTAMENTO_VAZIO: FormularioDepartamento = {
 })
 export class OrgPage {
   private readonly api = inject(HrStructureApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly configuracoes = inject(ConfigurationsApiService);
   private readonly permissoes = inject(PermissionsService);
   private readonly destroyRef = inject(DestroyRef);
@@ -550,7 +552,16 @@ export class OrgPage {
     });
   }
 
-  protected inativarCargo(cargo: Position): void {
+  protected async inativarCargo(cargo: Position): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Inativar cargo?',
+      mensagem:
+        'O cargo deixa de ser oferecido em novas admissões e movimentações. O histórico é preservado.',
+      rotuloConfirmar: 'Inativar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.api
       .inactivatePosition(cargo.id)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -615,7 +626,16 @@ export class OrgPage {
     });
   }
 
-  protected inativarDepartamento(departamento: Department): void {
+  protected async inativarDepartamento(departamento: Department): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Inativar departamento?',
+      mensagem:
+        'O departamento deixa de ser oferecido em novas lotações. O histórico é preservado.',
+      rotuloConfirmar: 'Inativar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.api
       .inactivateDepartment(departamento.id)
       .pipe(takeUntilDestroyed(this.destroyRef))

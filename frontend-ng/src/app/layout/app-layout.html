@@ -7,13 +7,14 @@
 
     <div class="topbar__spacer"></div>
 
-    <span class="search">
-      <i class="pi pi-search search__icon"></i>
-      <input pInputText type="text" placeholder="Buscar…" aria-label="Busca global" />
-      <kbd class="search__kbd">Ctrl K</kbd>
-    </span>
+    <sge-global-search />
 
-    <button type="button" class="company" (click)="trocarEmpresa()" aria-label="Trocar empresa ativa">
+    <button
+      type="button"
+      class="company"
+      (click)="trocarEmpresa()"
+      aria-label="Trocar empresa ativa"
+    >
       <i class="pi pi-building"></i>
       <span>{{ nomeEmpresa() }}</span>
       <i class="pi pi-chevron-down company__caret"></i>
@@ -27,6 +28,16 @@
       [pTooltip]="theme.escuro() ? 'Tema claro' : 'Tema escuro'"
       tooltipPosition="bottom"
       (onClick)="theme.alternar()"
+    />
+
+    <p-button
+      [text]="true"
+      severity="secondary"
+      icon="pi pi-sliders-h"
+      ariaLabel="Preferências"
+      pTooltip="Preferências"
+      tooltipPosition="bottom"
+      routerLink="/preferencias"
     />
 
     <p-avatar [label]="iniciais()" shape="circle" styleClass="avatar" />
@@ -57,7 +68,11 @@
               <span>{{ item.label }}</span>
             </a>
           } @else {
-            <span class="navitem navitem--bloqueado" aria-disabled="true" title="Sem permissão no perfil">
+            <span
+              class="navitem navitem--bloqueado"
+              aria-disabled="true"
+              title="Sem permissão no perfil"
+            >
               <i class="pi {{ item.icon }}"></i>
               <span>{{ item.label }}</span>
               <i class="pi pi-lock navitem__cadeado"></i>
@@ -77,3 +92,6 @@
     </main>
   </div>
 </div>
+
+<!-- Diálogo único de confirmação das ações irreversíveis (UI-081). -->
+<sge-confirm-dialog />

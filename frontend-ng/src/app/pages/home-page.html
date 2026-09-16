@@ -11,6 +11,8 @@
   </div>
 </div>
 
+<sge-onboarding-banner />
+
 <section class="kpis">
   @for (kpi of kpis(); track kpi.label) {
     <article class="card kpi">
@@ -45,7 +47,9 @@
             {{ item.label }}
           }
         </td>
-        <td><code>{{ item.exigencia }}</code></td>
+        <td>
+          <code>{{ item.exigencia }}</code>
+        </td>
         <td>
           @if (item.liberado) {
             <p-tag value="Liberado" severity="success" [rounded]="true" />

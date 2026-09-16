@@ -15,6 +15,7 @@ import { PermissionsService } from '../core/authz/permissions.service';
 import { formatDateTime } from '../core/lib/format';
 import { ListState } from '../core/lib/list-state';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { DataTable, type Coluna } from '../ui/data-table';
 import { ErrorAlert } from '../ui/error-alert';
 import { FilterBar, type OpcaoFiltro } from '../ui/filter-bar';
@@ -454,6 +455,7 @@ interface FormUsuario {
 })
 export class UsersPage {
   private readonly api = inject(UsersApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly rolesApi = inject(RolesApiService);
   private readonly branchesApi = inject(BranchesApiService);
   private readonly auth = inject(AuthService);
@@ -644,7 +646,15 @@ export class UsersPage {
     });
   }
 
-  protected removerVinculo(item: MembershipRow): void {
+  protected async removerVinculo(item: MembershipRow): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Remover vínculo do usuário?',
+      mensagem: 'O usuário perde o acesso a esta empresa assim que a sessão dele for revalidada.',
+      rotuloConfirmar: 'Remover',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.aviso.set(null);
     this.api
       .removeMembership(item.id)

@@ -12,6 +12,7 @@ import type { LedgerAccount, LedgerAccountNode } from '../core/api/types';
 import { PermissionsService } from '../core/authz/permissions.service';
 import { ESTILO_TABELA } from '../conciliacao/rotulos';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { ErrorAlert } from '../ui/error-alert';
 import { FilterBar, type ValoresFiltro } from '../ui/filter-bar';
 import { SearchSelect } from '../ui/search-select';
@@ -74,8 +75,18 @@ import {
       </div>
       <div class="pagehead__actions">
         @if (arvore().length > 0) {
-          <p-button label="Expandir tudo" severity="secondary" [text]="true" (onClick)="expandirTudo()" />
-          <p-button label="Recolher tudo" severity="secondary" [text]="true" (onClick)="recolherTudo()" />
+          <p-button
+            label="Expandir tudo"
+            severity="secondary"
+            [text]="true"
+            (onClick)="expandirTudo()"
+          />
+          <p-button
+            label="Recolher tudo"
+            severity="secondary"
+            [text]="true"
+            (onClick)="recolherTudo()"
+          />
         }
         @if (podeCriar()) {
           <p-button label="Nova conta" icon="pi pi-plus" (onClick)="abrirNova(null)" />
@@ -124,16 +135,24 @@ import {
                         type="button"
                         class="arvore__alternar"
                         [attr.aria-expanded]="!linha.recolhida"
-                        [attr.aria-label]="(linha.recolhida ? 'Expandir ' : 'Recolher ') + linha.conta.code"
+                        [attr.aria-label]="
+                          (linha.recolhida ? 'Expandir ' : 'Recolher ') + linha.conta.code
+                        "
                         (click)="alternar(linha.conta.id)"
                       >
-                        <i class="pi" [class.pi-chevron-right]="linha.recolhida" [class.pi-chevron-down]="!linha.recolhida"></i>
+                        <i
+                          class="pi"
+                          [class.pi-chevron-right]="linha.recolhida"
+                          [class.pi-chevron-down]="!linha.recolhida"
+                        ></i>
                       </button>
                     } @else {
                       <span class="arvore__folha" aria-hidden="true"></span>
                     }
                     <span class="codigo">{{ linha.conta.code }}</span>
-                    <span [class.sintetica]="!linha.conta.acceptsEntry">{{ linha.conta.name }}</span>
+                    <span [class.sintetica]="!linha.conta.acceptsEntry">{{
+                      linha.conta.name
+                    }}</span>
                   </span>
                 </td>
                 <td>
@@ -158,10 +177,22 @@ import {
                 </td>
                 <td class="acoes">
                   @if (podeCriar() && !linha.conta.acceptsEntry && linha.conta.isActive) {
-                    <p-button label="Subconta" severity="secondary" [text]="true" size="small" (onClick)="abrirNova(linha.conta)" />
+                    <p-button
+                      label="Subconta"
+                      severity="secondary"
+                      [text]="true"
+                      size="small"
+                      (onClick)="abrirNova(linha.conta)"
+                    />
                   }
                   @if (podeEditar()) {
-                    <p-button label="Editar" severity="secondary" [text]="true" size="small" (onClick)="abrirEdicao(linha.conta)" />
+                    <p-button
+                      label="Editar"
+                      severity="secondary"
+                      [text]="true"
+                      size="small"
+                      (onClick)="abrirEdicao(linha.conta)"
+                    />
                   }
                   @if (podeInativar() && linha.conta.isActive) {
                     <p-button
@@ -228,7 +259,12 @@ import {
           [disabled]="!!contaEditada()"
           (ngModelChange)="mudar('code', $event ?? '')"
         />
-        <sge-text-field rotulo="Nome" [obrigatorio]="true" [ngModel]="form().name" (ngModelChange)="mudar('name', $event ?? '')" />
+        <sge-text-field
+          rotulo="Nome"
+          [obrigatorio]="true"
+          [ngModel]="form().name"
+          (ngModelChange)="mudar('name', $event ?? '')"
+        />
         <sge-select-field
           rotulo="Tipo"
           [obrigatorio]="true"
@@ -246,9 +282,15 @@ import {
             (ngModelChange)="mudar('nature', $event ?? '')"
           />
         } @else if (form().type) {
-          <p class="secundario natureza">Natureza {{ naturezaDoTipo() }}: decorre do tipo (RF-079).</p>
+          <p class="secundario natureza">
+            Natureza {{ naturezaDoTipo() }}: decorre do tipo (RF-079).
+          </p>
         }
-        <sge-text-field rotulo="Código reduzido" [ngModel]="form().shortCode" (ngModelChange)="mudar('shortCode', $event ?? '')" />
+        <sge-text-field
+          rotulo="Código reduzido"
+          [ngModel]="form().shortCode"
+          (ngModelChange)="mudar('shortCode', $event ?? '')"
+        />
         <sge-text-field
           rotulo="Conta referencial SPED"
           [ngModel]="form().spedReferenceCode"
@@ -256,18 +298,36 @@ import {
         />
       </div>
       <label class="marcador">
-        <p-checkbox [binary]="true" [ngModel]="form().acceptsEntry" (ngModelChange)="mudar('acceptsEntry', $event)" />
+        <p-checkbox
+          [binary]="true"
+          [ngModel]="form().acceptsEntry"
+          (ngModelChange)="mudar('acceptsEntry', $event)"
+        />
         Analítica: recebe lançamento
       </label>
-      <p class="secundario">Conta com filhas não recebe lançamento — o saldo entraria duas vezes no balancete.</p>
+      <p class="secundario">
+        Conta com filhas não recebe lançamento — o saldo entraria duas vezes no balancete.
+      </p>
 
       @if (problema(); as texto) {
         <p class="campo__erro">{{ texto }}</p>
       }
 
       <ng-template #footer>
-        <p-button label="Voltar" severity="secondary" [outlined]="true" [disabled]="salvando()" (onClick)="editando.set(false)" />
-        <p-button label="Salvar" icon="pi pi-check" [loading]="salvando()" [disabled]="salvando()" (onClick)="salvar()" />
+        <p-button
+          label="Voltar"
+          severity="secondary"
+          [outlined]="true"
+          [disabled]="salvando()"
+          (onClick)="editando.set(false)"
+        />
+        <p-button
+          label="Salvar"
+          icon="pi pi-check"
+          [loading]="salvando()"
+          [disabled]="salvando()"
+          (onClick)="salvar()"
+        />
       </ng-template>
     </p-dialog>
   `,
@@ -325,6 +385,7 @@ import {
 })
 export class ChartOfAccountsPage {
   private readonly api = inject(AccountingApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly permissoes = inject(PermissionsService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -348,7 +409,9 @@ export class ChartOfAccountsPage {
   protected readonly salvando = signal(false);
   protected readonly erroDialogo = signal<unknown>(null);
 
-  protected readonly linhas = computed(() => achatarArvore(this.arvore(), this.recolhidas(), this.filtros()));
+  protected readonly linhas = computed(() =>
+    achatarArvore(this.arvore(), this.recolhidas(), this.filtros()),
+  );
 
   private readonly sinteticas = computed(() => contasSinteticas(this.arvore()));
   private readonly opcoesPai = computed(() => this.sinteticas().map(opcaoContaContabil));
@@ -443,7 +506,16 @@ export class ChartOfAccountsPage {
     }
   }
 
-  protected inativar(conta: LedgerAccount): void {
+  protected async inativar(conta: LedgerAccount): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Inativar conta contábil?',
+      mensagem:
+        'A conta deixa de aceitar novos lançamentos. Os lançamentos já escriturados nela são preservados.',
+      rotuloConfirmar: 'Inativar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     if (this.inativando()) return;
     this.inativando.set(conta.id);
     this.erro.set(null);
@@ -488,7 +560,10 @@ export class ChartOfAccountsPage {
     this.editando.set(true);
   }
 
-  private enviar(requisicao: ReturnType<AccountingApiService['createAccount']>, mensagem: string): void {
+  private enviar(
+    requisicao: ReturnType<AccountingApiService['createAccount']>,
+    mensagem: string,
+  ): void {
     this.salvando.set(true);
     this.erroDialogo.set(null);
     requisicao.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({

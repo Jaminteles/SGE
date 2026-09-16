@@ -9,6 +9,7 @@ import { PermissionsService } from '../core/authz/permissions.service';
 import { CompanyService } from '../core/company/company.service';
 import { formatCurrency } from '../core/lib/decimal';
 import { NAVIGATION } from '../core/navigation';
+import { OnboardingBanner } from '../onboarding/onboarding-banner';
 
 interface Kpi {
   label: string;
@@ -26,7 +27,7 @@ interface Kpi {
  */
 @Component({
   selector: 'sge-home-page',
-  imports: [RouterLink, ButtonModule, TableModule, TagModule],
+  imports: [RouterLink, ButtonModule, TableModule, TagModule, OnboardingBanner],
   templateUrl: './home-page.html',
 })
 export class HomePage {

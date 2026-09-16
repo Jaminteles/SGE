@@ -14,6 +14,7 @@ import { formatDate } from '../core/lib/format';
 import { ESTILO_TABELA } from '../conciliacao/rotulos';
 import { hoje } from '../financeiro/dinheiro';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { ErrorAlert } from '../ui/error-alert';
 import type { OpcaoFiltro } from '../ui/filter-bar';
 import { SelectField } from '../ui/select-field';
@@ -287,6 +288,7 @@ import {
 })
 export class TaxParametersPage {
   private readonly api = inject(FiscalApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly filiais = inject(BranchesApiService);
   private readonly permissoes = inject(PermissionsService);
   private readonly destroyRef = inject(DestroyRef);
@@ -398,7 +400,16 @@ export class TaxParametersPage {
   }
 
   /** Encerra a vigência hoje. O histórico permanece: a apuração antiga depende dele. */
-  protected encerrar(item: TaxParameter): void {
+  protected async encerrar(item: TaxParameter): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Encerrar vigência do parâmetro fiscal?',
+      mensagem:
+        'O parâmetro deixa de valer a partir do encerramento. Os cálculos já feitos na vigência anterior são preservados.',
+      rotuloConfirmar: 'Encerrar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     if (this.encerrando()) return;
     this.encerrando.set(item.id);
     this.erro.set(null);

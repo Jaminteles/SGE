@@ -20,6 +20,7 @@ import type {
 import { PermissionsService } from '../core/authz/permissions.service';
 import { formatCurrency, formatDecimal } from '../core/lib/decimal';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { DecimalField } from '../ui/decimal-field';
 import { ErrorAlert } from '../ui/error-alert';
 import type { OpcaoFiltro } from '../ui/filter-bar';
@@ -514,6 +515,7 @@ const FORNECEDOR_VAZIO: FormularioFornecedor = {
 })
 export class ProductFormPage {
   private readonly api = inject(CatalogApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly parceiros = inject(PartnersApiService);
   private readonly permissoes = inject(PermissionsService);
   private readonly rota = inject(ActivatedRoute);
@@ -688,7 +690,15 @@ export class ProductFormPage {
     });
   }
 
-  protected removerFornecedor(fornecedor: ProductSupplier): void {
+  protected async removerFornecedor(fornecedor: ProductSupplier): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Remover fornecedor do produto?',
+      mensagem: 'O vínculo sai do cadastro e o fornecedor deixa de ser sugerido para este produto.',
+      rotuloConfirmar: 'Remover',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     const item = this.registro();
     if (!item) return;
     this.api

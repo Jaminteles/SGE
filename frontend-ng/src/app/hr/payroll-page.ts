@@ -20,6 +20,7 @@ import { formatCurrency } from '../core/lib/decimal';
 import { ListState } from '../core/lib/list-state';
 import { FILTRO_SITUACAO, consultaPadrao } from '../admin/filtros';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { DataTable, type Coluna } from '../ui/data-table';
 import { ErrorAlert } from '../ui/error-alert';
 import { FilterBar } from '../ui/filter-bar';
@@ -432,6 +433,7 @@ function competenciaAtual(): string {
 })
 export class PayrollPage {
   private readonly api = inject(PayrollApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly permissoes = inject(PermissionsService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -609,7 +611,16 @@ export class PayrollPage {
     });
   }
 
-  protected inativarVerba(verba: PayrollItem): void {
+  protected async inativarVerba(verba: PayrollItem): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Inativar verba de folha?',
+      mensagem:
+        'A verba deixa de ser oferecida em novas folhas. As folhas já processadas não mudam.',
+      rotuloConfirmar: 'Inativar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.api
       .inactivateItem(verba.id)
       .pipe(takeUntilDestroyed(this.destroyRef))

@@ -13,6 +13,7 @@ import { PermissionsService } from '../core/authz/permissions.service';
 import { formatCurrency, formatDecimal } from '../core/lib/decimal';
 import { formatDate } from '../core/lib/format';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { DecimalField } from '../ui/decimal-field';
 import { ErrorAlert } from '../ui/error-alert';
 import type { OpcaoFiltro } from '../ui/filter-bar';
@@ -268,6 +269,7 @@ const VAZIO: FormularioVerba = {
 })
 export class EmployeeCompensationPage {
   private readonly api = inject(PayrollApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly employees = inject(EmployeesApiService);
   private readonly permissoes = inject(PermissionsService);
   private readonly rota = inject(ActivatedRoute);
@@ -383,7 +385,16 @@ export class EmployeeCompensationPage {
     });
   }
 
-  protected encerrar(verba: Compensation): void {
+  protected async encerrar(verba: Compensation): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Encerrar verba do funcionário?',
+      mensagem:
+        'A verba deixa de entrar nas próximas folhas. As folhas já processadas são preservadas.',
+      rotuloConfirmar: 'Encerrar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.api
       .closeCompensation(this.employeeId, verba.id)
       .pipe(takeUntilDestroyed(this.destroyRef))

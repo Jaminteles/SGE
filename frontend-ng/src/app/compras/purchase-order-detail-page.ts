@@ -30,6 +30,7 @@ import {
   severidadeTitulo,
 } from '../financeiro/rotulos';
 import { Alert } from '../ui/alert';
+import { PrintExport } from '../ui/print-export';
 import { ErrorAlert } from '../ui/error-alert';
 import { TextField } from '../ui/text-field';
 import { CASAS_UNITARIAS, positivo, saldoPendente } from './calculo';
@@ -79,6 +80,7 @@ interface NotaVinculada {
 @Component({
   selector: 'sge-purchase-order-detail-page',
   imports: [
+    PrintExport,
     FormsModule,
     RouterLink,
     ButtonModule,
@@ -97,6 +99,7 @@ interface NotaVinculada {
         <p>{{ subtitulo() }}</p>
       </div>
       <div class="pagehead__actions">
+        <sge-print-export />
         <p-button
           label="Voltar"
           severity="secondary"

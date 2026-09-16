@@ -25,6 +25,7 @@ import { formatCurrency, formatDecimal } from '../core/lib/decimal';
 import { formatDate, formatDateTime } from '../core/lib/format';
 import { novaChaveIdempotencia } from '../core/lib/idempotency';
 import { Alert } from '../ui/alert';
+import { PrintExport } from '../ui/print-export';
 import { DecimalField } from '../ui/decimal-field';
 import { ErrorAlert } from '../ui/error-alert';
 import type { OpcaoFiltro } from '../ui/filter-bar';
@@ -81,6 +82,7 @@ const PARCELA_ABERTA: InstallmentStatus[] = ['ABERTA', 'PARCIALMENTE_LIQUIDADA']
 @Component({
   selector: 'sge-entry-detail-page',
   imports: [
+    PrintExport,
     FormsModule,
     RouterLink,
     ButtonModule,
@@ -101,6 +103,7 @@ const PARCELA_ABERTA: InstallmentStatus[] = ['ABERTA', 'PARCIALMENTE_LIQUIDADA']
         <p>{{ subtitulo() }}</p>
       </div>
       <div class="pagehead__actions">
+        <sge-print-export />
         <p-button
           label="Voltar"
           severity="secondary"

@@ -45,38 +45,6 @@
   color: var(--p-text-color);
 }
 
-.search {
-  position: relative;
-  display: flex;
-  align-items: center;
-
-  input {
-    width: 20rem;
-    padding-left: 2.25rem;
-    padding-right: 4rem;
-  }
-}
-
-.search__icon {
-  position: absolute;
-  left: 0.75rem;
-  font-size: 0.8rem;
-  color: var(--p-text-muted-color);
-  pointer-events: none;
-}
-
-.search__kbd {
-  position: absolute;
-  right: 0.5rem;
-  padding: 0.15rem 0.4rem;
-  border: 1px solid var(--p-content-border-color);
-  border-radius: 5px;
-  font-family: inherit;
-  font-size: 0.68rem;
-  color: var(--p-text-muted-color);
-  pointer-events: none;
-}
-
 .company {
   display: flex;
   align-items: center;

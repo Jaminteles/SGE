@@ -11,6 +11,7 @@ import { PermissionsService } from '../core/authz/permissions.service';
 import { ListState } from '../core/lib/list-state';
 import { ESTILO_TABELA } from '../conciliacao/rotulos';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { DataTable, type Coluna } from '../ui/data-table';
 import { ErrorAlert } from '../ui/error-alert';
 import { FilterBar, type DefinicaoFiltro, type ValoresFiltro } from '../ui/filter-bar';
@@ -41,7 +42,12 @@ const COLUNAS: Coluna[] = [
 ];
 
 const FILTROS: DefinicaoFiltro[] = [
-  { name: 'type', label: 'Tipo', options: OPCOES_TIPO_CLASSIFICACAO, placeholder: 'Todos os tipos' },
+  {
+    name: 'type',
+    label: 'Tipo',
+    options: OPCOES_TIPO_CLASSIFICACAO,
+    placeholder: 'Todos os tipos',
+  },
 ];
 
 /**
@@ -214,8 +220,8 @@ const FILTROS: DefinicaoFiltro[] = [
       </div>
 
       <p class="secundario">
-        As alíquotas são a expectativa do cadastro: elas não reescrevem nada do que a nota
-        declarou — servem para apontar divergência.
+        As alíquotas são a expectativa do cadastro: elas não reescrevem nada do que a nota declarou
+        — servem para apontar divergência.
       </p>
 
       @if (problema(); as texto) {
@@ -261,6 +267,7 @@ const FILTROS: DefinicaoFiltro[] = [
 })
 export class TaxClassificationsPage {
   private readonly api = inject(FiscalApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly permissoes = inject(PermissionsService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -346,7 +353,16 @@ export class TaxClassificationsPage {
   }
 
   /** Inativa: o item de nota já classificado não pode apontar para linha que sumiu. */
-  protected inativar(item: TaxClassification): void {
+  protected async inativar(item: TaxClassification): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Inativar classificação fiscal?',
+      mensagem:
+        'A classificação deixa de ser oferecida em novos produtos e documentos. O que já a usa não muda.',
+      rotuloConfirmar: 'Inativar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     if (this.inativando()) return;
     this.inativando.set(item.id);
     this.api

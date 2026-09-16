@@ -13,6 +13,7 @@ import { PermissionsService } from '../core/authz/permissions.service';
 import { ListState } from '../core/lib/list-state';
 import { FILTRO_SITUACAO, consultaPadrao } from '../admin/filtros';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { DataTable, type Coluna } from '../ui/data-table';
 import { ErrorAlert } from '../ui/error-alert';
 import { FilterBar, type OpcaoFiltro } from '../ui/filter-bar';
@@ -213,6 +214,7 @@ const VAZIO: Formulario = { branchId: '', code: '', name: '', isDefault: false }
 })
 export class StockLocationsPage {
   private readonly api = inject(StockApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly filiais = inject(BranchesApiService);
   private readonly permissoes = inject(PermissionsService);
   private readonly destroyRef = inject(DestroyRef);
@@ -307,7 +309,16 @@ export class StockLocationsPage {
     });
   }
 
-  protected inativar(local: StockLocation): void {
+  protected async inativar(local: StockLocation): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Inativar local de estoque?',
+      mensagem:
+        'O local deixa de ser oferecido em novas movimentações. O saldo já registrado nele é preservado.',
+      rotuloConfirmar: 'Inativar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.api
       .inactivateLocation(local.id)
       .pipe(takeUntilDestroyed(this.destroyRef))

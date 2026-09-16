@@ -21,6 +21,7 @@ import { AuthService } from '../core/auth/auth.service';
 import { activeCompanyStore } from '../core/company/active-company-store';
 import { CompanyService } from '../core/company/company.service';
 import { makeMembership, makeUser } from '../core/test/factories';
+import { ConfirmService } from '../ui/confirm.service';
 import { ChartOfAccountsPage } from './chart-of-accounts-page';
 import { ClassificationsPage } from './classifications-page';
 import { ExportPage } from './export-page';
@@ -102,7 +103,9 @@ function prepararSessao(
 function rota(query: Record<string, string> = {}): Provider {
   return {
     provide: ActivatedRoute,
-    useValue: { snapshot: { paramMap: convertToParamMap({}), queryParamMap: convertToParamMap(query) } },
+    useValue: {
+      snapshot: { paramMap: convertToParamMap({}), queryParamMap: convertToParamMap(query) },
+    },
   };
 }
 
@@ -128,7 +131,14 @@ function conta(sobrescrever: Partial<LedgerAccountNode> = {}): LedgerAccountNode
 
 /** 1 Ativo › 1.1 Circulante › 1.1.01 Caixa (analítica) · 3 Receita › 3.1 Serviços (analítica). */
 function planoExemplo(): LedgerAccountNode[] {
-  const caixa = conta({ id: 'caixa', parentId: 'circ', code: '1.1.01', name: 'Caixa geral', acceptsEntry: true, level: 3 });
+  const caixa = conta({
+    id: 'caixa',
+    parentId: 'circ',
+    code: '1.1.01',
+    name: 'Caixa geral',
+    acceptsEntry: true,
+    level: 3,
+  });
   const banco = conta({
     id: 'banco',
     parentId: 'circ',
@@ -138,7 +148,14 @@ function planoExemplo(): LedgerAccountNode[] {
     isActive: false,
     level: 3,
   });
-  const circulante = conta({ id: 'circ', parentId: 'ativo', code: '1.1', name: 'Circulante', level: 2, children: [caixa, banco] });
+  const circulante = conta({
+    id: 'circ',
+    parentId: 'ativo',
+    code: '1.1',
+    name: 'Circulante',
+    level: 2,
+    children: [caixa, banco],
+  });
   const ativo = conta({ id: 'ativo', code: '1', name: 'Ativo', children: [circulante] });
   const servicos = conta({
     id: 'serv',
@@ -150,7 +167,14 @@ function planoExemplo(): LedgerAccountNode[] {
     acceptsEntry: true,
     level: 2,
   });
-  const receita = conta({ id: 'rec', code: '3', name: 'Receita', type: 'RECEITA', nature: 'CREDORA', children: [servicos] });
+  const receita = conta({
+    id: 'rec',
+    code: '3',
+    name: 'Receita',
+    type: 'RECEITA',
+    nature: 'CREDORA',
+    children: [servicos],
+  });
   return [ativo, receita];
 }
 
@@ -187,18 +211,26 @@ describe('plano de contas — regras espelhadas do backend (UI-054)', () => {
   it('só contas analíticas e ativas recebem partida', () => {
     expect(contasAnaliticas(planoExemplo()).map((c) => c.code)).toEqual(['1.1.01', '3.1']);
     const opcoes = contasAnaliticas(planoExemplo()).map(opcaoContaContabil);
-    expect(filtrarOpcoes(opcoes, 'caixa')).toEqual([{ value: 'caixa', label: '1.1.01 — Caixa geral' }]);
+    expect(filtrarOpcoes(opcoes, 'caixa')).toEqual([
+      { value: 'caixa', label: '1.1.01 — Caixa geral' },
+    ]);
     expect(filtrarOpcoes(opcoes, '3.1')).toHaveLength(1);
   });
 
   it('recusa filha de tipo diferente, pai analítico e compensação sem natureza (RF-079)', () => {
     const pai = { code: '1.1', type: 'ATIVO' as const, acceptsEntry: false };
-    const base = { ...formContaVazio({ id: 'circ', code: '1.1', type: 'ATIVO' }), code: '1.1.03', name: 'Aplicações' };
+    const base = {
+      ...formContaVazio({ id: 'circ', code: '1.1', type: 'ATIVO' }),
+      code: '1.1.03',
+      name: 'Aplicações',
+    };
     expect(problemaConta(base, pai)).toBeNull();
     expect(problemaConta({ ...base, code: '1.1.a' }, pai)).toContain('estruturado');
     expect(problemaConta({ ...base, type: 'PASSIVO' }, pai)).toContain('mesmo tipo');
     expect(problemaConta(base, { ...pai, acceptsEntry: true })).toContain('não pode ter filhas');
-    expect(problemaConta({ ...base, parentId: '', type: 'COMPENSACAO' }, null)).toContain('natureza');
+    expect(problemaConta({ ...base, parentId: '', type: 'COMPENSACAO' }, null)).toContain(
+      'natureza',
+    );
 
     // Natureza só vai no corpo em compensação: nos demais decorre do tipo.
     expect(montarConta({ ...base, nature: 'CREDORA' })).toEqual({
@@ -208,14 +240,27 @@ describe('plano de contas — regras espelhadas do backend (UI-054)', () => {
       acceptsEntry: true,
       parentId: 'circ',
     });
-    expect(montarConta({ ...base, parentId: '', type: 'COMPENSACAO', nature: 'CREDORA' })).toMatchObject({
+    expect(
+      montarConta({ ...base, parentId: '', type: 'COMPENSACAO', nature: 'CREDORA' }),
+    ).toMatchObject({
       nature: 'CREDORA',
     });
   });
 
   it('a edição manda só o que mudou, nunca código nem tipo', () => {
-    const atual = conta({ id: 'caixa', code: '1.1.01', name: 'Caixa', acceptsEntry: true }) as LedgerAccount;
-    const form = { ...formContaVazio(), code: '9.9', type: 'RECEITA' as const, name: 'Caixa geral', acceptsEntry: true };
+    const atual = conta({
+      id: 'caixa',
+      code: '1.1.01',
+      name: 'Caixa',
+      acceptsEntry: true,
+    }) as LedgerAccount;
+    const form = {
+      ...formContaVazio(),
+      code: '9.9',
+      type: 'RECEITA' as const,
+      name: 'Caixa geral',
+      acceptsEntry: true,
+    };
     expect(montarEdicaoConta(form, atual)).toEqual({ name: 'Caixa geral' });
   });
 });
@@ -225,7 +270,7 @@ interface Plano {
   abrirEdicao(conta: LedgerAccount): void;
   mudar(campo: string, valor: unknown): void;
   salvar(): void;
-  inativar(conta: LedgerAccount): void;
+  inativar(conta: LedgerAccount): Promise<void>;
   alternar(id: string): void;
   problema(): string | null;
   linhas(): { conta: LedgerAccountNode }[];
@@ -290,17 +335,23 @@ describe('plano de contas em árvore (UI-054)', () => {
     mock.verify();
   });
 
-  it('inativa a conta sem apagar e mostra o erro do servidor', () => {
+  it('inativa a conta sem apagar e mostra o erro do servidor', async () => {
     const { mock } = prepararSessao(['ledger-accounts:READ', 'ledger-accounts:DELETE']);
     const fixture = TestBed.createComponent(ChartOfAccountsPage);
     fixture.detectChanges();
     mock.expectOne(`${BASE}/ledger-accounts/tree`).flush(planoExemplo());
 
     const pagina = fixture.componentInstance as unknown as Plano;
-    pagina.inativar(pagina.linhas()[2].conta);
+    const inativando = pagina.inativar(pagina.linhas()[2].conta);
+    // Inativar passa pela confirmação padrão (UI-081) antes de chegar à API.
+    TestBed.inject(ConfirmService).responder(true);
+    await inativando;
     const inativar = mock.expectOne(`${BASE}/ledger-accounts/caixa`);
     expect(inativar.request.method).toBe('DELETE');
-    inativar.flush({ statusCode: 409, message: 'A conta tem saldo.' }, { status: 409, statusText: 'Conflito' });
+    inativar.flush(
+      { statusCode: 409, message: 'A conta tem saldo.' },
+      { status: 409, statusText: 'Conflito' },
+    );
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('A conta tem saldo.');
     mock.verify();
@@ -376,18 +427,39 @@ function lancamento(sobrescrever: Partial<JournalEntry> = {}): JournalEntry {
   };
 }
 
-function dre(receita: string, custo: string, despesa: string, extra: Partial<IncomeStatement> = {}): IncomeStatement {
+function dre(
+  receita: string,
+  custo: string,
+  despesa: string,
+  extra: Partial<IncomeStatement> = {},
+): IncomeStatement {
   const bruto = (BigInt(receita) - BigInt(custo)).toString();
   return {
     range: { from: '2026-01-01', to: '2026-03-31' },
     revenue: {
       total: receita,
-      lines: [{ accountId: 'serv', code: '3.1', name: 'Receita de serviços', type: 'RECEITA', amount: receita }],
+      lines: [
+        {
+          accountId: 'serv',
+          code: '3.1',
+          name: 'Receita de serviços',
+          type: 'RECEITA',
+          amount: receita,
+        },
+      ],
     },
     cost: { total: custo, lines: [] },
     expense: {
       total: despesa,
-      lines: [{ accountId: 'adm', code: '4.1', name: 'Despesas administrativas', type: 'DESPESA', amount: despesa }],
+      lines: [
+        {
+          accountId: 'adm',
+          code: '4.1',
+          name: 'Despesas administrativas',
+          type: 'DESPESA',
+          amount: despesa,
+        },
+      ],
     },
     grossResult: bruto,
     netResult: (BigInt(bruto) - BigInt(despesa)).toString(),
@@ -409,20 +481,35 @@ describe('lançamentos, relatórios e períodos — regras espelhadas do backend
       ...formLancamentoVazio('2026-03-05'),
       history: 'Aporte de capital',
       lines: [
-        { accountId: 'caixa', type: 'DEBITO' as const, amount: '100.00', costCenterId: '', extraHistory: '' },
-        { accountId: 'serv', type: 'CREDITO' as const, amount: '99.99', costCenterId: 'cc-1', extraHistory: ' ref ' },
+        {
+          accountId: 'caixa',
+          type: 'DEBITO' as const,
+          amount: '100.00',
+          costCenterId: '',
+          extraHistory: '',
+        },
+        {
+          accountId: 'serv',
+          type: 'CREDITO' as const,
+          amount: '99.99',
+          costCenterId: 'cc-1',
+          extraHistory: ' ref ',
+        },
       ],
     };
     expect(problemaLancamento(form)).toContain('desbalanceado');
     expect(problemaLancamento({ ...form, history: 'ab' })).toContain('histórico');
-    expect(problemaLancamento({ ...form, lines: [form.lines[0], { ...form.lines[1], accountId: '' }] })).toContain(
-      'Partida 2: escolha a conta',
-    );
-    expect(problemaLancamento({ ...form, lines: [form.lines[0], { ...form.lines[1], amount: '0' }] })).toContain(
-      'positivo',
-    );
     expect(
-      problemaLancamento({ ...form, lines: [form.lines[0], { ...form.lines[0], accountId: 'serv' }] }),
+      problemaLancamento({ ...form, lines: [form.lines[0], { ...form.lines[1], accountId: '' }] }),
+    ).toContain('Partida 2: escolha a conta');
+    expect(
+      problemaLancamento({ ...form, lines: [form.lines[0], { ...form.lines[1], amount: '0' }] }),
+    ).toContain('positivo');
+    expect(
+      problemaLancamento({
+        ...form,
+        lines: [form.lines[0], { ...form.lines[0], accountId: 'serv' }],
+      }),
     ).toContain('um débito e um crédito');
 
     const balanceado = { ...form, lines: [form.lines[0], { ...form.lines[1], amount: '100.00' }] };
@@ -432,7 +519,13 @@ describe('lançamentos, relatórios e períodos — regras espelhadas do backend
       history: 'Aporte de capital',
       lines: [
         { accountId: 'caixa', type: 'DEBITO', amount: '100.00' },
-        { accountId: 'serv', type: 'CREDITO', amount: '100.00', costCenterId: 'cc-1', extraHistory: 'ref' },
+        {
+          accountId: 'serv',
+          type: 'CREDITO',
+          amount: '100.00',
+          costCenterId: 'cc-1',
+          extraHistory: 'ref',
+        },
       ],
     });
     expect(problemaEstorno('erro')).toContain('mínimo de 5');
@@ -447,16 +540,35 @@ describe('lançamentos, relatórios e períodos — regras espelhadas do backend
   });
 
   it('mostra o bloqueio da competência pelo período (RN-008 — UI-059)', () => {
-    const periodos = [periodo({ status: 'FECHADO' }), periodo({ id: 'per-04', month: 4, status: 'EM_FECHAMENTO' })];
+    const periodos = [
+      periodo({ status: 'FECHADO' }),
+      periodo({ id: 'per-04', month: 4, status: 'EM_FECHAMENTO' }),
+    ];
     expect(bloqueioDaCompetencia(null, '2026-03-10')).toBeNull();
     expect(bloqueioDaCompetencia(periodos, '2026-03-10')).toContain('03/2026 está fechado');
     expect(bloqueioDaCompetencia(periodos, '2026-04-10')).toBeNull();
-    expect(bloqueioDaCompetencia(periodos, '2026-05-10')).toContain('Não há período contábil para 05/2026');
+    expect(bloqueioDaCompetencia(periodos, '2026-05-10')).toContain(
+      'Não há período contábil para 05/2026',
+    );
 
-    expect(acoesDoPeriodo('ABERTO')).toEqual({ iniciarFechamento: true, fechar: true, reabrir: false });
-    expect(acoesDoPeriodo('EM_FECHAMENTO')).toEqual({ iniciarFechamento: false, fechar: true, reabrir: false });
-    expect(acoesDoPeriodo('FECHADO')).toEqual({ iniciarFechamento: false, fechar: false, reabrir: true });
-    expect(anteriorAberto([periodo({ month: 1, status: 'FECHADO' }), periodo({ month: 2 })], periodo())).toMatchObject({
+    expect(acoesDoPeriodo('ABERTO')).toEqual({
+      iniciarFechamento: true,
+      fechar: true,
+      reabrir: false,
+    });
+    expect(acoesDoPeriodo('EM_FECHAMENTO')).toEqual({
+      iniciarFechamento: false,
+      fechar: true,
+      reabrir: false,
+    });
+    expect(acoesDoPeriodo('FECHADO')).toEqual({
+      iniciarFechamento: false,
+      fechar: false,
+      reabrir: true,
+    });
+    expect(
+      anteriorAberto([periodo({ month: 1, status: 'FECHADO' }), periodo({ month: 2 })], periodo()),
+    ).toMatchObject({
       month: 2,
     });
     expect(problemaReabertura('ajuste')).toBeNull();
@@ -477,12 +589,34 @@ describe('lançamentos, relatórios e períodos — regras espelhadas do backend
 
     const atual = dre('1000', '0', '400').expense.lines;
     const anterior = [
-      { accountId: 'adm', code: '4.1', name: 'Despesas administrativas', type: 'DESPESA' as const, amount: '500' },
+      {
+        accountId: 'adm',
+        code: '4.1',
+        name: 'Despesas administrativas',
+        type: 'DESPESA' as const,
+        amount: '500',
+      },
       { accountId: 'mkt', code: '4.2', name: 'Marketing', type: 'DESPESA' as const, amount: '80' },
     ];
     expect(linhasComparativas(atual, anterior)).toEqual([
-      { accountId: 'adm', code: '4.1', name: 'Despesas administrativas', atual: '400', anterior: '500', variacao: '-100.00', percentual: '−20,0%' },
-      { accountId: 'mkt', code: '4.2', name: 'Marketing', atual: '0.00', anterior: '80', variacao: '-80.00', percentual: '−100,0%' },
+      {
+        accountId: 'adm',
+        code: '4.1',
+        name: 'Despesas administrativas',
+        atual: '400',
+        anterior: '500',
+        variacao: '-100.00',
+        percentual: '−20,0%',
+      },
+      {
+        accountId: 'mkt',
+        code: '4.2',
+        name: 'Marketing',
+        atual: '0.00',
+        anterior: '80',
+        variacao: '-80.00',
+        percentual: '−100,0%',
+      },
     ]);
     expect(nomeDoAnexo('attachment; filename="contabil_2026-03.csv"')).toBe('contabil_2026-03.csv');
     expect(nomeDoAnexo(null)).toBeNull();
@@ -524,7 +658,16 @@ describe('classificação contábil das operações financeiras (UI-055)', () =>
     const lista = mock.expectOne((r) => r.url === `${BASE}/accounting/classifications/categories`);
     expect(lista.request.headers.get('x-company-id')).toBe(companyId);
     expect(lista.request.params.has('unclassifiedOnly')).toBe(false);
-    lista.flush([classificacao(), classificacao({ id: 'cat-2', name: 'Aluguel', ledgerAccountId: 'adm', ledgerAccountCode: '4.1', ledgerAccountName: 'Despesas' })]);
+    lista.flush([
+      classificacao(),
+      classificacao({
+        id: 'cat-2',
+        name: 'Aluguel',
+        ledgerAccountId: 'adm',
+        ledgerAccountCode: '4.1',
+        ledgerAccountName: 'Despesas',
+      }),
+    ]);
     mock.expectOne(`${BASE}/ledger-accounts/tree`).flush(planoExemplo());
     fixture.detectChanges();
 
@@ -538,9 +681,17 @@ describe('classificação contábil das operações financeiras (UI-055)', () =>
     const salvar = mock.expectOne(`${BASE}/accounting/classifications/categories/cat-1`);
     expect(salvar.request.method).toBe('PUT');
     expect(salvar.request.body).toEqual({ accountId: 'serv' });
-    salvar.flush(classificacao({ ledgerAccountId: 'serv', ledgerAccountCode: '3.1', ledgerAccountName: 'Receita de serviços' }));
+    salvar.flush(
+      classificacao({
+        ledgerAccountId: 'serv',
+        ledgerAccountCode: '3.1',
+        ledgerAccountName: 'Receita de serviços',
+      }),
+    );
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('classificada em 3.1 — Receita de serviços');
+    expect(fixture.nativeElement.textContent).toContain(
+      'classificada em 3.1 — Receita de serviços',
+    );
 
     pagina.trocarOrigem('payroll-items');
     mock.expectOne((r) => r.url === `${BASE}/accounting/classifications/payroll-items`).flush([]);
@@ -551,7 +702,9 @@ describe('classificação contábil das operações financeiras (UI-055)', () =>
     const { mock } = prepararSessao(['accounting-classifications:READ']);
     const fixture = TestBed.createComponent(ClassificationsPage);
     fixture.detectChanges();
-    mock.expectOne((r) => r.url === `${BASE}/accounting/classifications/categories`).flush([classificacao()]);
+    mock
+      .expectOne((r) => r.url === `${BASE}/accounting/classifications/categories`)
+      .flush([classificacao()]);
     fixture.detectChanges();
 
     const pagina = fixture.componentInstance as unknown as Classificacao;
@@ -587,7 +740,9 @@ describe('lançamentos contábeis e estorno (UI-056/UI-059)', () => {
     const lista = mock.expectOne((r) => r.url === `${BASE}/journal-entries`);
     expect(lista.request.headers.get('x-company-id')).toBe(companyId);
     lista.flush({ data: [lancamento()], total: 1, page: 1, pageSize: 20, totalPages: 1 });
-    mock.expectOne((r) => r.url === `${BASE}/accounting/periods`).flush([periodo({ status: 'FECHADO' })]);
+    mock
+      .expectOne((r) => r.url === `${BASE}/accounting/periods`)
+      .flush([periodo({ status: 'FECHADO' })]);
     fixture.detectChanges();
 
     const pagina = fixture.componentInstance as unknown as Lancamentos;
@@ -628,7 +783,9 @@ describe('lançamentos contábeis e estorno (UI-056/UI-059)', () => {
     const estorno = mock.expectOne(`${BASE}/journal-entries/lan-1/reverse`);
     expect(estorno.request.body).toEqual({ reason: 'curto', competenceDate: '2026-04-02' });
     estorno.flush(lancamento({ id: 'lan-2', number: 43, reversalOfId: 'lan-1' }));
-    mock.expectOne((r) => r.url === `${BASE}/journal-entries`).flush({ data: [], total: 0, page: 1, pageSize: 20, totalPages: 1 });
+    mock
+      .expectOne((r) => r.url === `${BASE}/journal-entries`)
+      .flush({ data: [], total: 0, page: 1, pageSize: 20, totalPages: 1 });
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Lançamento nº 42 estornado pelo nº 43.');
     mock.verify();
@@ -722,7 +879,13 @@ describe('razão e balancete por período, conta e centro de custo (UI-057)', ()
     expect(razao.request.params.get('limit')).toBe('200');
     expect(razao.request.params.has('offset')).toBe(false);
     razao.flush({
-      account: { id: 'caixa', code: '1.1.01', name: 'Caixa geral', type: 'ATIVO', nature: 'DEVEDORA' },
+      account: {
+        id: 'caixa',
+        code: '1.1.01',
+        name: 'Caixa geral',
+        type: 'ATIVO',
+        nature: 'DEVEDORA',
+      },
       range: { from: '2026-03-01', to: '2026-03-31' },
       costCenterId: 'cc-1',
       openingBalance: '500',
@@ -730,7 +893,17 @@ describe('razão e balancete por período, conta e centro de custo (UI-057)', ()
       totalCredit: '900',
       closingBalance: '-100',
       rows: [
-        { entryId: 'l1', entryNumber: 5, competenceDate: '2026-03-05', history: 'Recebimento', extraHistory: null, origin: 'TITULO_BAIXA', debit: '300', credit: '0', balance: '800' },
+        {
+          entryId: 'l1',
+          entryNumber: 5,
+          competenceDate: '2026-03-05',
+          history: 'Recebimento',
+          extraHistory: null,
+          origin: 'TITULO_BAIXA',
+          debit: '300',
+          credit: '0',
+          balance: '800',
+        },
       ],
     } satisfies LedgerReport);
     fixture.detectChanges();
@@ -763,7 +936,17 @@ describe('razão e balancete por período, conta e centro de custo (UI-057)', ()
       totalCredit: '90',
       balanced: false,
       rows: [
-        { accountId: 'caixa', code: '1.1.01', name: 'Caixa geral', type: 'ATIVO', nature: 'DEVEDORA', openingBalance: '0', debit: '100', credit: '90', closingBalance: '10' },
+        {
+          accountId: 'caixa',
+          code: '1.1.01',
+          name: 'Caixa geral',
+          type: 'ATIVO',
+          nature: 'DEVEDORA',
+          openingBalance: '0',
+          debit: '100',
+          credit: '90',
+          closingBalance: '10',
+        },
       ],
     } satisfies TrialBalance);
     fixture.detectChanges();
@@ -787,12 +970,13 @@ describe('DRE com comparativo entre exercícios (UI-058)', () => {
     pagina.consultar();
 
     const chamadas = mock.match((r) => r.url === `${BASE}/accounting/reports/income-statement`);
-    expect(chamadas.map((c) => `${c.request.params.get('from')}|${c.request.params.get('to')}`)).toEqual([
-      '2026-01-01|2026-03-31',
-      '2025-01-01|2025-03-31',
-    ]);
+    expect(
+      chamadas.map((c) => `${c.request.params.get('from')}|${c.request.params.get('to')}`),
+    ).toEqual(['2026-01-01|2026-03-31', '2025-01-01|2025-03-31']);
     chamadas[0].flush(dre('11250', '0', '400'));
-    chamadas[1].flush(dre('10000', '0', '500', { range: { from: '2025-01-01', to: '2025-03-31' } }));
+    chamadas[1].flush(
+      dre('10000', '0', '500', { range: { from: '2025-01-01', to: '2025-03-31' } }),
+    );
     fixture.detectChanges();
 
     const texto = fixture.nativeElement.textContent as string;
@@ -811,7 +995,9 @@ describe('DRE com comparativo entre exercícios (UI-058)', () => {
     const pagina = fixture.componentInstance as unknown as Recorte;
     pagina.comparar.set(false);
     pagina.consultar();
-    mock.expectOne((r) => r.url === `${BASE}/accounting/reports/income-statement`).flush(dre('100', '0', '200'));
+    mock
+      .expectOne((r) => r.url === `${BASE}/accounting/reports/income-statement`)
+      .flush(dre('100', '0', '200'));
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Prejuízo líquido');
     mock.verify();
@@ -831,13 +1017,19 @@ interface Periodos {
 
 describe('fechamento e reabertura de períodos (UI-059)', () => {
   it('fecha em ordem e reabre só com motivo', () => {
-    const { mock, companyId } = prepararSessao(['accounting-periods:READ', 'accounting-periods:UPDATE']);
+    const { mock, companyId } = prepararSessao([
+      'accounting-periods:READ',
+      'accounting-periods:UPDATE',
+    ]);
     const fixture = TestBed.createComponent(PeriodsPage);
     fixture.detectChanges();
 
     const lista = mock.expectOne((r) => r.url === `${BASE}/accounting/periods`);
     expect(lista.request.headers.get('x-company-id')).toBe(companyId);
-    lista.flush([periodo({ id: 'per-02', month: 2 }), periodo({ status: 'FECHADO', closedAt: '2026-04-02T10:00:00Z' })]);
+    lista.flush([
+      periodo({ id: 'per-02', month: 2 }),
+      periodo({ status: 'FECHADO', closedAt: '2026-04-02T10:00:00Z' }),
+    ]);
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('1 período(s) fechado(s)');
     expect(fixture.nativeElement.textContent).toContain('Não aceita lançamentos');
@@ -864,7 +1056,9 @@ describe('fechamento e reabertura de períodos (UI-059)', () => {
 
     pagina.ano.set('2027');
     pagina.abrirExercicio();
-    const abrir = mock.expectOne((r) => r.url === `${BASE}/accounting/periods` && r.method === 'POST');
+    const abrir = mock.expectOne(
+      (r) => r.url === `${BASE}/accounting/periods` && r.method === 'POST',
+    );
     expect(abrir.request.body).toEqual({ year: 2027 });
     abrir.flush([periodo({ year: 2027, month: 1 })]);
     mock.verify();

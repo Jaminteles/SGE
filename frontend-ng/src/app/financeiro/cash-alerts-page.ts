@@ -11,6 +11,7 @@ import { PermissionsService } from '../core/authz/permissions.service';
 import { formatCurrency } from '../core/lib/decimal';
 import { formatDate } from '../core/lib/format';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { DecimalField } from '../ui/decimal-field';
 import { ErrorAlert } from '../ui/error-alert';
 import { TextField } from '../ui/text-field';
@@ -255,6 +256,7 @@ function horizonte(texto: string): number | null {
 })
 export class CashAlertsPage {
   private readonly api = inject(CashFlowApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly permissoes = inject(PermissionsService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -346,7 +348,15 @@ export class CashAlertsPage {
       });
   }
 
-  protected excluir(alerta: CashAlert): void {
+  protected async excluir(alerta: CashAlert): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Excluir alerta de caixa?',
+      mensagem: 'O alerta deixa de ser avaliado e ninguém mais é notificado por ele.',
+      rotuloConfirmar: 'Excluir',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     if (this.salvando()) return;
     this.salvando.set(true);
     this.erro.set(null);

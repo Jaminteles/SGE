@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 
+import { type ColunaExportavel } from '../core/lib/csv';
 import { PurchasingApiService } from '../core/api/purchasing-api.service';
 import type { ApprovalStatus, PurchaseOrder, PurchaseOrderStatus } from '../core/api/types';
 import { PermissionsService } from '../core/authz/permissions.service';
@@ -11,6 +12,7 @@ import { formatDate } from '../core/lib/format';
 import { ListState } from '../core/lib/list-state';
 import { ROTULO_APROVACAO, severidadeAprovacao } from '../financeiro/rotulos';
 import { DataTable, type Coluna } from '../ui/data-table';
+import { PrintExport } from '../ui/print-export';
 import { ErrorAlert } from '../ui/error-alert';
 import { FilterBar } from '../ui/filter-bar';
 import {
@@ -31,7 +33,7 @@ import {
  */
 @Component({
   selector: 'sge-purchase-orders-page',
-  imports: [RouterLink, ButtonModule, TagModule, DataTable, ErrorAlert, FilterBar],
+  imports: [RouterLink, ButtonModule, TagModule, DataTable, ErrorAlert, FilterBar, PrintExport],
   template: `
     <p class="crumb">Compras / Pedidos</p>
 
@@ -48,6 +50,7 @@ import {
     </div>
 
     <sge-filter-bar
+      chave="compras.pedidos"
       placeholderBusca="Buscar por número, fornecedor ou observação"
       [valores]="lista.filtros()"
       [filtros]="filtros"
@@ -61,6 +64,7 @@ import {
 
     <section class="card table-card espaco">
       <sge-data-table
+        chave="compras.pedidos"
         [colunas]="colunas"
         [linhas]="lista.linhas()"
         [total]="lista.total()"
@@ -72,6 +76,13 @@ import {
         "
         (paginaMudou)="lista.irParaPagina($event.page, $event.pageSize)"
       >
+        <sge-print-export
+          ferramentas
+          nome="pedidos-de-compra"
+          [colunas]="colunasExportadas"
+          [consulta]="exportarLista"
+        />
+
         <ng-template #linha let-pedido>
           <tr>
             <td>{{ pedido.number }}</td>
@@ -119,6 +130,23 @@ import {
 export class PurchaseOrdersPage {
   private readonly api = inject(PurchasingApiService);
   private readonly permissoes = inject(PermissionsService);
+
+  /**
+   * Colunas do CSV (RF-113 — UI-080). Não são as da tela: a listagem mostra
+   * valores já formatados e junta campos na mesma célula; o arquivo leva o
+   * dado como veio da API, para ser somado e filtrado na planilha.
+   */
+  protected readonly colunasExportadas: ColunaExportavel[] = [
+    { campo: 'number', cabecalho: 'Número' },
+    { campo: 'orderDate', cabecalho: 'Data' },
+    { campo: 'partner.legalName', cabecalho: 'Fornecedor' },
+    { campo: 'expectedDate', cabecalho: 'Previsão' },
+    { campo: 'totalAmount', cabecalho: 'Total' },
+    { campo: 'status', cabecalho: 'Situação' },
+    { campo: 'approvalStatus', cabecalho: 'Aprovação' },
+  ];
+
+  protected readonly exportarLista = () => this.lista.exportar();
 
   protected readonly colunas: Coluna[] = [
     { campo: 'number', cabecalho: 'Número', largura: '9rem' },

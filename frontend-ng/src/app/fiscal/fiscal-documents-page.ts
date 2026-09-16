@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 
+import { type ColunaExportavel } from '../core/lib/csv';
 import { FiscalDocumentsApiService } from '../core/api/fiscal-documents-api.service';
 import type { FiscalDocument } from '../core/api/types';
 import { PermissionsService } from '../core/authz/permissions.service';
@@ -11,6 +12,7 @@ import { formatCurrency } from '../core/lib/decimal';
 import { formatDate } from '../core/lib/format';
 import { ListState } from '../core/lib/list-state';
 import { Alert } from '../ui/alert';
+import { PrintExport } from '../ui/print-export';
 import { DataTable, type Coluna } from '../ui/data-table';
 import { ErrorAlert } from '../ui/error-alert';
 import { FilterBar } from '../ui/filter-bar';
@@ -39,14 +41,25 @@ import {
  */
 @Component({
   selector: 'sge-fiscal-documents-page',
-  imports: [RouterLink, ButtonModule, TagModule, Alert, DataTable, ErrorAlert, FilterBar],
+  imports: [
+    RouterLink,
+    ButtonModule,
+    TagModule,
+    Alert,
+    DataTable,
+    ErrorAlert,
+    FilterBar,
+    PrintExport,
+  ],
   template: `
     <p class="crumb">Fiscal / Documentos</p>
 
     <div class="pagehead">
       <div>
         <h1>Documentos fiscais</h1>
-        <p>Notas recebidas, a situação do processamento e o que falta em cada uma (RF-043 a RF-050).</p>
+        <p>
+          Notas recebidas, a situação do processamento e o que falta em cada uma (RF-043 a RF-050).
+        </p>
       </div>
       @if (podeImportar()) {
         <div class="pagehead__actions">
@@ -56,6 +69,7 @@ import {
     </div>
 
     <sge-filter-bar
+      chave="fiscal.documentos"
       placeholderBusca="Número, chave de acesso ou emitente"
       [valores]="lista.filtros()"
       [filtros]="filtros"
@@ -77,6 +91,7 @@ import {
 
     <section class="card table-card espaco">
       <sge-data-table
+        chave="fiscal.documentos"
         [colunas]="colunas"
         [linhas]="lista.linhas()"
         [total]="lista.total()"
@@ -90,6 +105,13 @@ import {
         "
         (paginaMudou)="lista.irParaPagina($event.page, $event.pageSize)"
       >
+        <sge-print-export
+          ferramentas
+          nome="documentos-fiscais"
+          [colunas]="colunasExportadas"
+          [consulta]="exportarLista"
+        />
+
         <ng-template #linha let-nota>
           <tr>
             <td>{{ data(nota.issuedAt) }}</td>
@@ -101,11 +123,7 @@ import {
             <td class="numero">{{ moeda(nota.totalAmount) }}</td>
             <td>{{ origem(nota) }}</td>
             <td>
-              <p-tag
-                [value]="situacao(nota)"
-                [severity]="severidade(nota)"
-                [rounded]="true"
-              />
+              <p-tag [value]="situacao(nota)" [severity]="severidade(nota)" [rounded]="true" />
               @if (nota.status === 'DUPLICADO' && nota.duplicateOf) {
                 <span class="secundario">de {{ nota.duplicateOf.number }}</span>
               }
@@ -179,6 +197,24 @@ export class FiscalDocumentsPage {
   private readonly api = inject(FiscalDocumentsApiService);
   private readonly permissoes = inject(PermissionsService);
   private readonly destroyRef = inject(DestroyRef);
+
+  /**
+   * Colunas do CSV (RF-113 — UI-080). Não são as da tela: a listagem mostra
+   * valores já formatados e junta campos na mesma célula; o arquivo leva o
+   * dado como veio da API, para ser somado e filtrado na planilha.
+   */
+  protected readonly colunasExportadas: ColunaExportavel[] = [
+    { campo: 'issuedAt', cabecalho: 'Emissão' },
+    { campo: 'model', cabecalho: 'Modelo' },
+    { campo: 'number', cabecalho: 'Número' },
+    { campo: 'series', cabecalho: 'Série' },
+    { campo: 'accessKey', cabecalho: 'Chave de acesso' },
+    { campo: 'issuerName', cabecalho: 'Emitente' },
+    { campo: 'totalAmount', cabecalho: 'Valor' },
+    { campo: 'status', cabecalho: 'Situação' },
+  ];
+
+  protected readonly exportarLista = () => this.lista.exportar();
 
   protected readonly colunas: Coluna[] = [
     { campo: 'issuedAt', cabecalho: 'Emissão', largura: '7rem' },

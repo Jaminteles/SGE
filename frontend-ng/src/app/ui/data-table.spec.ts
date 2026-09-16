@@ -2,6 +2,7 @@ import { Component, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { UserPreferencesService } from '../core/prefs/user-preferences.service';
 import { DataTable, type Coluna, type PaginaSolicitada } from './data-table';
 
 interface Titulo {
@@ -99,5 +100,57 @@ describe('DataTable (UI-006)', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Nenhum registro encontrado.');
+  });
+});
+
+@Component({
+  imports: [DataTable],
+  template: `
+    <sge-data-table chave="testes.titulos" [colunas]="colunas" [linhas]="linhas()" [total]="2" />
+  `,
+})
+class HospedeiroComChave {
+  readonly colunas: Coluna[] = [
+    { campo: 'numero', cabecalho: 'Título' },
+    { campo: 'fornecedor', cabecalho: 'Fornecedor' },
+    { campo: 'valor', cabecalho: 'Valor', numerica: true },
+    { campo: 'acoes', cabecalho: '', largura: '6rem' },
+  ];
+  readonly linhas = signal<Titulo[]>([
+    { numero: 'TP-004821', fornecedor: 'Ferragens Bahia', valor: '18.420,00' },
+    { numero: 'TP-004820', fornecedor: 'Posto Rodoviário', valor: '3.180,50' },
+  ]);
+}
+
+describe('DataTable — colunas visíveis (UI-078)', () => {
+  let prefs: UserPreferencesService;
+  let fixture: ComponentFixture<HospedeiroComChave>;
+
+  beforeEach(async () => {
+    localStorage.clear();
+    await TestBed.configureTestingModule({ imports: [HospedeiroComChave] }).compileComponents();
+    prefs = TestBed.inject(UserPreferencesService);
+    fixture = TestBed.createComponent(HospedeiroComChave);
+    fixture.detectChanges();
+  });
+
+  const escondidas = (seletor: string): string[] =>
+    Array.from(fixture.nativeElement.querySelectorAll(seletor))
+      .filter((celula) => (celula as HTMLElement).style.display === 'none')
+      .map((celula) => (celula as HTMLElement).textContent?.trim() ?? '');
+
+  it('esconde a coluna escolhida no cabeçalho e em toda linha do corpo', () => {
+    prefs.definirColunasOcultas('testes.titulos', ['fornecedor']);
+    fixture.detectChanges();
+
+    expect(escondidas('thead th')).toEqual(['Fornecedor']);
+    expect(escondidas('tbody td')).toEqual(['Ferragens Bahia', 'Posto Rodoviário']);
+  });
+
+  it('não oferece coluna sem cabeçalho — a de ações não pode sumir', () => {
+    prefs.definirColunasOcultas('testes.titulos', ['acoes']);
+    fixture.detectChanges();
+
+    expect(escondidas('thead th')).toEqual([]);
   });
 });

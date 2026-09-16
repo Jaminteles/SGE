@@ -19,9 +19,15 @@ import { formatDate } from '../core/lib/format';
 import { ESTILO_TABELA } from '../conciliacao/rotulos';
 import { hoje } from '../financeiro/dinheiro';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { DataTable, type Coluna } from '../ui/data-table';
 import { ErrorAlert } from '../ui/error-alert';
-import { FilterBar, type DefinicaoFiltro, type OpcaoFiltro, type ValoresFiltro } from '../ui/filter-bar';
+import {
+  FilterBar,
+  type DefinicaoFiltro,
+  type OpcaoFiltro,
+  type ValoresFiltro,
+} from '../ui/filter-bar';
 import { SearchSelect } from '../ui/search-select';
 import { SelectField } from '../ui/select-field';
 import { TextField } from '../ui/text-field';
@@ -413,6 +419,7 @@ const FILTROS: DefinicaoFiltro[] = [
 })
 export class TaxRulesPage {
   private readonly api = inject(FiscalApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly permissoes = inject(PermissionsService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -501,9 +508,7 @@ export class TaxRulesPage {
   }
 
   protected criterios(item: TaxRule): string {
-    const classificacao = this.classificacoes().find(
-      (linha) => linha.id === item.classificationId,
-    );
+    const classificacao = this.classificacoes().find((linha) => linha.id === item.classificationId);
     return resumoCriterios(
       item,
       classificacao ? `${classificacao.type} ${classificacao.code}` : undefined,
@@ -567,7 +572,16 @@ export class TaxRulesPage {
     });
   }
 
-  protected inativar(item: TaxRule): void {
+  protected async inativar(item: TaxRule): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Inativar regra fiscal?',
+      mensagem:
+        'A regra deixa de ser aplicada em novos cálculos. Os documentos já calculados não mudam.',
+      rotuloConfirmar: 'Inativar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     if (this.inativando()) return;
     this.inativando.set(item.id);
     this.api

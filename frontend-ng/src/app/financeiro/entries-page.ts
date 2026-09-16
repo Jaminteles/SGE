@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 
+import { type ColunaExportavel } from '../core/lib/csv';
 import { ConfigurationsApiService } from '../core/api/configurations-api.service';
 import { FinanceApiService } from '../core/api/finance-api.service';
 import type { ApprovalStatus, EntryStatus, FinancialEntry } from '../core/api/types';
@@ -12,6 +13,7 @@ import { formatCurrency } from '../core/lib/decimal';
 import { formatDate } from '../core/lib/format';
 import { ListState } from '../core/lib/list-state';
 import { DataTable, type Coluna } from '../ui/data-table';
+import { PrintExport } from '../ui/print-export';
 import { ErrorAlert } from '../ui/error-alert';
 import { FilterBar, type DefinicaoFiltro, type OpcaoFiltro } from '../ui/filter-bar';
 import {
@@ -37,7 +39,7 @@ import {
  */
 @Component({
   selector: 'sge-entries-page',
-  imports: [RouterLink, ButtonModule, TagModule, DataTable, ErrorAlert, FilterBar],
+  imports: [RouterLink, ButtonModule, TagModule, DataTable, ErrorAlert, FilterBar, PrintExport],
   template: `
     <p class="crumb">Financeiro / Contas a pagar e receber</p>
 
@@ -56,6 +58,7 @@ import {
     </div>
 
     <sge-filter-bar
+      chave="financeiro.titulos"
       placeholderBusca="Buscar por número, descrição ou documento"
       [valores]="lista.filtros()"
       [filtros]="filtros()"
@@ -69,6 +72,7 @@ import {
 
     <section class="card table-card espaco">
       <sge-data-table
+        chave="financeiro.titulos"
         [colunas]="colunas"
         [linhas]="lista.linhas()"
         [total]="lista.total()"
@@ -80,6 +84,13 @@ import {
         "
         (paginaMudou)="lista.irParaPagina($event.page, $event.pageSize)"
       >
+        <sge-print-export
+          ferramentas
+          nome="titulos"
+          [colunas]="colunasExportadas"
+          [consulta]="exportarLista"
+        />
+
         <ng-template #linha let-titulo>
           <tr>
             <td>{{ titulo.number }}</td>
@@ -140,6 +151,28 @@ export class EntriesPage {
   private readonly configuracoes = inject(ConfigurationsApiService);
   private readonly permissoes = inject(PermissionsService);
   private readonly destroyRef = inject(DestroyRef);
+
+  /**
+   * Colunas do CSV (RF-113 — UI-080). Não são as da tela: a listagem mostra
+   * valores já formatados e junta campos na mesma célula; o arquivo leva o
+   * dado como veio da API, para ser somado e filtrado na planilha.
+   */
+  protected readonly colunasExportadas: ColunaExportavel[] = [
+    { campo: 'number', cabecalho: 'Número' },
+    { campo: 'type', cabecalho: 'Carteira' },
+    { campo: 'partner.legalName', cabecalho: 'Contraparte' },
+    { campo: 'description', cabecalho: 'Descrição' },
+    { campo: 'category.name', cabecalho: 'Categoria' },
+    { campo: 'issueDate', cabecalho: 'Emissão' },
+    { campo: 'competenceDate', cabecalho: 'Competência' },
+    { campo: 'netAmount', cabecalho: 'Valor líquido' },
+    { campo: 'settledAmount', cabecalho: 'Baixado' },
+    { campo: 'balance', cabecalho: 'Saldo' },
+    { campo: 'status', cabecalho: 'Situação' },
+    { campo: 'approvalStatus', cabecalho: 'Aprovação' },
+  ];
+
+  protected readonly exportarLista = () => this.lista.exportar();
 
   protected readonly colunas: Coluna[] = [
     { campo: 'number', cabecalho: 'Número', largura: '9rem' },

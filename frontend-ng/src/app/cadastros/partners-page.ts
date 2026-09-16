@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 
+import { type ColunaExportavel } from '../core/lib/csv';
 import { PartnersApiService } from '../core/api/partners-api.service';
 import type { Partner } from '../core/api/types';
 import { PermissionsService } from '../core/authz/permissions.service';
@@ -11,9 +12,11 @@ import { formatCnpj } from '../core/lib/format';
 import { ListState } from '../core/lib/list-state';
 import { FILTRO_SITUACAO } from '../admin/filtros';
 import { DataTable, type Coluna } from '../ui/data-table';
+import { PrintExport } from '../ui/print-export';
 import { ErrorAlert } from '../ui/error-alert';
 import { FilterBar } from '../ui/filter-bar';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { FILTRO_PAPEL, ROTULO_PESSOA, consultaParceiro, rotuloPapel } from './rotulos';
 
 /** CPF apenas para exibição: "39053344705" -> "390.533.447-05". */
@@ -37,7 +40,16 @@ function formatCpf(valor: string | null): string {
  */
 @Component({
   selector: 'sge-partners-page',
-  imports: [RouterLink, ButtonModule, TagModule, Alert, DataTable, ErrorAlert, FilterBar],
+  imports: [
+    RouterLink,
+    ButtonModule,
+    TagModule,
+    Alert,
+    DataTable,
+    ErrorAlert,
+    FilterBar,
+    PrintExport,
+  ],
   template: `
     <p class="crumb">Cadastros / Parceiros</p>
 
@@ -54,6 +66,7 @@ function formatCpf(valor: string | null): string {
     </div>
 
     <sge-filter-bar
+      chave="cadastros.parceiros"
       placeholderBusca="Buscar por nome, CPF ou CNPJ"
       [valores]="lista.filtros()"
       [filtros]="[FILTRO_PAPEL, FILTRO_SITUACAO]"
@@ -70,6 +83,7 @@ function formatCpf(valor: string | null): string {
 
     <section class="card table-card espaco">
       <sge-data-table
+        chave="cadastros.parceiros"
         [colunas]="colunas"
         [linhas]="lista.linhas()"
         [total]="lista.total()"
@@ -83,6 +97,13 @@ function formatCpf(valor: string | null): string {
         "
         (paginaMudou)="lista.irParaPagina($event.page, $event.pageSize)"
       >
+        <sge-print-export
+          ferramentas
+          nome="parceiros"
+          [colunas]="colunasExportadas"
+          [consulta]="exportarLista"
+        />
+
         <ng-template #linha let-parceiro>
           <tr>
             <td>
@@ -127,11 +148,30 @@ function formatCpf(valor: string | null): string {
 })
 export class PartnersPage {
   private readonly api = inject(PartnersApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly permissoes = inject(PermissionsService);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly FILTRO_PAPEL = FILTRO_PAPEL;
   protected readonly FILTRO_SITUACAO = FILTRO_SITUACAO;
+
+  /**
+   * Colunas do CSV (RF-113 — UI-080). Não são as da tela: a listagem mostra
+   * valores já formatados e junta campos na mesma célula; o arquivo leva o
+   * dado como veio da API, para ser somado e filtrado na planilha.
+   */
+  protected readonly colunasExportadas: ColunaExportavel[] = [
+    { campo: 'legalName', cabecalho: 'Razão social' },
+    { campo: 'tradeName', cabecalho: 'Nome fantasia' },
+    { campo: 'cnpj', cabecalho: 'CNPJ' },
+    { campo: 'cpf', cabecalho: 'CPF' },
+    { campo: 'personType', cabecalho: 'Tipo de pessoa' },
+    { campo: 'isCustomer', cabecalho: 'Cliente' },
+    { campo: 'isSupplier', cabecalho: 'Fornecedor' },
+    { campo: 'isActive', cabecalho: 'Ativo' },
+  ];
+
+  protected readonly exportarLista = () => this.lista.exportar();
 
   protected readonly colunas: Coluna[] = [
     { campo: 'legalName', cabecalho: 'Nome / razão social' },
@@ -170,7 +210,16 @@ export class PartnersPage {
     return rotuloPapel(parceiro);
   }
 
-  protected inativar(parceiro: Partner): void {
+  protected async inativar(parceiro: Partner): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Inativar parceiro?',
+      mensagem:
+        'O parceiro deixa de aparecer nas listagens e não pode ser usado em novos lançamentos. O histórico é preservado.',
+      rotuloConfirmar: 'Inativar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.aviso.set(null);
     this.api
       .inactivate(parceiro.id)

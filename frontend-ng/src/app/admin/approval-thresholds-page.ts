@@ -12,6 +12,7 @@ import { PermissionsService } from '../core/authz/permissions.service';
 import { formatCurrency } from '../core/lib/decimal';
 import { ListState } from '../core/lib/list-state';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { DataTable, type Coluna } from '../ui/data-table';
 import { DecimalField } from '../ui/decimal-field';
 import { ErrorAlert } from '../ui/error-alert';
@@ -237,6 +238,7 @@ const VAZIO: Formulario = {
 })
 export class ApprovalThresholdsPage {
   private readonly api = inject(ApprovalsApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly rolesApi = inject(RolesApiService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -328,7 +330,16 @@ export class ApprovalThresholdsPage {
     });
   }
 
-  protected remover(item: ApprovalThreshold): void {
+  protected async remover(item: ApprovalThreshold): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Remover alçada de aprovação?',
+      mensagem:
+        'A faixa deixa de exigir aprovação para novos lançamentos. As aprovações já registradas não mudam.',
+      rotuloConfirmar: 'Remover',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.aviso.set(null);
     this.api
       .remove(item.id)

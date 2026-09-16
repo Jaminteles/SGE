@@ -3,16 +3,18 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { Router } from '@angular/router';
 import { AvatarModule } from 'primeng/avatar';
 import { ButtonModule } from 'primeng/button';
-import { InputTextModule } from 'primeng/inputtext';
 import { TooltipModule } from 'primeng/tooltip';
 
 import { SessionExpiryBanner } from '../auth/session-expiry-banner';
+import { GlobalSearch } from '../search/global-search';
 import { AuthService } from '../core/auth/auth.service';
 import { PermissionsService } from '../core/authz/permissions.service';
 import { CompanyService } from '../core/company/company.service';
 import { initials } from '../core/lib/format';
 import { NAVIGATION } from '../core/navigation';
+import { UserPreferencesService } from '../core/prefs/user-preferences.service';
 import { ThemeService } from '../theme/theme-service';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 
 /**
  * Moldura da área autenticada (UI-004 / UI-005).
@@ -29,10 +31,11 @@ import { ThemeService } from '../theme/theme-service';
     RouterLink,
     RouterLinkActive,
     ButtonModule,
-    InputTextModule,
     AvatarModule,
     TooltipModule,
     SessionExpiryBanner,
+    ConfirmDialog,
+    GlobalSearch,
   ],
   templateUrl: './app-layout.html',
   styleUrl: './app-layout.scss',
@@ -42,6 +45,10 @@ export class AppLayout {
   protected readonly auth = inject(AuthService);
   protected readonly empresa = inject(CompanyService);
   private readonly permissoes = inject(PermissionsService);
+  // Injetado aqui de propósito: o serviço é `providedIn: 'root'` e preguiçoso,
+  // e é ele quem aplica a classe de densidade no `<html>` (UI-078). Sem alguém
+  // da moldura pedindo por ele, a preferência salva não valeria no recarregar.
+  private readonly prefs = inject(UserPreferencesService);
   private readonly router = inject(Router);
 
   protected readonly iniciais = computed(() => initials(this.auth.usuario()?.name ?? ''));

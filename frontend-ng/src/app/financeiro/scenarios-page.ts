@@ -19,6 +19,7 @@ import { formatCurrency } from '../core/lib/decimal';
 import { formatDate } from '../core/lib/format';
 import { ListState } from '../core/lib/list-state';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { DataTable, type Coluna } from '../ui/data-table';
 import { DecimalField } from '../ui/decimal-field';
 import { ErrorAlert } from '../ui/error-alert';
@@ -464,6 +465,7 @@ function cenarioVazio(): FormCenario {
 })
 export class ScenariosPage {
   private readonly api = inject(CashFlowApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly permissoes = inject(PermissionsService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -625,7 +627,16 @@ export class ScenariosPage {
     this.exclusao.set(cenario);
   }
 
-  protected excluir(): void {
+  protected async excluir(): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Excluir cenário de fluxo de caixa?',
+      mensagem:
+        'O cenário e as projeções lançadas nele saem do comparativo. A ação não pode ser desfeita.',
+      rotuloConfirmar: 'Excluir',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     const cenario = this.exclusao();
     if (!cenario || this.salvando()) return;
     this.salvando.set(true);
@@ -693,7 +704,15 @@ export class ScenariosPage {
       });
   }
 
-  protected removerProjecao(projecao: CashProjection): void {
+  protected async removerProjecao(projecao: CashProjection): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Remover projeção do cenário?',
+      mensagem: 'A projeção sai do cenário e deixa de compor a curva projetada.',
+      rotuloConfirmar: 'Remover',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     const cenario = this.selecionado();
     if (!cenario || this.salvando()) return;
     this.salvando.set(true);

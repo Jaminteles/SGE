@@ -15,6 +15,7 @@ import type { BankAccount, Employee, EmployeeInput } from '../core/api/types';
 import { PermissionsService } from '../core/authz/permissions.service';
 import { formatDate } from '../core/lib/format';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { DecimalField } from '../ui/decimal-field';
 import { ErrorAlert } from '../ui/error-alert';
 import type { OpcaoFiltro } from '../ui/filter-bar';
@@ -417,6 +418,7 @@ const VAZIO: Formulario = {
 })
 export class EmployeeFormPage {
   private readonly api = inject(EmployeesApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly estrutura = inject(HrStructureApiService);
   private readonly configuracoes = inject(ConfigurationsApiService);
   private readonly filiais = inject(BranchesApiService);
@@ -568,7 +570,15 @@ export class EmployeeFormPage {
     });
   }
 
-  protected removerConta(conta: BankAccount): void {
+  protected async removerConta(conta: BankAccount): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Remover conta bancária do funcionário?',
+      mensagem: 'A conta sai do cadastro e deixa de ser oferecida no pagamento da folha.',
+      rotuloConfirmar: 'Remover',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     const funcionario = this.registro();
     if (!funcionario) return;
     this.api

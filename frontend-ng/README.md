@@ -257,6 +257,10 @@ seus próprios 30 s em vez de herdar o que sobrou da primeira. O
 | `FilterBar` | Busca com atraso + filtros |
 | `ErrorAlert` | `ApiError` → alerta, com a lista de erros de validação |
 | `StateScreen` | Estados vazio, erro e "em construção" (UI-081) |
+| `AsyncState` | Carregando → erro → vazio → conteúdo, na mesma ordem em toda tela (UI-081) |
+| `LoadingBlock` | Esqueleto de carregamento, com `role="status"` (UI-081) |
+| `ConfirmDialog` + `ConfirmService` | Confirmação única das ações irreversíveis (UI-081) |
+| `PrintExport` | Imprimir a tela e exportar o filtro inteiro em CSV (RF-113 — UI-080) |
 
 Todos os campos implementam `ControlValueAccessor`, então funcionam com
 `ngModel` e com formulários reativos.
@@ -384,3 +388,39 @@ primitivas `primary/*` e `surface/*` e os semânticos do Aura
 (`content-background`, `text-muted-color`, `form-field-border-color`…) nos
 modos **Claro** e **Escuro** — os mesmos dois lados que a função `light-dark()`
 resolve em [`sge-preset.ts`](src/app/theme/sge-preset.ts).
+
+## Transversais da Sprint 30
+
+| Rota | O que é |
+| --- | --- |
+| `/design-system` | **Documentação viva** (UI-076): a aplicação desenhando os próprios componentes e tokens, nos dois temas |
+| `/preferencias` | Tema, densidade, colunas escondidas e filtros salvos (UI-078) |
+| `/onboarding` | Assistente de primeira configuração da empresa (RF-006 — UI-079) |
+
+**Tokens (UI-076).** Cor continua saindo inteira do preset
+([`sge-preset.ts`](src/app/theme/sge-preset.ts)); o que
+[`styles.scss`](src/styles.scss) acrescenta é o que o preset não modela — a
+escala de espaço (`--sge-espaco-1..6`), o raio e a tipografia. São degraus, não
+valores livres: valor fora da escala é sinal de componente faltando.
+
+**Busca global (UI-077).** `Ctrl`/`Cmd` + `K` de qualquer tela. Não há endpoint
+de busca única no backend: a busca reaproveita o `q` das listagens que já
+existem, uma requisição por entidade e cinco linhas cada, só nos módulos que o
+perfil libera — e uma entidade que falhar entra vazia em vez de derrubar o
+resto.
+
+**Preferências (UI-078).** Ficam no `localStorage`, por usuário: numa máquina
+compartilhada a escolha de um não pode virar a tela do outro. Filtro salvo
+guarda também a empresa em que nasceu, porque carrega ids que só existem lá.
+Densidade é uma classe no `<html>`, como o tema.
+
+**Impressão e exportação (UI-080).** Impressão é a própria tela: o `@media
+print` global tira barra superior, menu, ações e paginação — sem rota nem
+layout paralelo para papel. O CSV sai do recorte inteiro (`ListState.exportar()`
+pagina de cem em cem, até 2000 linhas) com `;`, aspas e BOM, as mesmas escolhas
+do exportador do backend.
+
+**Confirmação (UI-081).** Toda ação irreversível de listagem — inativar,
+excluir, encerrar, remover vínculo — passa pelo `ConfirmService`, que alimenta
+um único `<sge-confirm-dialog>` montado na moldura autenticada. Fechar no `Esc`
+conta como recusa.

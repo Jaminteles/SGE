@@ -9,6 +9,35 @@
   /* Fundo do app, um degrau abaixo do fundo dos cards (surface.900),
      para os painéis destacarem sem precisar de sombra. */
   --sge-app-bg: #f1f5f9;
+
+  /* ---------- Tokens de design (UI-076) ----------
+     Cor não entra aqui: ela vem inteira do preset do PrimeNG
+     (`theme/sge-preset.ts`), que resolve claro e escuro pela função CSS
+     `light-dark()`. Duplicar cor em token próprio criaria uma segunda fonte de
+     verdade, e as duas divergiriam na primeira mudança de tema.
+
+     O que fica aqui é o que o preset não modela: a escala de espaço, o raio e a
+     tipografia das primitivas de página. São degraus, não valores livres — é o
+     que mantém oito módulos parecendo o mesmo produto. A tela viva em
+     `/design-system` mostra todos eles. */
+  --sge-espaco-1: 0.25rem;
+  --sge-espaco-2: 0.4rem;
+  --sge-espaco-3: 0.6rem;
+  --sge-espaco-4: 0.875rem;
+  --sge-espaco-5: 1.125rem;
+  --sge-espaco-6: 1.5rem;
+
+  --sge-raio-1: 8px;
+  --sge-raio-2: 10px;
+
+  --sge-fonte-xs: 0.7rem;
+  --sge-fonte-sm: 0.78rem;
+  --sge-fonte-md: 0.85rem;
+  --sge-fonte-lg: 1rem;
+  --sge-fonte-xl: 1.25rem;
+
+  --sge-peso-medio: 500;
+  --sge-peso-forte: 600;
 }
 
 /* `color-scheme: dark` é o que faz a função light-dark() dos tokens do
@@ -58,7 +87,7 @@ body {
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin-bottom: 1.125rem;
+  margin-bottom: var(--sge-espaco-5);
 }
 
 .pagehead h1 {
@@ -97,7 +126,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  padding: 1rem 1.125rem;
+  padding: 1rem var(--sge-espaco-5);
 }
 
 .kpi__label {
@@ -141,7 +170,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.875rem 1.125rem;
+  padding: var(--sge-espaco-4) var(--sge-espaco-5);
   border-bottom: 1px solid var(--p-content-border-color);
 }
 
@@ -201,7 +230,7 @@ body {
   flex-direction: column;
   gap: 0.25rem;
   padding: 0.8rem 1rem;
-  border-radius: 10px;
+  border-radius: var(--sge-raio-2);
   border: 1px solid;
 }
 
@@ -267,7 +296,7 @@ body {
 }
 
 .secao {
-  padding: 1.125rem;
+  padding: var(--sge-espaco-5);
 }
 
 .secao + .secao {
@@ -284,7 +313,7 @@ body {
 .grade-campos {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0.875rem;
+  gap: var(--sge-espaco-4);
 }
 
 /* Coluna de ações das listagens: encostada à direita e sem quebra de linha. */
@@ -323,5 +352,115 @@ body {
     top: 0;
     left: 0;
     width: 100%;
+  }
+}
+
+/* ---------- Densidade (UI-078) ----------
+   Uma classe no <html>, como o tema. O modo compacto encolhe o respiro das
+   primitivas de página e das células da tabela — quem opera o dia inteiro na
+   listagem quer mais linhas por tela; quem consulta de vez em quando quer ar. */
+
+.sge-compacto {
+  --p-datatable-header-cell-padding: 0.45rem 0.65rem;
+  --p-datatable-body-cell-padding: 0.4rem 0.65rem;
+  --p-datatable-footer-cell-padding: 0.45rem 0.65rem;
+}
+
+.sge-compacto .pagehead {
+  margin-bottom: 0.75rem;
+}
+
+.sge-compacto .kpi {
+  padding: 0.7rem 0.85rem;
+}
+
+.sge-compacto .kpi__value {
+  font-size: 1.2rem;
+}
+
+.sge-compacto .secao {
+  padding: 0.75rem;
+}
+
+.sge-compacto .secao + .secao,
+.sge-compacto .espaco {
+  margin-top: 0.65rem;
+}
+
+.sge-compacto .table-card__head {
+  padding: 0.55rem 0.85rem;
+}
+
+.sge-compacto .barra-filtro {
+  padding: 0.5rem 0.65rem;
+}
+
+/* ---------- Impressão (RF-113 — UI-080) ----------
+   Impressão é a própria tela, sem a moldura da aplicação: barra superior, menu
+   lateral, botões de ação e paginação saem do papel. Vale para listagem e para
+   tela de detalhe, sem rota nem layout paralelo — o que o usuário vê é o que
+   sai impresso.
+
+   A regra do comprovante da ordem (UI-045) continua acima e é mais específica:
+   quando `body.imprimindo-comprovante` está presente, só o comprovante sai. */
+
+@media print {
+  :root {
+    color-scheme: light;
+    --sge-app-bg: #ffffff;
+  }
+
+  body {
+    background: #ffffff;
+    color: #000000;
+  }
+
+  .topbar,
+  .sidebar,
+  .pagehead__actions,
+  .barra-filtro__salvos,
+  .tabela__ferramentas,
+  .acoes,
+  .p-paginator,
+  sge-session-expiry-banner,
+  sge-confirm-dialog,
+  sge-global-search {
+    display: none !important;
+  }
+
+  .shell,
+  .body,
+  .content {
+    display: block !important;
+    overflow: visible !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .card,
+  .table-card {
+    border-color: #999999;
+    box-shadow: none;
+  }
+
+  /* Quebrar um cartão no meio da página separa o rótulo do valor. */
+  .card,
+  .kpi,
+  .secao {
+    break-inside: avoid;
+  }
+
+  /* Tabela longa repete o cabeçalho em cada folha. */
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    break-inside: avoid;
+  }
+
+  a[href]::after {
+    content: '';
   }
 }

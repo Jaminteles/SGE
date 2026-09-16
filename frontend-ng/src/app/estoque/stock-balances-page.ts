@@ -3,12 +3,14 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ButtonModule } from 'primeng/button';
 import { TagModule } from 'primeng/tag';
 
+import { type ColunaExportavel } from '../core/lib/csv';
 import { StockApiService } from '../core/api/stock-api.service';
 import type { StockAlert, StockBalance, StockValuation } from '../core/api/types';
 import { PermissionsService } from '../core/authz/permissions.service';
 import { formatCurrency, formatDecimal } from '../core/lib/decimal';
 import { ListState } from '../core/lib/list-state';
 import { DataTable, type Coluna } from '../ui/data-table';
+import { PrintExport } from '../ui/print-export';
 import { ErrorAlert } from '../ui/error-alert';
 import { FilterBar, type OpcaoFiltro, type ValoresFiltro } from '../ui/filter-bar';
 import type { Consulta } from '../core/lib/list-state';
@@ -48,7 +50,7 @@ const FILTRO_COM_SALDO = {
  */
 @Component({
   selector: 'sge-stock-balances-page',
-  imports: [ButtonModule, TagModule, DataTable, ErrorAlert, FilterBar],
+  imports: [ButtonModule, TagModule, DataTable, ErrorAlert, FilterBar, PrintExport],
   template: `
     <p class="crumb">Estoque / Saldos</p>
 
@@ -82,6 +84,7 @@ const FILTRO_COM_SALDO = {
     </div>
 
     <sge-filter-bar
+      chave="estoque.saldos"
       placeholderBusca="Buscar item por código ou descrição"
       [valores]="lista.filtros()"
       [filtros]="[filtroLocal(), FILTRO_COM_SALDO]"
@@ -94,6 +97,7 @@ const FILTRO_COM_SALDO = {
 
     <section class="card table-card espaco">
       <sge-data-table
+        chave="estoque.saldos"
         [colunas]="colunas"
         [linhas]="lista.linhas()"
         [total]="lista.total()"
@@ -103,6 +107,13 @@ const FILTRO_COM_SALDO = {
         mensagemVazia="Nenhum item com saldo nesses filtros."
         (paginaMudou)="lista.irParaPagina($event.page, $event.pageSize)"
       >
+        <sge-print-export
+          ferramentas
+          nome="saldos-de-estoque"
+          [colunas]="colunasExportadas"
+          [consulta]="exportarLista"
+        />
+
         <ng-template #linha let-saldo>
           <tr>
             <td>{{ saldo.product?.code ?? '—' }}</td>
@@ -131,6 +142,25 @@ export class StockBalancesPage {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly FILTRO_COM_SALDO = FILTRO_COM_SALDO;
+
+  /**
+   * Colunas do CSV (RF-113 — UI-080). Não são as da tela: a listagem mostra
+   * valores já formatados e junta campos na mesma célula; o arquivo leva o
+   * dado como veio da API, para ser somado e filtrado na planilha.
+   */
+  protected readonly colunasExportadas: ColunaExportavel[] = [
+    { campo: 'product.code', cabecalho: 'Código' },
+    { campo: 'product.description', cabecalho: 'Descrição' },
+    { campo: 'location.code', cabecalho: 'Local' },
+    { campo: 'location.name', cabecalho: 'Nome do local' },
+    { campo: 'quantity', cabecalho: 'Saldo' },
+    { campo: 'reserved', cabecalho: 'Reservado' },
+    { campo: 'averageCost', cabecalho: 'Custo médio' },
+    { campo: 'totalValue', cabecalho: 'Valor total' },
+    { campo: 'product.minStock', cabecalho: 'Mínimo' },
+  ];
+
+  protected readonly exportarLista = () => this.lista.exportar();
 
   protected readonly colunas: Coluna[] = [
     { campo: 'code', cabecalho: 'Código', largura: '9rem' },

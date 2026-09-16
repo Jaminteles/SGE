@@ -13,6 +13,7 @@ import { formatCurrency, formatDecimal } from '../core/lib/decimal';
 import { formatDate, formatDateTime } from '../core/lib/format';
 import { CASAS_UNITARIAS } from '../compras/calculo';
 import { Alert } from '../ui/alert';
+import { PrintExport } from '../ui/print-export';
 import { ErrorAlert } from '../ui/error-alert';
 import { TextField } from '../ui/text-field';
 import { FiscalAttachmentsPanel } from './fiscal-attachments-panel';
@@ -49,6 +50,7 @@ const MOTIVO_MINIMO = 5;
 @Component({
   selector: 'sge-fiscal-document-detail-page',
   imports: [
+    PrintExport,
     FormsModule,
     RouterLink,
     ButtonModule,
@@ -72,6 +74,7 @@ const MOTIVO_MINIMO = 5;
         <p>{{ subtitulo() }}</p>
       </div>
       <div class="pagehead__actions">
+        <sge-print-export />
         <p-button
           label="Voltar"
           severity="secondary"
@@ -203,7 +206,9 @@ const MOTIVO_MINIMO = 5;
           </div>
           <div>
             <dt>Filial</dt>
-            <dd>{{ registro.branch ? registro.branch.code + ' — ' + registro.branch.name : '—' }}</dd>
+            <dd>
+              {{ registro.branch ? registro.branch.code + ' — ' + registro.branch.name : '—' }}
+            </dd>
           </div>
         </dl>
       </section>
@@ -336,7 +341,9 @@ const MOTIVO_MINIMO = 5;
                       <span class="secundario">{{ moeda(linha.cofinsAmount) }}</span>
                     </td>
                     <td>
-                      {{ linha.product ? linha.product.code + ' — ' + linha.product.description : '—' }}
+                      {{
+                        linha.product ? linha.product.code + ' — ' + linha.product.description : '—'
+                      }}
                     </td>
                   </tr>
                 }

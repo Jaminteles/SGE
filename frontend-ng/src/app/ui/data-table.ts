@@ -1,6 +1,20 @@
-import { Component, TemplateRef, computed, contentChild, input, output } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  TemplateRef,
+  afterRenderEffect,
+  computed,
+  contentChild,
+  inject,
+  input,
+  output,
+} from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { MultiSelectModule } from 'primeng/multiselect';
 import { TableModule, TableLazyLoadEvent } from 'primeng/table';
+
+import { UserPreferencesService } from '../core/prefs/user-preferences.service';
 
 /** Descrição de uma coluna. `campo` é a chave do objeto da linha. */
 export interface Coluna {
@@ -9,6 +23,8 @@ export interface Coluna {
   /** Alinha à direita e usa dígitos de largura fixa — valores monetários. */
   numerica?: boolean;
   largura?: string;
+  /** Coluna que o usuário não pode esconder (identificador, ações). */
+  fixa?: boolean;
 }
 
 export interface PaginaSolicitada {
@@ -22,11 +38,38 @@ export interface PaginaSolicitada {
  * A paginação é **server-side**: o componente desenha só a página recebida e
  * avisa quando o usuário pede outra. Nunca ordena nem fatia a coleção inteira —
  * numa base de ERP a coleção inteira não cabe no navegador.
+ *
+ * Com `chave` preenchida, a tabela ganha o seletor de colunas visíveis e guarda
+ * a escolha nas preferências do usuário (UI-078). Esconder é feito por índice
+ * de célula, e não removendo a coluna da lista: o `<tr>` de cada página é
+ * desenhado pelo template da própria tela, com `<td>` escritos à mão — tirar a
+ * coluna do cabeçalho e deixar a célula no corpo desalinharia a linha inteira.
  */
 @Component({
   selector: 'sge-data-table',
-  imports: [NgTemplateOutlet, TableModule],
+  imports: [NgTemplateOutlet, FormsModule, MultiSelectModule, TableModule],
   template: `
+    @if (chave() || temFerramentas()) {
+      <div class="tabela__ferramentas">
+        <ng-content select="[ferramentas]" />
+        @if (chave()) {
+          <p-multiselect
+            styleClass="tabela__colunas"
+            [options]="opcoesDeColuna()"
+            optionLabel="cabecalho"
+            optionValue="campo"
+            [ngModel]="visiveis()"
+            (ngModelChange)="definirVisiveis($event)"
+            [showToggleAll]="true"
+            [maxSelectedLabels]="0"
+            selectedItemsLabel="{0} colunas visíveis"
+            placeholder="Colunas"
+            ariaLabel="Colunas visíveis"
+          />
+        }
+      </div>
+    }
+
     <p-table
       [value]="linhas()"
       [columns]="colunas()"
@@ -75,6 +118,14 @@ export interface PaginaSolicitada {
     </p-table>
   `,
   styles: `
+    .tabela__ferramentas {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      padding: 0.6rem 0.875rem;
+      border-bottom: 1px solid var(--p-content-border-color);
+    }
     :host ::ng-deep .coluna--numerica {
       text-align: right;
       font-variant-numeric: tabular-nums;
@@ -96,8 +147,18 @@ export class DataTable {
   readonly tamanhoPagina = input(50);
   readonly carregando = input(false);
   readonly mensagemVazia = input('Nenhum registro encontrado.');
+  /**
+   * Identificador da tabela nas preferências do usuário — ex.:
+   * `cadastros.parceiros`. Vazio desliga o seletor de colunas.
+   */
+  readonly chave = input('');
+  /** Liga a barra de ferramentas mesmo sem seletor de colunas (exportação, UI-080). */
+  readonly temFerramentas = input(false);
 
   readonly paginaMudou = output<PaginaSolicitada>();
+
+  private readonly prefs = inject(UserPreferencesService);
+  private readonly host: ElementRef<HTMLElement> = inject(ElementRef);
 
   /**
    * `<ng-template #linha let-item>` opcional para desenhar o `<tr>` — é o que
@@ -108,6 +169,60 @@ export class DataTable {
 
   /** O PrimeNG conta registros a partir de 0; a aplicação conta páginas a partir de 1. */
   protected readonly primeiroRegistro = computed(() => (this.pagina() - 1) * this.tamanhoPagina());
+
+  /** Só colunas com cabeçalho e não fixas entram no seletor. */
+  protected readonly opcoesDeColuna = computed(() =>
+    this.colunas().filter((coluna) => !coluna.fixa && coluna.cabecalho.trim() !== ''),
+  );
+
+  private readonly ocultas = computed(() => {
+    const chave = this.chave();
+    if (!chave) return new Set<string>();
+    const opcionais = new Set(this.opcoesDeColuna().map((coluna) => coluna.campo));
+    // Uma coluna que deixou de existir (ou virou fixa) não pode continuar
+    // escondendo célula nenhuma.
+    return new Set(this.prefs.colunasOcultas(chave).filter((campo) => opcionais.has(campo)));
+  });
+
+  protected readonly visiveis = computed(() =>
+    this.opcoesDeColuna()
+      .map((coluna) => coluna.campo)
+      .filter((campo) => !this.ocultas().has(campo)),
+  );
+
+  constructor() {
+    // Roda depois de cada render: a troca de página redesenha o `<tbody>`
+    // inteiro, e as células novas nascem sem o estilo aplicado.
+    afterRenderEffect(() => {
+      const ocultas = this.ocultas();
+      const colunas = this.colunas();
+      // Dependência explícita: novas linhas precisam do mesmo tratamento.
+      this.linhas();
+
+      const indices = colunas.map((coluna) => ocultas.has(coluna.campo));
+      const raiz = this.host.nativeElement;
+      for (const linha of Array.from(raiz.querySelectorAll('table tr'))) {
+        const celulas = Array.from(linha.children) as HTMLElement[];
+        // Linhas de mensagem usam `colspan`; mexer nelas esconderia o aviso.
+        if (celulas.length !== colunas.length) continue;
+        celulas.forEach((celula, i) => {
+          celula.style.display = indices[i] ? 'none' : '';
+        });
+      }
+    });
+  }
+
+  protected definirVisiveis(campos: string[]): void {
+    const chave = this.chave();
+    if (!chave) return;
+    const visiveis = new Set(campos);
+    this.prefs.definirColunasOcultas(
+      chave,
+      this.opcoesDeColuna()
+        .map((coluna) => coluna.campo)
+        .filter((campo) => !visiveis.has(campo)),
+    );
+  }
 
   protected aoPedirPagina(evento: TableLazyLoadEvent): void {
     const tamanho = evento.rows ?? this.tamanhoPagina();

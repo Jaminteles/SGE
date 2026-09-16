@@ -20,6 +20,7 @@ import type {
 import { PermissionsService } from '../core/authz/permissions.service';
 import { ListState } from '../core/lib/list-state';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { DataTable, type Coluna } from '../ui/data-table';
 import { ErrorAlert } from '../ui/error-alert';
 import { FilterBar, type OpcaoFiltro } from '../ui/filter-bar';
@@ -449,6 +450,7 @@ interface FormParametro {
 })
 export class ConfigurationsPage {
   private readonly api = inject(ConfigurationsApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly permissoes = inject(PermissionsService);
@@ -660,7 +662,16 @@ export class ConfigurationsPage {
     });
   }
 
-  protected inativarCategoria(item: Category): void {
+  protected async inativarCategoria(item: Category): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Inativar categoria?',
+      mensagem:
+        'A categoria deixa de ser oferecida em novos lançamentos. Os lançamentos já classificados nela não mudam.',
+      rotuloConfirmar: 'Inativar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.api
       .inactivateCategory(item.id)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -673,7 +684,16 @@ export class ConfigurationsPage {
       });
   }
 
-  protected inativarCentro(item: CostCenter): void {
+  protected async inativarCentro(item: CostCenter): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Inativar centro de custo?',
+      mensagem:
+        'O centro de custo deixa de ser oferecido em novos lançamentos. O que já foi rateado nele não muda.',
+      rotuloConfirmar: 'Inativar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.api
       .inactivateCostCenter(item.id)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -686,7 +706,15 @@ export class ConfigurationsPage {
       });
   }
 
-  protected removerParametro(item: CompanySetting): void {
+  protected async removerParametro(item: CompanySetting): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Remover parâmetro?',
+      mensagem: 'O sistema volta a usar o valor padrão deste parâmetro na empresa ativa.',
+      rotuloConfirmar: 'Remover',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.api
       .removeSetting(item.id)
       .pipe(takeUntilDestroyed(this.destroyRef))

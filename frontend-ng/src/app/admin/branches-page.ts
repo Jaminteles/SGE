@@ -12,6 +12,7 @@ import { PermissionsService } from '../core/authz/permissions.service';
 import { formatCnpj } from '../core/lib/format';
 import { ListState } from '../core/lib/list-state';
 import { Alert } from '../ui/alert';
+import { ConfirmService } from '../ui/confirm.service';
 import { DataTable, type Coluna } from '../ui/data-table';
 import { ErrorAlert } from '../ui/error-alert';
 import { FilterBar } from '../ui/filter-bar';
@@ -278,6 +279,7 @@ const VAZIO: Formulario = {
 })
 export class BranchesPage {
   private readonly api = inject(BranchesApiService);
+  private readonly confirmacao = inject(ConfirmService);
   private readonly permissoes = inject(PermissionsService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -368,7 +370,16 @@ export class BranchesPage {
     });
   }
 
-  protected inativar(filial: Branch): void {
+  protected async inativar(filial: Branch): Promise<void> {
+    const confirmado = await this.confirmacao.confirmar({
+      titulo: 'Inativar filial?',
+      mensagem:
+        'A filial deixa de aparecer nas listagens e não pode receber novos lançamentos. O registro e o histórico são preservados.',
+      rotuloConfirmar: 'Inativar',
+      destrutivo: true,
+    });
+    if (!confirmado) return;
+
     this.aviso.set(null);
     this.api
       .inactivate(filial.id)
