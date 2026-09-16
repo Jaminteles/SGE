@@ -10,6 +10,34 @@
   <title>SGE — Sistema de Gestão Empresarial e Financeira</title>
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!--
+    Política de segurança de conteúdo (RNF-002 — UI-089).
+
+    O ideal é o cabeçalho `Content-Security-Policy` do gateway — é o que
+    `nginx.conf` publica. Esta cópia existe porque a aplicação também roda
+    servida por outro servidor (o `ng serve` do desenvolvimento, uma pasta
+    estática numa homologação): sem ela, a proteção dependeria de o gateway
+    estar configurado, e um esquecimento passaria despercebido.
+
+    `frame-ancestors` fica **só** no `nginx.conf`: o navegador o ignora quando
+    vem por <meta>, e ainda registra um erro no console a cada carregamento.
+
+    - `script-src 'self'`: o bundle do Angular é sempre arquivo externo. Sem
+      'unsafe-inline' e sem 'unsafe-eval' — um XSS refletido não teria como
+      executar.
+    - `style-src` precisa de 'unsafe-inline': o Angular injeta os estilos de
+      componente como <style>, e o PrimeNG escreve estilo calculado no elemento.
+    - `connect-src 'self'`: a API é servida na mesma origem (`/api/v1`).
+    - `object-src 'none'` e `base-uri 'self'` fecham dois desvios clássicos de
+      execução e de reescrita de URL relativa.
+  -->
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+
+  <!-- Não vaza a URL interna (com ids de empresa e de título) para terceiros. -->
+  <meta name="referrer" content="same-origin">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
 </head>
 <body>

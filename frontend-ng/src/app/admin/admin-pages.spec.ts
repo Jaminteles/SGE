@@ -33,7 +33,11 @@ function prepararSessao(permissoes: string[], { superAdmin = false } = {}): void
 
   TestBed.configureTestingModule({
     providers: [
-      provideRouter([]),
+      // Rota curinga: depois de cadastrar, a tela navega para a empresa criada.
+      // Com o mapa vazio, essa navegação rejeitava com NG04002 fora do teste —
+      // ninguém via a falha, mas o `vitest` terminava com erro não tratado e a
+      // esteira (UI-091) ficava vermelha com a suíte inteira passando.
+      provideRouter([{ path: '**', children: [] }]),
       provideHttpClient(withInterceptors(SGE_INTERCEPTORS)),
       provideHttpClientTesting(),
       {

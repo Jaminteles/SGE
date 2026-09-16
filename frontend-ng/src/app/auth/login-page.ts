@@ -33,6 +33,10 @@ export class LoginPage {
   protected readonly enviando = signal(false);
   protected readonly erro = signal<string | null>(null);
 
+  /** `?motivo=inatividade` — posto pelo `SessionActivityService` (UI-089). */
+  protected readonly encerradaPorInatividade =
+    this.rota.snapshot.queryParamMap.get('motivo') === 'inatividade';
+
   protected async entrar(): Promise<void> {
     if (this.enviando()) return;
     this.erro.set(null);

@@ -1,0 +1,99 @@
+# Pipeline da interface (UI-091).
+#
+# Um job só, em série. Não é economia de minutos: os quatro passos compartilham
+# o mesmo `node_modules` e a mesma compilação de TypeScript, e dividi-los em
+# jobs paralelos pagaria quatro vezes o `npm ci` para ganhar segundos.
+#
+# A ordem é a do custo crescente — formatação, tipos, testes, build. O que
+# quebra por vírgula fora do lugar falha em segundos, antes de gastar o resto.
+#
+# A publicação não empurra para lugar nenhum sozinha: monta a imagem e guarda o
+# bundle como artefato. Quem decide o que vai para produção é quem opera, e o
+# segredo do registro não fica neste arquivo.
+
+name: Interface (frontend-ng)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend-ng/**'
+      - '.github/workflows/frontend.yml'
+  pull_request:
+    paths:
+      - 'frontend-ng/**'
+      - '.github/workflows/frontend.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: frontend-ng
+
+jobs:
+  verificar:
+    name: Formatação, tipos, testes e build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend-ng/package-lock.json
+
+      # `npm ci` e não `npm install`: instala exatamente o que está no lock.
+      - name: Instalar dependências
+        run: npm ci
+
+      # A conferência de formatação (`npm run lint`) **não** entra na esteira
+      # ainda: o código anterior a esta sprint nunca passou pelo Prettier, e
+      # hoje 174 arquivos divergem da configuração. Ligar o passo agora
+      # reprovaria todo commit até um reformata-tudo — que é decisão do líder
+      # do projeto, não efeito colateral de uma tarefa de esteira. O script
+      # existe e roda localmente; quando o repositório for formatado de uma
+      # vez, basta descomentar.
+      #
+      # - name: Formatação
+      #   run: npm run lint
+
+      - name: Tipos
+        run: npm run typecheck
+
+      # Regras de acessibilidade e responsividade conferíveis no template
+      # (UI-086). Barata e determinística — cabe antes dos testes.
+      - name: Auditoria de interface
+        run: npm run auditoria:ui -- --ci
+
+      # Os testes de rota montam a aplicação inteira e já rodam em série
+      # (`fileParallelism: false` em `vitest.config.ts`).
+      - name: Testes
+        run: npm run test:ci
+
+      - name: Build de produção
+        run: npm run build:prod
+
+      - name: Guardar o bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-ng-dist
+          path: frontend-ng/dist/frontend-ng/browser
+          retention-days: 7
+
+  imagem:
+    name: Imagem de publicação
+    needs: verificar
+    # Só em `main`: pull request não gera imagem para publicar.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Monta e valida o Dockerfile sem empurrar para registro nenhum: o destino
+      # e as credenciais são decisão de quem opera o ambiente.
+      - name: Montar a imagem
+        run: docker build -t sge-frontend:${{ github.sha }} .

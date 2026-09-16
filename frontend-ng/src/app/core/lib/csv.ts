@@ -1,3 +1,5 @@
+import { celulaSegura } from '../security/sanitize';
+
 /** Marca de ordem de bytes: sem ela o Excel abre o CSV em ANSI e come os acentos. */
 const BOM = '﻿';
 
@@ -40,8 +42,16 @@ function texto(valor: unknown): string {
   return String(valor);
 }
 
+/**
+ * Escapa o campo e neutraliza fórmula (UI-089).
+ *
+ * Nome de parceiro, descrição de título e observação são texto digitado por
+ * usuário; a planilha trata `=CMD(...)` como fórmula ao abrir o arquivo (CSV
+ * injection). O exportador do backend já fazia isto — o da tela não fazia, e é
+ * a mesma planilha que abre os dois arquivos.
+ */
 function escapar(valor: string): string {
-  return `"${valor.replace(/"/g, '""')}"`;
+  return `"${celulaSegura(valor).replace(/"/g, '""')}"`;
 }
 
 /**

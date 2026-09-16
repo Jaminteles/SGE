@@ -8,4 +8,14 @@ export const config = {
   companyHeader: 'x-company-id',
   /** Antecedência do aviso de expiração da sessão (UI-005). */
   sessionWarningMs: 2 * 60 * 1000,
+  /**
+   * Inatividade que encerra a sessão (RNF-002 — UI-089). Trinta minutos é o
+   * intervalo em que um usuário do financeiro sai para uma reunião e volta;
+   * acima disso a tela está abandonada.
+   */
+  sessionIdleMs: 30 * 60 * 1000,
+  /** Renova o token com esta antecedência enquanto houver atividade (UI-089). */
+  sessionRenewAheadMs: 60 * 1000,
+  /** Intervalo do relógio que avalia inatividade e renovação (UI-089). */
+  sessionCheckMs: 30 * 1000,
 } as const;

@@ -15,6 +15,16 @@
         <p-message severity="error" [text]="mensagem" styleClass="auth__erro" />
       }
 
+      <!-- Sessão encerrada por inatividade (UI-089): sem isto, quem volta ao
+           computador vê a tela de login sem entender por que foi deslogado. -->
+      @if (encerradaPorInatividade) {
+        <p-message
+          severity="warn"
+          text="Sua sessão foi encerrada por inatividade. Entre novamente para continuar."
+          styleClass="auth__erro"
+        />
+      }
+
       <label class="campo">
         <span class="campo__rotulo">E-mail</span>
         <input

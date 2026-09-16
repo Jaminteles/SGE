@@ -81,24 +81,49 @@ export class CompanyService {
     // Descarta seleção inválida (ex.: id antigo no storage, ou vínculo
     // removido) e aplica o vínculo único/padrão automaticamente.
     effect(() => {
-      if (!this.auth.usuario()) return;
-
-      const empresas = this.empresas();
-      const escolhida = this._escolhida();
-
-      if (escolhida && empresas.some((m) => m.companyId === escolhida)) return;
-      // Escolha fora da lista pode ser só a lista do super admin que ainda não
-      // chegou: descartar agora derrubaria a empresa ativa a cada F5 dele.
-      if (escolhida && this._carregandoPlataforma()) return;
-      if (escolhida) this.limpar();
-
-      if (empresas.length === 1) {
-        this.selecionar(empresas[0].companyId);
-        return;
-      }
-      const padrao = empresas.find((m) => m.isDefault);
-      if (padrao) this.selecionar(padrao.companyId);
+      // Lido aqui para o efeito depender do perfil e da lista de empresas: a
+      // decisão em si está no método, que também é chamado fora do efeito.
+      this.auth.usuario();
+      this.empresas();
+      this.resolverSelecao();
     });
+  }
+
+  /**
+   * Aplica o vínculo único/padrão e descarta escolha inválida.
+   *
+   * Fica num método, e não só dentro do efeito, porque o efeito só roda na
+   * próxima detecção de mudanças — e a guarda de rota decide antes dela. Quem
+   * acabou de fazer login com um vínculo só caía em `/selecionar-empresa`, com
+   * uma empresa na lista, porque o efeito ainda não tinha rodado quando a
+   * guarda leu `ativaId()`.
+   */
+  private resolverSelecao(): void {
+    if (!this.auth.usuario()) return;
+
+    const empresas = this.empresas();
+    const escolhida = this._escolhida();
+
+    if (escolhida && empresas.some((m) => m.companyId === escolhida)) {
+      // A escolha válida é a do serviço; o armazenamento é só a cópia que
+      // sobrevive ao F5 — e é dele que o interceptor tira o `x-company-id`.
+      // Se divergirem (edição manual do `localStorage`, outra aba gravando por
+      // cima), a cópia é corrigida: o cabeçalho não pode sair com um id que o
+      // serviço recusou.
+      if (activeCompanyStore.get() !== escolhida) activeCompanyStore.set(escolhida);
+      return;
+    }
+    // Escolha fora da lista pode ser só a lista do super admin que ainda não
+    // chegou: descartar agora derrubaria a empresa ativa a cada F5 dele.
+    if (escolhida && this._carregandoPlataforma()) return;
+    if (escolhida) this.limpar();
+
+    if (empresas.length === 1) {
+      this.selecionar(empresas[0].companyId);
+      return;
+    }
+    const padrao = empresas.find((m) => m.isDefault);
+    if (padrao) this.selecionar(padrao.companyId);
   }
 
   selecionar(companyId: string): void {
@@ -153,7 +178,12 @@ export class CompanyService {
     // Dispara aqui em vez de confiar no efeito: num F5 a guarda decide antes
     // do primeiro ciclo de detecção de mudanças, e o efeito ainda não rodou.
     if (this.auth.superAdmin()) this.carregarPlataforma();
-    return this.carregamento ?? Promise.resolve();
+    if (!this.carregamento) {
+      this.resolverSelecao();
+      return Promise.resolve();
+    }
+    // Do super admin, a escolha só pode ser resolvida depois da lista chegar.
+    return this.carregamento.then(() => this.resolverSelecao());
   }
 
   private carregamento: Promise<void> | null = null;

@@ -18,6 +18,15 @@ export class ApiError extends Error {
   readonly code: string;
   readonly details: string[];
 
+  /**
+   * Correlation id da requisição que falhou (RNF-010 — UI-090).
+   *
+   * Preenchido pelo `correlationInterceptor` no caminho de volta: é o mesmo id
+   * que o backend usou nos logs daquela requisição, e o que o usuário informa
+   * ao suporte. Mutável porque o erro é construído antes de voltar por lá.
+   */
+  correlationId: string | null = null;
+
   constructor(
     status: number,
     message: string,

@@ -3,6 +3,7 @@ import ptBr from '@angular/common/locales/pt';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   ApplicationConfig,
+  ErrorHandler,
   LOCALE_ID,
   inject,
   provideAppInitializer,
@@ -14,6 +15,7 @@ import { providePrimeNG } from 'primeng/config';
 import { routes } from './app.routes';
 import { SGE_INTERCEPTORS } from './core/api/interceptors';
 import { CompanyService } from './core/company/company.service';
+import { SgeErrorHandler } from './core/observability/client-errors.service';
 import { SgePreset } from './theme/sge-preset';
 
 // Locale pt-BR do Angular (UI-084). Dinheiro, data e número da aplicação são
@@ -27,6 +29,10 @@ registerLocaleData(ptBr, 'pt-BR');
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
+    // Captura de erros do cliente (RNF-010 — UI-090). Entra depois do
+    // `provideBrowserGlobalErrorListeners`: são ele e o `ErrorHandler` juntos
+    // que cobrem erro de renderização, `Promise` rejeitada e `window.onerror`.
+    { provide: ErrorHandler, useClass: SgeErrorHandler },
     { provide: LOCALE_ID, useValue: 'pt-BR' },
     provideRouter(routes),
     provideHttpClient(withInterceptors(SGE_INTERCEPTORS)),

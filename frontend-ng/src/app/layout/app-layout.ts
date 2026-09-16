@@ -21,12 +21,14 @@ import { ViewportService } from '../core/layout/viewport.service';
 import { GlobalSearch } from '../search/global-search';
 import { AuthService } from '../core/auth/auth.service';
 import { PermissionsService } from '../core/authz/permissions.service';
+import { SessionActivityService } from '../core/auth/session-activity.service';
 import { CompanyService } from '../core/company/company.service';
 import { initials } from '../core/lib/format';
 import { NAVIGATION } from '../core/navigation';
 import { UserPreferencesService } from '../core/prefs/user-preferences.service';
 import { ThemeService } from '../theme/theme-service';
 import { ConfirmDialog } from '../ui/confirm-dialog';
+import { HelpPanel } from '../ui/help-panel';
 
 /**
  * Moldura da área autenticada (UI-004 / UI-005).
@@ -48,6 +50,7 @@ import { ConfirmDialog } from '../ui/confirm-dialog';
     SessionExpiryBanner,
     ConfirmDialog,
     GlobalSearch,
+    HelpPanel,
     RouteAnnouncer,
   ],
   host: { '(document:keydown.escape)': 'fecharMenu()' },
@@ -65,6 +68,7 @@ export class AppLayout {
   private readonly prefs = inject(UserPreferencesService);
   private readonly router = inject(Router);
   private readonly viewport = inject(ViewportService);
+  private readonly atividade = inject(SessionActivityService);
   private readonly injector = inject(Injector);
 
   private readonly botaoMenu = viewChild<ElementRef<HTMLButtonElement>>('botaoMenu');
@@ -107,6 +111,10 @@ export class AppLayout {
   protected readonly bloqueados = computed(() => this.itens().filter((i) => !i.liberado).length);
 
   constructor() {
+    // Inatividade e renovação silenciosa só valem dentro da área autenticada
+    // (UI-089): na tela de login não há sessão para expirar nem para renovar.
+    this.atividade.iniciar();
+
     // Voltar ao layout largo (girar o tablet, arrastar a janela) precisa
     // devolver o menu ao estado fixo: deixá-lo "aberto" faria o véu cobrir a
     // tela inteira num desktop, sem nada para fechar.
