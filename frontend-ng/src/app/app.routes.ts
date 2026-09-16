@@ -7,6 +7,7 @@ import {
   sessaoGuard,
 } from './core/auth/guards';
 import { NAVIGATION } from './core/navigation';
+import { ReportFilterStore } from './relatorios/filtros';
 
 /**
  * Mapa de rotas (UI-005).
@@ -66,6 +67,18 @@ const ROTAS_PRONTAS: Record<string, Route> = {
   contabil: {
     loadComponent: () => import('./contabil/contabil-shell').then((m) => m.ContabilShell),
     loadChildren: () => import('./contabil/contabil.routes').then((m) => m.CONTABIL_ROUTES),
+  },
+  relatorios: {
+    // O `ReportFilterStore` é fornecido aqui: o recorte acompanha a troca de
+    // painel dentro do módulo e morre ao sair dele (UI-072).
+    loadComponent: () => import('./relatorios/relatorios-shell').then((m) => m.RelatoriosShell),
+    loadChildren: () => import('./relatorios/relatorios.routes').then((m) => m.RELATORIOS_ROUTES),
+    providers: [ReportFilterStore],
+  },
+  integracoes: {
+    loadComponent: () => import('./integracoes/integracoes-shell').then((m) => m.IntegracoesShell),
+    loadChildren: () =>
+      import('./integracoes/integracoes.routes').then((m) => m.INTEGRACOES_ROUTES),
   },
   automacao: {
     loadComponent: () => import('./automacao/automacao-shell').then((m) => m.AutomacaoShell),

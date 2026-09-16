@@ -2530,6 +2530,8 @@ export interface QueueSummary {
 }
 
 export interface IntegrationHealth {
+  /** Uma linha por integração da empresa, das piores para as saudáveis. */
+  integrations: IntegrationHealthRow[];
   totals: { total: number; active: number; suspended: number; degraded: number; errors24h: number };
   queue: QueueSummary;
   webhooks: QueueSummary;
@@ -3225,4 +3227,354 @@ export interface AutomationRuleRun {
   result: Record<string, unknown> | null;
   error: string | null;
   executedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// M15 — Relatórios e dashboards (RF-106 a RF-113 — UI-068 a UI-073)
+// ---------------------------------------------------------------------------
+
+/**
+ * Recorte comum a todo painel e relatório do M15 (`ReportFilterDto` — RF-112).
+ *
+ * O período é obrigatório e **não tem padrão no servidor**: um painel que
+ * assume "os últimos 30 dias" produz um número que ninguém pediu e que muda
+ * sozinho de um dia para o outro. A empresa não entra aqui — vem do cabeçalho
+ * e é validada pelo guard; aceitá-la no filtro seria a rota do IDOR.
+ */
+export interface ReportFilter {
+  from: string;
+  to: string;
+  branchId?: string;
+  categoryId?: string;
+  costCenterId?: string;
+  bankAccountId?: string;
+  partnerId?: string;
+}
+
+export interface ReportPeriod {
+  from: string;
+  to: string;
+}
+
+/** Realizado agrupado por competência (RF-106). */
+export interface FinancialMonth {
+  competence: string;
+  inflow: string;
+  outflow: string;
+  net: string;
+}
+
+/** Dashboard financeiro (RF-106). */
+export interface FinancialDashboard {
+  period: ReportPeriod;
+  openPortfolio: {
+    receivable: string;
+    payable: string;
+    overdueReceivable: string;
+    overduePayable: string;
+    installments: number;
+  };
+  realized: {
+    inflow: string;
+    outflow: string;
+    net: string;
+    settlements: number;
+    interest: string;
+    discount: string;
+  };
+  byMonth: FinancialMonth[];
+}
+
+/** Faixa de atraso de `vw_carteira_titulo`. */
+export type AgingBand = 'A_VENCER' | 'ATE_30' | 'DE_31_A_60' | 'DE_61_A_90' | 'ACIMA_DE_90';
+
+export interface PortfolioDueRow {
+  type: EntryType;
+  agingBand: AgingBand;
+  competence: string;
+  installments: number;
+  balance: string;
+  charges: string;
+  updatedAmount: string;
+}
+
+export interface PortfolioAgingRow {
+  band: AgingBand;
+  installments: number;
+  receivable: string;
+  payable: string;
+}
+
+/** Contas a pagar e a receber com aging (RF-107). */
+export interface PortfolioDashboard {
+  period: ReportPeriod;
+  dueInPeriod: PortfolioDueRow[];
+  /** Sobre a carteira inteira, não só sobre a janela filtrada. */
+  aging: PortfolioAgingRow[];
+  totals: { receivable: string; payable: string };
+}
+
+export interface CashDay {
+  date: string;
+  status: string;
+  inflow: string;
+  outflow: string;
+  movements: number;
+}
+
+export interface IncomeLine {
+  competence: string;
+  type: string;
+  accountCode: string;
+  accountName: string;
+  amount: string;
+}
+
+/** Fluxo de caixa realizado e resultado do período (RF-108). */
+export interface CashFlowDashboard {
+  period: ReportPeriod;
+  cash: {
+    days: CashDay[];
+    /** Somas por situação do movimento (REALIZADO, PREVISTO, …). */
+    totals: Record<string, { inflow: string; outflow: string }>;
+  };
+  result: {
+    lines: IncomeLine[];
+    revenue: string;
+    expense: string;
+    net: string;
+  };
+}
+
+export interface PurchaseOrderIndicator {
+  competence: string;
+  status: string;
+  orders: number;
+  productsAmount: string;
+  freightAmount: string;
+  totalAmount: string;
+}
+
+export interface SupplierIndicator {
+  partnerId: string;
+  partnerName: string;
+  orders: number;
+  totalAmount: string;
+  receipts: number;
+  divergentReceipts: number;
+  averageLeadTimeDays: string | null;
+  worstDeliveryDelayDays: number | null;
+}
+
+export interface StockIndicator {
+  locationId: string;
+  locationName: string;
+  productCategoryId: string | null;
+  items: number;
+  quantity: string;
+  totalAmount: string;
+  itemsBelowMinimum: number;
+}
+
+/** Compras, fornecedores e estoque (RF-109). O estoque é posição, não período. */
+export interface PurchasingDashboard {
+  period: ReportPeriod;
+  orders: PurchaseOrderIndicator[];
+  suppliers: SupplierIndicator[];
+  stock: StockIndicator[];
+  totals: { purchased: string; stockValue: string; itemsBelowMinimum: number };
+}
+
+export interface HeadcountRow {
+  departmentId: string | null;
+  departmentName: string | null;
+  positionId: string | null;
+  costCenterId: string | null;
+  status: string;
+  employees: number;
+  employeesWithSalary: number;
+  baseSalaryTotal: string;
+}
+
+export interface WorkforceMovementRow {
+  competence: string;
+  departmentId: string | null;
+  hires: number;
+  terminations: number;
+}
+
+export interface CostCenterRow {
+  competence: string;
+  costCenterId: string;
+  costCenterName: string;
+  type: string;
+  budgetedAmount: string;
+  realizedAmount: string;
+}
+
+/** Funcionários e centros de custo (RF-110). O quadro é posição de hoje. */
+export interface WorkforceDashboard {
+  period: ReportPeriod;
+  headcount: HeadcountRow[];
+  movement: WorkforceMovementRow[];
+  costCenters: CostCenterRow[];
+  totals: {
+    activeEmployees: number;
+    activeBaseSalary: string;
+    hires: number;
+    terminations: number;
+  };
+}
+
+/**
+ * Balancete e DRE do período (RF-111).
+ *
+ * Nada é recalculado pelo M15: as duas peças vêm do M11, para que não existam
+ * duas definições de "resultado do mês" no sistema.
+ */
+export interface AccountingStatementReport {
+  period: ReportPeriod;
+  trialBalance: TrialBalance;
+  incomeStatement: IncomeStatement;
+}
+
+/** Apuração e livro fiscal do período (RF-111), calculados pelo M12. */
+export interface FiscalStatementReport {
+  period: ReportPeriod;
+  assessment: FiscalAssessmentReport;
+  ledger: FiscalLedgerReport;
+}
+
+/**
+ * Catálogo fechado de relatórios exportáveis (`REPORT_KEYS` — RF-111/RF-113).
+ *
+ * Fechado de propósito: receber o nome da view ou a consulta no corpo faria da
+ * rota de exportação um executor de SQL arbitrário com o crachá de quem chamou.
+ */
+export type ReportKey =
+  | 'financeiro'
+  | 'carteira'
+  | 'fluxo-caixa'
+  | 'compras-estoque'
+  | 'pessoal'
+  | 'contabil'
+  | 'fiscal';
+
+export type ReportFormat = 'csv' | 'xlsx' | 'pdf';
+
+/** `ExportReportDto` (RF-113). */
+export interface ReportExportInput extends ReportFilter {
+  report: ReportKey;
+  format: ReportFormat;
+}
+
+/** O arquivo gerado; o nome vem do servidor, nunca do cliente. */
+export interface ReportExportFile {
+  content: Blob;
+  filename: string;
+}
+
+// ---------------------------------------------------------------------------
+// M18 — Administração de integrações (RF-126 a RF-130 — UI-074/UI-075)
+// ---------------------------------------------------------------------------
+
+export type IntegrationEnvironment = 'PRODUCAO' | 'HOMOLOGACAO' | 'SANDBOX';
+export type IntegrationStatus = 'ATIVA' | 'SUSPENSA' | 'ERRO' | 'INATIVA';
+
+/**
+ * Integração externa da empresa (RF-126/RF-127).
+ *
+ * `parameters` nunca carrega segredo: chave com nome de credencial é recusada
+ * pela API e pelo banco (bd/20 §3). O segredo mora na credencial cifrada, que
+ * aparece aqui só por id e nome — nenhuma rota devolve o valor (RNF-003).
+ */
+export interface Integration {
+  id: string;
+  code: string;
+  name: string;
+  environment: IntegrationEnvironment;
+  parameters: Record<string, unknown> | null;
+  status: IntegrationStatus;
+  isActive: boolean;
+  timeoutMs: number;
+  maxAttempts: number;
+  failureStreak: number;
+  failureThreshold: number;
+  lastRunAt: string | null;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  lastError: string | null;
+  suspensionReason: string | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+  provider: BankProvider;
+  credential: {
+    id: string;
+    name: string;
+    environment: string;
+    expiresAt: string | null;
+  } | null;
+}
+
+/** `CreateIntegrationDto`. */
+export interface IntegrationInput {
+  providerId: string;
+  credentialId?: string;
+  code: string;
+  name: string;
+  environment?: IntegrationEnvironment;
+  parameters?: Record<string, unknown>;
+  timeoutMs?: number;
+  maxAttempts?: number;
+  failureThreshold?: number;
+  note?: string;
+}
+
+/** `UpdateIntegrationDto` — `code`, `providerId` e `status` ficam de fora. */
+export type IntegrationUpdate = Partial<Omit<IntegrationInput, 'code' | 'providerId'>> & {
+  isActive?: boolean;
+};
+
+export type IntegrationEventSeverity = 'INFO' | 'AVISO' | 'ERRO' | 'CRITICO';
+
+/** Linha do diário de integrações (RF-129). */
+export interface IntegrationEvent {
+  id: string;
+  integrationId: string | null;
+  providerId: string | null;
+  type: string;
+  severity: IntegrationEventSeverity;
+  operation: string | null;
+  message: string;
+  detail: Record<string, unknown> | null;
+  referenceType: string | null;
+  referenceId: string | null;
+  httpStatus: number | null;
+  durationMs: number | null;
+  attempt: number | null;
+  correlationId: string | null;
+  occurredAt: string;
+  integration: { id: string; code: string; name: string } | null;
+}
+
+/** Saúde de uma integração no painel (RF-128). */
+export interface IntegrationHealthRow {
+  id: string;
+  code: string;
+  name: string;
+  status: IntegrationStatus;
+  isActive: boolean;
+  provider: { code: string; category: string };
+  failureStreak: number;
+  failureThreshold: number;
+  lastRunAt: string | null;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  lastError: string | null;
+  events24h: number;
+  errors24h: number;
+  lastErrorEventAt: string | null;
+  /** Ainda responde, mas já acumulou falha: é o que se olha antes de suspender. */
+  degraded: boolean;
 }
