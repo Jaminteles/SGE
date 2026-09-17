@@ -1,7 +1,11 @@
-# SGE — Backend (Fases 1 a 5 em andamento)
+# SGE — Backend (Fases 1 a 8 concluídas)
 
 Backend do **Sistema de Gestão Empresarial e Financeira**, implementado conforme a
 stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
+
+**Estado: Sprints 1 a 17 implementadas** — os 131 requisitos funcionais da ERS
+(RF-001 a RF-131) nos 18 módulos (M01 a M18). A interface web (Sprints 18 a 32)
+vive em [`frontend-ng/`](../frontend-ng/README.md).
 
 - **Sprint 1 — M01/M02**: cadastro de empresas e filiais, configurações da
   empresa, usuários, autenticação, perfis e permissões (RBAC), isolamento
@@ -58,11 +62,39 @@ stack de referência da ERS v1.0: **NestJS + TypeScript + PostgreSQL + Prisma**.
   e número do documento, sugestão de parceiro, categoria e centro de custo pelo
   histórico, validação humana registrada e documento e resultado preservados
   (RF-095 a RF-100).
+- **Sprint 13 — M17 (Notificações e Automação)**: notificação interna com
+  prioridade e link para a entidade, entrega por e-mail atrás de uma porta de
+  provedor (com adaptador que só registra, para quem não contratou envio),
+  varredura periódica de quatro fatos — vencimento, pagamento processado ou
+  falho, aprovação parada e divergência de conciliação — e regras que dizem
+  quando avisar e a quem, com histórico de execução (RF-119 a RF-125).
+- **Sprint 14 — M11 (Contabilidade)**: plano de contas em árvore, classificação
+  contábil das origens financeiras, lançamentos de débito e crédito com partida
+  dobrada, origem e documento, estorno por contrapartida, razão, balancete e
+  DRE, fechamento e reabertura de período com motivo, e exportação para o
+  sistema contábil (RF-078 a RF-087).
+- **Sprint 15 — M12 (Fiscal)**: parâmetros fiscais por vigência e filial,
+  classificações de NCM, CEST, CFOP e CST, leitura da tributação declarada na
+  nota com as divergências apontadas, regras por operação e produto com
+  prioridade e simulação, eventos fiscais transmitidos por fila atrás de uma
+  porta de provedor, e apuração com livro de entradas e saídas (RF-088 a
+  RF-094).
+- **Sprint 16 — M15 (Relatórios e Dashboards)**: cinco painéis gerenciais
+  (financeiro, carteira com aging, caixa e resultado, compras e estoque,
+  pessoal), recorte comum por período, filial, categoria, conta e centro de
+  custo, relatórios contábeis e fiscais e exportação em PDF, XLSX e CSV
+  (RF-106 a RF-113).
+- **Sprint 17 — M18 (Administração e Integrações)**: cadastro de integrações
+  externas por empresa, parâmetros e credencial cifrada, painel de saúde das
+  integrações e da fila com suspensão automática por falhas consecutivas,
+  diário append-only de eventos e erros com redação de segredos,
+  reprocessamento idempotente do que falhou e documentação da API por rota
+  autenticada (RF-126 a RF-131).
 
 ## Banco de dados
 
 O modelo físico vive em [`bd/`](../bd) (schema `gestao`) e é a **fonte da
-verdade**. O Prisma aqui só **mapeia** as tabelas usadas nesta sprint
+verdade**. O Prisma aqui só **mapeia** as tabelas do schema
 (`@map`/`@@map`) — não há migrations do Prisma e `prisma migrate` não deve ser
 usado. Mudanças estruturais são feitas nos scripts SQL.
 
@@ -90,11 +122,18 @@ psql -U gestao_owner -h localhost -d gestao_empresarial -f 10_fluxo_caixa_sprint
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 11_compras_sprint8.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 12_documentos_fiscais_sprint9.sql
 psql -U gestao_owner -h localhost -d gestao_empresarial -f 13_bancos_sprint10.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 14_conciliacao_sprint11.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 15_ocr_sprint12.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 16_notificacoes_sprint13.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 17_contabilidade_sprint14.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 18_fiscal_sprint15.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 19_relatorios_sprint16.sql
+psql -U gestao_owner -h localhost -d gestao_empresarial -f 20_integracoes_sprint17.sql
 ```
 
 Se o banco já existe e você só quer trazê-lo para a sprint atual **sem perder os
 dados**, rode `pwsh ../bd/instalar-bd.ps1 -Atualizar`: reaplica apenas `04` a
-`13`, que são idempotentes.
+`20`, que são idempotentes.
 
 ```bash
 # 2. Backend
@@ -159,9 +198,9 @@ associações, mas não são editáveis pela API.
 
 `gestao.permissao` não tem coluna de código: a chave é a tripla
 (`modulo`, `recurso`, `acao`). A API deriva o código `recurso:AÇÃO` e grava seu
-catálogo com `modulo` = `M01`/`M02`/`M03`/`M04`/`M05`/`M06`/`M07`/`M08`/`M09`/`M14`/`M16`. As permissões em
-português da carga inicial de `bd/03` continuam lá, reservadas para os módulos
-das próximas sprints.
+catálogo com `modulo` = `M01` a `M18` — os dezoito módulos da ERS. As permissões
+em português da carga inicial de `bd/03` continuam lá, ao lado das derivadas
+pela API.
 
 Vínculos feitos pelo seed nos perfis de sistema:
 
@@ -170,9 +209,23 @@ Vínculos feitos pelo seed nos perfis de sistema:
 | RH | Todo o M03 | `reimbursements:APPROVE` — quem lança a despesa não decide sobre ela (RN-003) |
 | COMPRAS | M04, o catálogo do M05 e o M06 (pedido e histórico) | `partner-bank-accounts:*` — quem negocia o preço não redireciona o crédito; `stock-movements:*`, `inventories:*` e `goods-receipts:CREATE` — quem compra não dá baixa nem confere o que chegou; `purchase-orders:APPROVE` — quem pede não aprova (RN-003) |
 | FINANCEIRO | Todo o M08, `partner-bank-accounts:*`, leitura de parceiros, histórico, condições, `stock:READ`, `stock-valuation:READ`, `cash-flow:READ`, leitura de cenários e alertas, leitura do M06 (pedido, recebimento e preços), `fiscal-documents:READ` e o M09 (contas, ordens e extratos) | `financial-entries:APPROVE` — quem lança o título não decide sobre ele (RN-003); `payments:APPROVE` — a confirmação manual é a afirmação de que o banco pagou, e é ela que gera a baixa; escrita de `integration-credentials` — quem guarda o que assina a ordem pode apontar a integração para outro destino; escrita do cadastro comercial e do estoque; escrita de cenário e alerta |
-| DIRETOR | Todo o M14 (fluxo, cenários e alertas) + leitura de títulos, baixas, inadimplência, contas bancárias, ordens e extratos | Escrita no M08 e no M09 — quem planeja o caixa não lança, não baixa título e não emite ordem |
-| OPERACIONAL | Catálogo, locais, movimentação e contagem do M05 + recebimento do M06 (`goods-receipts:*`, `purchase-orders:READ`) e `fiscal-documents:READ` | M04 — catálogo não implica acesso a parceiros; `inventories:APPROVE` — quem conta não homologa a própria diferença (RN-003); `stock-valuation:READ` — valor do ativo é leitura financeira; escrita do pedido — quem recebe não negocia preço |
+| DIRETOR | Todo o M14 (fluxo, cenários e alertas) + leitura de títulos, baixas, inadimplência, contas bancárias, ordens e extratos + razão, balancete, DRE e períodos do M11 | Escrita no M08 e no M09 — quem planeja o caixa não lança, não baixa título e não emite ordem; escrita no M11 — quem decide o rumo não escritura nem fecha o mês |
+| OPERACIONAL | Catálogo, locais, movimentação e contagem do M05 + recebimento do M06 (`goods-receipts:*`, `purchase-orders:READ`), `fiscal-documents:READ` e o M13 (enviar o comprovante e acompanhar a leitura) | M04 — catálogo não implica acesso a parceiros; `inventories:APPROVE` — quem conta não homologa a própria diferença (RN-003); `stock-valuation:READ` — valor do ativo é leitura financeira; escrita do pedido — quem recebe não negocia preço; `ocr:APPROVE` — assumir que o valor lido está certo é de quem responde pelo lançamento |
 | FISCAL | Todo o M07 (importar, vincular, anexar, reprocessar, cancelar) + leitura de parceiros, catálogo, pedidos e recebimentos | `fiscal-postings:CREATE` — dar entrada no estoque e assumir a conta a pagar move ativo e dinheiro; é decisão de quem confere a mercadoria e de quem paga, não de quem arquiva o documento (RN-003) |
+
+A **caixa de entrada é de todo mundo**: `notifications:READ` e
+`notifications:UPDATE` (marcar como lido) entram em todos os perfis de sistema —
+um aviso que o destinatário não pode abrir não avisa nada. Emitir aviso para
+terceiros (`notifications:CREATE`) e manter as regras (`automation-rules:*`)
+ficam com o Administrador: as duas decidem o que aparece na tela dos outros, e
+desativar uma regra é a maneira silenciosa de fazer o alerta de pagamento falho
+ou de aprovação parada deixar de sair.
+
+O M12 (Fiscal), o M15 (Relatórios) e o M18 (Integrações) também não vão para
+perfil de sistema nenhum, pela mesma razão: quem apura tributo, quem tira o dado
+de dentro do sistema (`reports:EXPORT`) e quem reprocessa uma integração que
+move dinheiro (`integration-events:APPROVE`) variam de empresa para empresa.
+São do Administrador, ou de um perfil próprio criado por ele.
 
 `fiscal-postings:CREATE` não vai para **nenhum** perfil de sistema: quem lança a
 nota como mercadoria e conta a pagar é o Administrador da empresa, ou um perfil
@@ -264,6 +317,57 @@ recurso por padrão seria decidir isso por elas.
 | RF-068 | Registrar identificador externo | `externalId`/`endToEndId`, únicos por empresa e provedor (`ux_transacao_externa`) |
 | RF-069 | Executar operações assíncronas por fila | `gestao.job_execucao` + `JobWorkerService` (`FOR UPDATE SKIP LOCKED`) |
 | RF-070 | Executar retry controlado | Tentativas, backoff exponencial com jitter, teto e fila morta em `FALHA` |
+| RF-071 | Importar extrato para conciliar | `POST /banking/statements/import` (OFX, CSV e CNAB 240) |
+| RF-072 | Identificar natureza, contraparte e documento do movimento | `GET /reconciliation/pending`, `POST /reconciliation/bank-transactions/:id/identify` |
+| RF-073 | Sugerir correspondência com título, baixa e ordem | `GET /reconciliation/bank-transactions/:id/suggestions` (score e motivos) |
+| RF-074 | Conciliar manualmente, desfazer e marcar sem par | `POST /reconciliation`, `DELETE /reconciliation/:id` (com motivo), `POST /reconciliation/bank-transactions/:id/ignore`, `/reopen` |
+| RF-075 | Conciliação automática por regras | `/reconciliation-rules` (CRUD) + `POST /reconciliation/run` (fila) |
+| RF-076 | Painel de divergências entre extrato e lançamentos | `GET /reconciliation/divergences` |
+| RF-077 | Histórico append-only da conciliação | `GET /reconciliation`, `GET /reconciliation/:id` |
+| RF-095 | Receber imagem ou PDF para leitura | `POST /ocr/documents` (multipart `file`) |
+| RF-096 | Ler o documento na fila, com reprocessamento | Job `ocr.processar` + `POST /ocr/:id/reprocess` |
+| RF-097 | Extrair valor, data, estabelecimento, chave e número | `GET /ocr/:id` (campos extraídos e confiança) |
+| RF-098 | Sugerir parceiro, categoria e centro de custo | Sugestões pelo histórico, na resposta de `GET /ocr/:id` |
+| RF-099 | Registrar a validação humana | `POST /ocr/:id/validate` (com correções), `POST /ocr/:id/reject` (com motivo), `GET /ocr?status=` |
+| RF-100 | Preservar documento e resultado | `GET /ocr/:id/document` (original, sempre `attachment`) |
+| RF-119 | Notificar internamente quem precisa decidir | `GET /notifications`, `GET /notifications/unread-count`, `POST /notifications`, `POST /notifications/:id/read`, `POST /notifications/read-all` |
+| RF-120 | Entregar o aviso por canal externo | Job `notificacoes.enviar` + porta `EmailProvider` (credencial da categoria `EMAIL` em `/banking/credentials`) |
+| RF-121 | Alertar vencimento | Varredura `notificacoes.varredura` sobre `titulo_parcela` (horizonte em dias, configurável na regra) |
+| RF-122 | Alertar pagamento processado ou falho | Varredura sobre `transacao_pagamento` |
+| RF-123 | Alertar aprovação parada | Varredura sobre título e pedido aguardando alçada |
+| RF-124 | Alertar divergência de conciliação | Varredura sobre `conciliacao` |
+| RF-125 | Regras de automação dos avisos | `/automation-rules` (CRUD) + `GET /automation-rules/:id/runs` |
+| RF-078 | Plano de contas patrimonial e de resultado | `/ledger-accounts` (CRUD) + `GET /ledger-accounts/tree` |
+| RF-079 | Código reduzido e classificação SPED | Campos de `/ledger-accounts` |
+| RF-080 | Classificar contabilmente as origens financeiras | `GET /accounting/classifications/:source`, `PUT /accounting/classifications/:source/:id` |
+| RF-081 | Lançar débito e crédito com partida dobrada | `POST /journal-entries`, `POST /journal-entries/settlements/:settlementId` (contabiliza a baixa) |
+| RF-082 | Consultar o diário, a origem e o documento; estornar | `GET /journal-entries`, `GET /journal-entries/:id`, `POST /journal-entries/:id/reverse`, `POST /journal-entries/settlements/:settlementId/reverse` |
+| RF-083 | Razão por conta, com saldo anterior e corrido | `GET /accounting/reports/ledger` |
+| RF-084 | Balancete de verificação | `GET /accounting/reports/trial-balance` |
+| RF-085 | DRE do período | `GET /accounting/reports/income-statement` |
+| RF-086 | Fechar e reabrir períodos | `GET/POST /accounting/periods`, `POST /accounting/periods/:id/close`, `/reopen` (com motivo) |
+| RF-087 | Exportar para o sistema contábil | `POST /accounting/export` |
+| RF-088 | Parâmetros fiscais da empresa | `/fiscal/parameters` (CRUD) + `GET /fiscal/parameters/current` (vigência, preferindo a filial) |
+| RF-089 | Classificações de NCM, CEST, CFOP e CST | `/fiscal/classifications` (CRUD) |
+| RF-090 | Tributação declarada no documento | `GET /fiscal/documents/:documentId/taxes`, `PATCH .../taxes/classify`, `POST .../taxes/auto-classify` |
+| RF-091 | Regras fiscais por operação e produto | `/fiscal/rules` (CRUD, com prioridade e vigência) + `GET /fiscal/rules/resolve` (simulação) |
+| RF-092 | Registrar eventos fiscais e seus protocolos | `POST /fiscal/events`, `GET /fiscal/events`, `GET /fiscal/events/:id`, `PATCH /fiscal/events/:id/settle` |
+| RF-093 | Apuração e livro fiscal | `GET /fiscal/reports/assessment`, `GET /fiscal/reports/ledger` |
+| RF-094 | Transmitir ao provedor fiscal | `POST /fiscal/events/:id/transmit` (job `fiscal.transmitir-evento`) |
+| RF-106 | Dashboard financeiro do período | `GET /reports/dashboard/financial` |
+| RF-107 | Carteira a pagar e a receber, com aging | `GET /reports/dashboard/portfolio` |
+| RF-108 | Fluxo de caixa realizado e resultado | `GET /reports/dashboard/cash-flow` |
+| RF-109 | Indicadores de compras, estoque e fornecedores | `GET /reports/dashboard/purchasing` |
+| RF-110 | Indicadores de funcionários e centros de custo | `GET /reports/dashboard/workforce` |
+| RF-111 | Relatórios contábeis e fiscais | `GET /reports/accounting`, `GET /reports/fiscal` (exigem também a permissão do módulo de origem) |
+| RF-112 | Filtros combinados | Recorte comum (período, filial, categoria, conta, centro de custo) em todo painel e relatório do M15 |
+| RF-113 | Exportar em PDF, XLSX e CSV | `POST /reports/export` (`reports:EXPORT`, registrado na trilha) |
+| RF-126 | Cadastrar e manter integrações externas | `POST/GET/PATCH /integrations`, `GET /integrations/:id`, `POST /integrations/:id/activate`, `DELETE /integrations/:id` |
+| RF-127 | Parâmetros e credencial da integração | `PATCH /integrations/:id` (segredo cifrado, nunca devolvido), `PATCH /integrations/:id/parameters` |
+| RF-128 | Monitorar saúde das integrações e da fila | `GET /integrations/health`, `POST /integrations/:id/suspend` (com motivo), `/resume` |
+| RF-129 | Diário de eventos e erros | `GET /integrations/events` (append-only, com segredos redigidos) |
+| RF-130 | Reprocessar o que falhou | `GET /integrations/failed`, `POST /integrations/reprocess` (`integration-events:APPROVE`) |
+| RF-131 | Documentar a API | `GET /integrations/api-docs`, `GET /integrations/api-docs/openapi.json` e o Swagger em `/api/docs` |
 
 ## Contrato da API — pontos de atenção
 
@@ -665,7 +769,61 @@ Eventos anteriores à escolha da empresa (login) ficam sem `empresa_id` e, por
 isso, **não aparecem** na trilha de nenhum tenant: a política de RLS de `bd/05` é
 estrita, para não vazar atividade entre empresas.
 
-## Segurança (RNF aplicados nesta sprint)
+### M10 a M18 — a direção das dependências
+
+Do M10 em diante, quase todo módulo novo **lê** o que os anteriores escreveram e
+grava só nas próprias tabelas. Isso não é acaso de implementação: é a barreira
+que impede que uma funcionalidade de apoio vire uma segunda porta para o
+dinheiro. Nenhum deles importa `FinanceModule` ou `BankingModule`.
+
+| Módulo | Lê | Escreve | O que a dependência invertida causaria |
+| --- | --- | --- | --- |
+| M10 — Conciliação | Parcela, baixa, ordem e movimento bancário | `conciliacao` + o par (`status_conciliacao`, `metadados`) do movimento | Conciliar acabaria liquidando — o mesmo dinheiro com duas portas de entrada |
+| M13 — OCR | `parceiro` e `titulo`, para sugerir | `ocr_processamento` e `documento` | Um erro de reconhecimento de caractere viraria título sem ninguém decidir |
+| M17 — Notificações | Parcela, transação, pedido e conciliação | `notificacao`, `regra_automacao` e a trilha de execução | Regra de aviso mal configurada prorrogaria parcela ou confirmaria conciliação |
+| M11 — Contabilidade | Baixa, conta bancária e categoria | Plano de contas, lançamentos, períodos e a classificação das origens | A contabilidade alteraria o financeiro; o razão reflete o caixa, nunca o contrário |
+| M15 — Relatórios | As views de `bd/19` + os serviços do M11 e do M12 | Nada — o módulo não tem tabela | Cada módulo de origem carregaria a responsabilidade de se apresentar num painel |
+| M18 — Integrações | Jobs, webhooks e eventos dos módulos donos | `integracao` e o diário `integracao_evento` | O M18 reimplementaria o efeito em vez de devolver o trabalho à fila de quem manda nele |
+
+As duas exceções têm motivo declarado: o **M12** importa o M07 porque o
+cancelamento autorizado pelo fisco precisa cancelar a nota — e pelo serviço do
+módulo dono dela, que é onde estão as travas de documento que já gerou estoque
+ou título; e o **M15** importa M11 e M12 porque o relatório contábil e o fiscal
+(RF-111) saem dos serviços deles.
+
+### Contabilidade — o que não se corrige, se estorna (RF-081/RF-086)
+
+- **Lançamento é imutável** (`bd/17` §5). Não existe rota de edição: a correção
+  é o estorno, que deixa as duas linhas visíveis no diário. Apagar o erro
+  apagaria também a evidência de que ele existiu.
+- **Período fechado não recebe nada** (RN-008). O bloqueio é do banco — trigger
+  de `bd/03` —, não da aplicação: reabrir exige motivo e vai à trilha.
+- **A baixa vira lançamento por rota própria**
+  (`POST /journal-entries/settlements/:settlementId`), e o estorno contábil é
+  outra rota. Contabilizar e liquidar continuam sendo decisões separadas.
+
+### Integrações — o diário é a evidência (RF-129/RF-130)
+
+- `integracao_evento` é **append-only** (`REVOKE UPDATE, DELETE, TRUNCATE` em
+  `bd/20`): registra-se um evento novo, nunca se altera o anterior.
+- Todo detalhe passa por **redação** antes de tocar o banco — toda chave com
+  cara de segredo (senha, token, `api-key`, assinatura, cookie…) vira
+  `[REDIGIDO]`. O diário existe para investigar incidente, não para virar o
+  lugar onde o segredo vazou.
+- **Reprocessar é `APPROVE`, não `UPDATE`**: reexecutar uma integração que move
+  dinheiro é autorizar a operação de novo. Quem lê o diário para investigar não
+  passa a poder reenviar um pagamento por causa disso.
+- A **suspensão por falhas consecutivas** é automática; retomar é manual e com
+  motivo.
+
+### Relatórios — ver na tela e sair com o arquivo são decisões diferentes
+
+`reports:EXPORT` não acompanha `reports:READ` (RF-113): tirar o dado de dentro
+do sistema é auditado e concedido à parte. E o relatório contábil ou fiscal
+exige **também** a permissão de leitura do módulo de origem — quem não pode ver
+a DRE em `/accounting` não passa a poder vê-la porque pediu pela porta do M15.
+
+## Segurança (RNF aplicados)
 
 - **RNF-001**: senhas com hash **argon2id**.
 - **RNF-003**: segredos em `.env` (fora do versionamento).
@@ -693,8 +851,12 @@ estrita, para não vazar atividade entre empresas.
   totais e alçada do pedido de compra, recebimento acima do saldo, custo posto da
   entrada, título gerado pela entrega, leitura defensiva de XML, chave de acesso
   conferida contra o conteúdo da nota, autorização da SEFAZ, destinatário,
-  detecção de duplicidade, idempotência da coleta, vínculo e reprocessamento, e
-  as duas portas de entrada da mercadoria).
+  detecção de duplicidade, idempotência da coleta, vínculo e reprocessamento,
+  as duas portas de entrada da mercadoria, sugestão e conciliação do movimento
+  bancário, validação humana do OCR, motor de alertas e regras de automação,
+  partida dobrada, período fechado e estorno contábil, resolução da regra
+  fiscal e transmissão do evento, recorte dos painéis e exportação, e
+  monitoramento, redação e reprocessamento das integrações).
 - **Financeiro (Sprint 6)**: `titulo_baixa` é append-only nas mesmas três camadas
   da trilha de auditoria — ausência de rota de escrita, trigger que rejeita
   `UPDATE`/`DELETE` e retirada do privilégio da role da aplicação. A marcação de
@@ -754,6 +916,45 @@ estrita, para não vazar atividade entre empresas.
   (RN-003). `conta_bancaria.saldo_atual` é o saldo **do banco**, movido só por
   extrato importado — a divergência entre ele e as baixas lançadas é o que a
   conciliação (M10) precisa enxergar.
+- **Conciliação (Sprint 11)**: `conciliacao` é append-only — `bd/14` retira o
+  `DELETE` da role da aplicação, e desfazer é registrar o desfazimento com
+  motivo, não apagar a linha. O módulo não importa o financeiro nem o bancário:
+  conciliar afirma que a linha do extrato **é** aquele lançamento, e nunca cria
+  a baixa que faltava.
+- **OCR (Sprint 12)**: o módulo não lança nada. Lê parceiro e título para
+  sugerir, e escreve só na própria tabela e em `documento` — um erro de
+  reconhecimento de caractere não vira título. Validar é recurso separado de
+  enviar (`ocr:APPROVE`), pela mesma razão do inventário e do reembolso
+  (RN-003): assumir que o valor lido está certo é decisão de quem responde pelo
+  lançamento. O documento de origem é preservado e sai sempre como
+  `attachment`.
+- **Notificações (Sprint 13)**: as varreduras **só leem**. Emitir aviso para
+  terceiros e manter as regras ficam com o Administrador — desativar uma regra é
+  a maneira silenciosa de fazer o alerta de pagamento falho ou de aprovação
+  parada deixar de sair, e por isso a alteração vai à trilha e a execução tem
+  histórico append-only (`bd/16`). A credencial do provedor de e-mail é cifrada
+  e não sai do resolvedor: nada dela vai para a notificação, para log ou para
+  resposta da API.
+- **Contabilidade (Sprint 14)**: lançamento é imutável (`bd/17` §5) e a correção
+  é o estorno, com as duas linhas visíveis no diário. Período fechado não recebe
+  nada, e quem barra é o banco (RN-008); reabrir exige motivo. Lançar,
+  contabilizar a baixa e exportar são recursos separados — e nenhum deles
+  escreve no M08.
+- **Fiscal (Sprint 15)**: o M12 classifica e apura, mas quem decide o destino do
+  documento é o M07 — o cancelamento autorizado pelo fisco passa pelo serviço
+  dono da nota, que é onde estão as travas de documento que já gerou estoque ou
+  título. A URL do provedor fiscal é validada antes de cada chamada, como a do
+  provedor financeiro (SSRF).
+- **Relatórios (Sprint 16)**: `reports:EXPORT` é recurso à parte de
+  `reports:READ` — tirar o dado de dentro do sistema é decisão diferente de
+  vê-lo na tela, e é auditada. O relatório contábil e o fiscal exigem **também**
+  a leitura do módulo de origem: a porta do M15 não amplia acesso.
+- **Integrações (Sprint 17)**: `integracao_evento` é append-only
+  (`REVOKE UPDATE, DELETE, TRUNCATE` em `bd/20`) e todo detalhe passa por
+  redação antes de tocar o banco — chave com cara de segredo vira
+  `[REDIGIDO]`. Reprocessar é `APPROVE`, não `UPDATE`: reexecutar uma
+  integração que move dinheiro é autorizar a operação de novo. A suspensão por
+  falhas consecutivas é automática; retomar é manual e com motivo.
 - **RN-001 estrutural (Sprints 3 a 10)**: as referências do M03, M04, M05, M06, M07, M08, M09 e M14 usam **FK composta**
   `(empresa_id, <coluna>)`. A verificação de chave estrangeira roda no sistema,
   sem RLS: sem isso, um defeito na API poderia vincular funcionário da empresa A
@@ -775,8 +976,12 @@ estrita, para não vazar atividade entre empresas.
 
 - A API conecta com o usuário `sge_api` (criado em `bd/04`), que **está sujeito à
   RLS**. Não use `gestao_owner` na aplicação.
-- O envio de e-mail da recuperação de senha (RF-009) pertence ao módulo de
-  Notificações (M17, sprint futura). Nesta fase o token é registrado em log.
+- O envio de e-mail da recuperação de senha (RF-009) continua **em log**, mesmo
+  com o M17 entregue na Sprint 13. A recuperação acontece antes do login e,
+  portanto, fora de qualquer empresa — e o provedor de e-mail é resolvido pela
+  credencial **da empresa**. Ligar os dois exige decidir de qual empresa sai o
+  e-mail de um endereço que ainda não se sabe a quem pertence; até lá, o token
+  fica no log (`TODO(M17)` em `auth.service.ts`).
 - Rotação de refresh token com detecção de reuso e revogação server-side de sessões.
 - Trocar/redefinir a senha grava `usuario.senha_alterada_em` e **invalida os
   access tokens já emitidos** — revogar as sessões sozinho não bastaria, porque

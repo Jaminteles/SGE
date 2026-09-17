@@ -2,10 +2,15 @@
 
 Interface do Sistema de Gestão Empresarial e Financeira em **Angular 21 + PrimeNG**.
 
-> **Estado:** fundação da Sprint 18 e telas de administração da Sprint 19
-> (UI-007 a UI-012) **completas**, com 141 testes passando. A fundação anterior
+> **Estado: Sprints 18 a 32 concluídas** — os itens `UI-001` a `UI-093` da
+> planilha, com 55 arquivos de teste (Vitest + Angular TestBed, incluindo os E2E
+> de login, fluxos financeiros e isolamento multiempresa). A fundação anterior
 > em React foi removida no commit seguinte ao `483e777`; para consultá-la,
 > `git show 483e777:frontend/`.
+
+As Sprints 18 a 29 formam a **Fase 9 — Interface Web** (a fundação e as telas
+módulo a módulo) e as Sprints 30 a 32, a **Fase 10 — Qualidade e Entrega da
+Interface** (design system, acessibilidade, performance, testes e go-live).
 
 ## Executar
 
@@ -17,8 +22,17 @@ npm start      # http://localhost:4200
 | Comando | O que faz |
 | --- | --- |
 | `npm start` | Servidor de desenvolvimento |
-| `npm run build` | Build de produção em `dist/` |
-| `npm test` | Testes (Vitest — runner padrão do Angular 21) |
+| `npm run build` | Build em `dist/` (`build:prod` para a configuração de produção) |
+| `npm test` | Testes (Vitest — runner padrão do Angular 21); `test:ci` roda sem watch |
+| `npm run lint` | Prettier em modo verificação; `format` reescreve |
+| `npm run typecheck` | `tsc --noEmit` sobre a aplicação e os testes |
+| `npm run auditoria:ui` | Auditoria de acessibilidade e responsividade (UI-086) |
+
+A imagem de produção sai do [`Dockerfile`](Dockerfile) em duas etapas: o Node
+compila, o nginx publica. A imagem final não leva `node_modules` nem
+código-fonte, roda sem root e escuta em 8080. Os cabeçalhos de segurança
+(CSP, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
+`Permissions-Policy`, HSTS) estão em [`nginx.conf`](nginx.conf) — UI-089.
 
 ## Stack
 
@@ -110,7 +124,7 @@ interceptors sobre o `HttpClient`. A ordem em `withInterceptors` importa — o
 primeiro da lista é o mais externo:
 
 ```
-baseUrl → erro → empresa → auth → backend
+baseUrl → correlação → cache → erro → empresa → auth → backend
 ```
 
 O de auth fica mais interno de propósito: a repetição depois da renovação
@@ -120,9 +134,18 @@ nunca teria chance de dar certo.
 | Interceptor | O que faz |
 | --- | --- |
 | `baseUrlInterceptor` | Prefixa `/api/v1`, para os services escreverem `'auth/me'` |
+| `correlationInterceptor` | `x-correlation-id` por requisição, o mesmo id que o backend carrega no log e na trilha (RNF-010 — UI-090) |
+| `queryCacheInterceptor` | Cache curto de `GET` de referência, por empresa, invalidado na mutação (RNF-008 — UI-085) |
 | `errorInterceptor` | Envelope do backend → `ApiError`; status 0 → `NetworkError` |
 | `companyInterceptor` | `x-company-id` da empresa ativa (RF-005) |
 | `authInterceptor` | `Bearer`, e no 401 renova e repete **uma vez** |
+
+O de correlação fica **antes** do de erro de propósito: assim o que sobe já é o
+`ApiError` exibível e leva o id da requisição que falhou — mais para dentro, só
+passaria o `HttpErrorResponse` cru e o id se perderia na tradução. O de cache
+vem logo depois do de base porque precisa da URL final como chave, e antes dos
+outros porque resposta servida da memória não tem por que atravessar token,
+empresa e tempo limite de novo.
 
 Rotas fora da regra declaram por `HttpContext` (`semAuth()`, `semEmpresa()`,
 `rotaPublica()`), no lugar das flags `auth` e `withCompany` de antes. O padrão
@@ -198,8 +221,8 @@ sem isso, cada reavaliação destruiria e recriaria o conteúdo, perdendo estado
 formulário e foco.
 
 [`core/navigation.ts`](src/app/core/navigation.ts) traz a navegação por módulo
-com a exigência de cada item. A barra lateral passa a consumi-la no passo
-seguinte, junto com as rotas — hoje o shell ainda usa a lista fixa.
+com a exigência de cada item. A barra lateral e as rotas de módulo saem daí — é
+a mesma lista, então menu e permissão de rota não têm como divergir.
 
 ### Instanciação no bootstrap
 
@@ -370,26 +393,48 @@ dado inventado: cidade/UF na listagem de filiais (o endereço não vem na lista 
 apareceria como um N+1), o filtro por regime tributário nas empresas e os KPIs
 de convites e 2FA da UI-009.
 
-## Próximo passo
+## Módulos (Sprints 20 a 29)
 
-As telas dos módulos — Sprints 19 a 24, com as 74 telas do Figma como
-referência. A conferência do fluxo completo (login real, troca de empresa,
-permissões) ainda depende do backend NestJS no ar.
+Todo módulo tem a mesma forma, e isso é o que permite ler qualquer um deles
+depois de ter lido um:
 
-As telas de referência estão no Figma:
-[SGE — Telas do sistema](https://www.figma.com/design/2fHfjDKNSzL2QJiM8jPkI5)
-(74 telas). A estrutura delas é agnóstica de framework — a troca para Angular
-não as invalida —, e desde a Sprint 18 a pintura acompanha o preset: as 74
-telas foram recoloridas para o tema escuro (primária violeta, superfície
-carvão azulado, campo com raio 8 e conteúdo com 12).
+- uma **moldura de abas** (`*-shell`) e as telas nas rotas filhas de um
+  `*.routes.ts`, com a permissão de cada uma em `data.permissions`;
+- a sub-navegação sai da **mesma lista** que gera as rotas — aba e rota não
+  podem divergir, do mesmo jeito que a barra lateral e `core/navigation.ts`;
+- listagem com filtro e paginação **do servidor**, pelo
+  [`ListState`](src/app/core/lib/list-state.ts), que descarta a resposta de uma
+  consulta já substituída;
+- dinheiro entra e sai como **string** (RN-012), pelo `DecimalField` e pelos
+  pipes de `core/lib`.
 
-O arquivo também tem a coleção de variáveis `SGE · Tokens (PrimeNG)`, com as
-primitivas `primary/*` e `surface/*` e os semânticos do Aura
-(`content-background`, `text-muted-color`, `form-field-border-color`…) nos
-modos **Claro** e **Escuro** — os mesmos dois lados que a função `light-dark()`
-resolve em [`sge-preset.ts`](src/app/theme/sge-preset.ts).
+| Rota | Sprint — itens | Telas |
+| --- | --- | --- |
+| `/rh` | 20 — UI-013 a UI-017 | `funcionarios` (com detalhe, histórico e verbas), `estrutura`, `verbas`, `reembolsos` |
+| `/cadastros` | 21 — UI-018 a UI-020 | `parceiros`, `condicoes`, `catalogo`, `classificacao` |
+| `/estoque` | 21 — UI-021 a UI-023 | `saldos`, `locais`, `movimentacoes`, `inventarios` |
+| `/financeiro` | 22 — UI-024 a UI-029 | `titulos` (novo, detalhe, editar), `aprovacoes`, `inadimplencia`, `fluxo-caixa`, `cenarios`, `alertas` |
+| `/compras` | 23 — UI-030 a UI-035 | `pedidos` (novo, detalhe, editar, receber), `recebimentos`, `historico` |
+| `/fiscal` | 24 — UI-036 a UI-041 | `documentos`, `importar`, `coleta` |
+| `/bancos` | 25 — UI-042 a UI-047 | `contas`, `ordens` (nova e detalhe), `extratos`, `movimentos`, `operacoes` |
+| `/conciliacao` | 26 — UI-048 a UI-053 | `movimentos` (com detalhe e sugestões), `divergencias`, `historico`, `regras` |
+| `/contabil` | 27 — UI-054 a UI-060 | `plano`, `classificacao`, `lancamentos` (com o lançamento manual), `razao`, `balancete`, `dre`, `periodos`, `exportacao` |
+| `/fiscal` | 28 — UI-061 a UI-064 | `parametros`, `classificacoes`, `regras`, `relatorios`, `transmissoes` |
+| `/automacao` | 28 — UI-065 a UI-067 | `notificacoes`, `preferencias`, `regras` |
+| `/relatorios` | 29 — UI-068 a UI-073 | `financeiro`, `carteira`, `caixa`, `compras`, `pessoal`, `contabil-fiscal` |
+| `/integracoes` | 29 — UI-074/UI-075 | `provedores`, `monitoramento` |
 
-## Transversais da Sprint 30
+Duas coisas que a tabela não diz:
+
+- **`/fiscal` é um módulo só, de duas sprints.** Os documentos da Sprint 24
+  (M07) e a tributação da Sprint 28 (M12) moram na mesma árvore de rotas porque,
+  para o usuário, são a mesma área — e porque é da nota que a classificação
+  fiscal fala. Cada aba continua exigindo a sua própria permissão.
+- **O recorte dos relatórios vive no módulo.** O `ReportFilterStore` é fornecido
+  na rota de `/relatorios`, e não na raiz: o filtro acompanha a troca de painel
+  dentro do módulo e morre ao sair dele (UI-072).
+
+## Transversais (Sprint 30 — UI-076 a UI-081)
 
 | Rota | O que é |
 | --- | --- |
@@ -424,3 +469,95 @@ do exportador do backend.
 excluir, encerrar, remover vínculo — passa pelo `ConfirmService`, que alimenta
 um único `<sge-confirm-dialog>` montado na moldura autenticada. Fechar no `Esc`
 conta como recusa.
+
+## Acessibilidade e performance (Sprint 31 — UI-082 a UI-086)
+
+**Navegação anunciada (UI-082).** Numa aplicação de página única, clicar em
+"Financeiro" não produz som nenhum para quem usa leitor de tela, e o foco fica
+parado no item do menu. O [`RouteAnnouncer`](src/app/core/a11y/route-announcer.ts)
+resolve os dois: uma região `aria-live="polite"` anuncia o título da rota que
+entrou, e o foco vai para o `<main>` (que carrega `tabindex="-1"` justamente
+para poder recebê-lo), de onde o Tab percorre o conteúdo novo — critério 2.4.3.
+A primeira navegação não mexe no foco.
+
+**Responsividade (UI-083).** A quebra é em **900px**, e não num aparelho: é a
+largura em que a barra lateral de 232px e uma tabela de listagem param de
+conviver. Abaixo dela a barra vira gaveta — que nasce fechada, fica `inert`
+enquanto está fora da tela e volta a ser menu quando o aparelho gira. Isso é
+estado, e mora no [`ViewportService`](src/app/core/layout/viewport.service.ts),
+não em `window.innerWidth` lido dentro do template.
+
+**Formatos pt-BR (UI-084).** Os pipes de [`core/lib/pipes.ts`](src/app/core/lib/pipes.ts)
+formatam moeda, data e número **a partir da string canônica**. O valor nunca
+passa por `number` no caminho da tela para a API — a formatação é de saída, e é
+só isso.
+
+**Performance (UI-085).** Três frentes: `loadComponent` em tudo (o bundle
+inicial caiu de **1,02 MB para 489 kB**, 114 kB comprimido); o
+[`queryCacheInterceptor`](src/app/core/api/query-cache.ts), com janela de 30 s
+para dados de referência, chaveado por empresa e limpo na mutação; e rolagem
+virtual no `DataTable` para as listagens longas.
+
+**Auditoria (UI-086).** `npm run auditoria:ui` aplica as regras de
+[docs/auditoria-ui-086.md](../docs/auditoria-ui-086.md) sobre as telas já
+entregues. A execução final fecha com 0 achados, e a esteira roda a auditoria
+junto com testes e build.
+
+## Qualidade e entrega (Sprint 32 — UI-087 a UI-093)
+
+**E2E de verdade, sem dublê (UI-087/UI-088).** A moldura de
+[`src/app/e2e/`](src/app/e2e) monta `AuthService`, `CompanyService`, guardas,
+interceptors e o mapa de rotas **de produção**; só a rede é substituída pelo
+`HttpTestingController`. São três roteiros: login, fluxos financeiros e
+isolamento multiempresa — este último confere que trocar de empresa troca o
+`x-company-id` e refaz as permissões, e que nada da empresa anterior sobrevive
+na tela.
+
+**Hardening (UI-089).** A CSP e os demais cabeçalhos ficam no
+[`nginx.conf`](nginx.conf) da imagem. Na aplicação,
+[`core/security/sanitize.ts`](src/app/core/security/sanitize.ts) trata o que o
+template não trata: fórmula de planilha em campo exportado (`=HYPERLINK(...)`,
+que o Excel executa ao abrir), esquema perigoso em `href` montado com valor da
+API (`javascript:`, `data:`) e caractere de controle dentro de valor que vai
+para arquivo ou log. O Angular já escapa interpolação — o risco que sobra é
+esse.
+
+**Observabilidade (UI-090).** O backend já registrava tudo com correlation id; o
+navegador era o ponto cego. O `correlationInterceptor` manda o id, e o
+[`ClientErrorsService`](src/app/core/observability/client-errors.service.ts)
+guarda as últimas ocorrências: momento, rota, mensagem e o id. **Nunca** corpo
+da requisição, token ou cabeçalho.
+
+**Esteira (UI-091).** `.github/workflows/frontend.yml` roda tipos, auditoria de
+interface, testes e build em série, monta a imagem Docker e guarda o bundle como
+artefato. Publicar continua sendo decisão de quem opera.
+
+A conferência de formatação (`npm run lint`) está no arquivo, mas **comentada**:
+o código anterior à Sprint 32 nunca passou pelo Prettier e 174 arquivos divergem
+da configuração. Ligar o passo hoje reprovaria todo commit até um
+reformata-tudo — que é decisão do líder do projeto, não efeito colateral de uma
+tarefa de esteira. O script existe e roda localmente; quando o repositório for
+formatado de uma vez, basta descomentar.
+
+**Ajuda e homologação (UI-092/UI-093).** O manual completo é
+[docs/manual-do-usuario.md](../docs/manual-do-usuario.md); o botão `?` da barra
+superior mostra o pedaço do módulo aberto, de
+[`core/help/help-content.ts`](src/app/core/help/help-content.ts) — manual é o
+que se lê antes, ajuda contextual é o que se consulta no meio de uma tarefa. Os
+cenários de UAT, os apontamentos corrigidos e o checklist de go-live estão em
+[docs/homologacao-uat.md](../docs/homologacao-uat.md).
+
+## Telas de referência (Figma)
+
+As telas de referência estão no Figma:
+[SGE — Telas do sistema](https://www.figma.com/design/2fHfjDKNSzL2QJiM8jPkI5)
+(74 telas). A estrutura delas é agnóstica de framework — a troca para Angular
+não as invalida —, e desde a Sprint 18 a pintura acompanha o preset: as 74
+telas foram recoloridas para o tema escuro (primária violeta, superfície
+carvão azulado, campo com raio 8 e conteúdo com 12).
+
+O arquivo também tem a coleção de variáveis `SGE · Tokens (PrimeNG)`, com as
+primitivas `primary/*` e `surface/*` e os semânticos do Aura
+(`content-background`, `text-muted-color`, `form-field-border-color`…) nos
+modos **Claro** e **Escuro** — os mesmos dois lados que a função `light-dark()`
+resolve em [`sge-preset.ts`](src/app/theme/sge-preset.ts).
